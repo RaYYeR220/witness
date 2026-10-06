@@ -53,7 +53,15 @@ def audit_path(values: list[bytes], index: int) -> list[PathStep]:
     return [*audit_path(values[k:], index - k), PathStep("L", root(values[:k]))]
 
 
+def _is_h32(b: object) -> bool:
+    return isinstance(b, bytes) and len(b) == 32
+
+
 def verify(value: bytes, path: list[PathStep], expected_root: bytes) -> bool:
+    if not _is_h32(value) or not _is_h32(expected_root):
+        return False
+    if any(not isinstance(s, PathStep) or not _is_h32(s.hash) for s in path):
+        return False
     h = leaf_hash(value)
     for step in path:
         if step.side == "L":

@@ -64,3 +64,44 @@ def test_negative_control_flip():
         swapped[j] = merkle.PathStep("L" if step.side == "R" else "R", step.hash)
         assert not merkle.verify(vals[4], swapped, r)
     assert not merkle.verify(flip(vals[4]), path, r)
+
+
+def test_hand_computed_roots_and_paths():
+    L = merkle.leaf_hash
+    N = merkle.node_hash
+    S = merkle.PathStep
+    v = synth(7)
+    l = [L(x) for x in v]
+    assert merkle.root(v[:3]) == N(N(l[0], l[1]), l[2])
+    assert merkle.root(v[:5]) == N(N(N(l[0], l[1]), N(l[2], l[3])), l[4])
+    assert merkle.root(v) == N(N(N(l[0], l[1]), N(l[2], l[3])), N(N(l[4], l[5]), l[6]))
+
+    v3 = v[:3]
+    assert merkle.audit_path(v3, 0) == [S("R", l[1]), S("R", l[2])]
+    assert merkle.audit_path(v3, 1) == [S("L", l[0]), S("R", l[2])]
+    assert merkle.audit_path(v3, 2) == [S("L", N(l[0], l[1]))]
+
+    v5 = v[:5]
+    left4 = N(N(l[0], l[1]), N(l[2], l[3]))
+    assert merkle.audit_path(v5, 0) == [S("R", l[1]), S("R", N(l[2], l[3])), S("R", l[4])]
+    assert merkle.audit_path(v5, 1) == [S("L", l[0]), S("R", N(l[2], l[3])), S("R", l[4])]
+    assert merkle.audit_path(v5, 2) == [S("R", l[3]), S("L", N(l[0], l[1])), S("R", l[4])]
+    assert merkle.audit_path(v5, 3) == [S("L", l[2]), S("L", N(l[0], l[1])), S("R", l[4])]
+    assert merkle.audit_path(v5, 4) == [S("L", left4)]
+
+    assert merkle.audit_path(v[:1], 0) == []
+
+
+def test_verify_rejects_malformed_inputs():
+    vals = synth(5)
+    r = merkle.root(vals)
+    path = merkle.audit_path(vals, 2)
+    S = merkle.PathStep
+    assert merkle.verify(vals[2], path, r)
+    assert not merkle.verify(vals[2], [S(path[0].side, path[0].hash[:31]), *path[1:]], r)
+    assert not merkle.verify(vals[2], [S("X", path[0].hash), *path[1:]], r)  # type: ignore[arg-type]
+    assert not merkle.verify(vals[2], [*path, path[0]], r)
+    assert not merkle.verify(vals[2][:31], path, r)
+    assert not merkle.verify(vals[2], path, r[:31])
+    assert not merkle.verify("x", path, r)  # type: ignore[arg-type]
+    assert not merkle.verify(vals[2], [S("L", "ab")], r)  # type: ignore[arg-type]
