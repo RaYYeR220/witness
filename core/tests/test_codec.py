@@ -125,3 +125,111 @@ def test_hex_helpers():
     assert ids.to_hex(b"\xab\x01") == "0xab01"
     assert ids.from_hex("ab01") == ids.from_hex("0xab01") == b"\xab\x01"
     assert len(ids.blake2b256(b"")) == 32
+
+
+def _payload_with_options(vectors, count: int, options: bytes) -> tuple[bytes, bytes]:
+    """Milestone payload (and essence) from a real vector with synthetic options."""
+    m = vectors("milestones")[0]
+    base = ids.from_hex(m["essence"])
+    assert base[-1] == 0  # optionsCount of the real vector
+    essence = base[:-1] + bytes([count]) + options
+    sigs = b"".join(
+        b"\x00" + ids.from_hex(s["pk"]) + ids.from_hex(s["sig"]) for s in m["signatures"]
+    )
+    payload = (7).to_bytes(4, "little") + essence + bytes([len(m["signatures"])]) + sigs
+    return payload, essence
+
+
+PARAMS_OPT = b"\x01" + (400).to_bytes(4, "little") + b"\x02" + (3).to_bytes(2, "little") + b"abc"
+RECEIPT_OPT = (
+    b"\x00"
+    + (1234).to_bytes(4, "little")
+    + b"\x01"
+    + (2).to_bytes(2, "little")
+    + b"".join(
+        bytes([k]) * 49 + b"\x00" + bytes([k + 1]) * 32 + (1000 + k).to_bytes(8, "little")
+        for k in (5, 6)
+    )
+    + (4).to_bytes(4, "little")
+    + b"\x01"
+    + b"\x33" * 32
+    + b"\x02"
+    + (999).to_bytes(8, "little")
+)
+
+
+@pytest.mark.parametrize(
+    ("count", "options"),
+    [(1, PARAMS_OPT), (1, RECEIPT_OPT), (2, RECEIPT_OPT + PARAMS_OPT)],
+)
+def test_milestone_options_roundtrip(vectors, count, options):
+    payload, essence = _payload_with_options(vectors, count, options)
+    p = codec.parse_milestone_payload(payload)
+    assert p.essence.options == options
+    assert p.essence_bytes == essence
+    assert codec.serialize_milestone_essence(p.essence) == essence
+    assert codec.milestone_id(p.essence_bytes) == ids.blake2b256(essence)
+    for n in range(len(payload)):
+        with pytest.raises(codec.DecodeError):
+            codec.parse_milestone_payload(payload[:n])
+
+
+def test_unknown_milestone_option_type_rejected(vectors):
+    payload, _ = _payload_with_options(vectors, 1, b"\x07\x00\x00")
+    with pytest.raises(codec.DecodeError, match="option type 7"):
+        codec.parse_milestone_payload(payload)
+
+
+def test_serializer_rejects_malformed_options(vectors):
+    payload, _ = _payload_with_options(vectors, 1, PARAMS_OPT)
+    e = codec.parse_milestone_payload(payload).essence
+    bad = codec.MilestoneEssence(**{**e.__dict__, "options": PARAMS_OPT[:-1]})
+    with pytest.raises(ValueError):
+        codec.serialize_milestone_essence(bad)
+
+
+def test_milestone_payload_every_prefix_raises(vectors):
+    m = vectors("milestones")[0]
+    sigs = b"".join(
+        b"\x00" + ids.from_hex(s["pk"]) + ids.from_hex(s["sig"]) for s in m["signatures"]
+    )
+    payload = (7).to_bytes(4, "little") + ids.from_hex(m["essence"]) + bytes([2]) + sigs
+    codec.parse_milestone_payload(payload)
+    for n in range(len(payload)):
+        with pytest.raises(codec.DecodeError):
+            codec.parse_milestone_payload(payload[:n])
+    with pytest.raises(codec.DecodeError):
+        codec.parse_milestone_payload(payload + b"\x00")
+
+
+def _block_with_payload(payload: bytes, declared: int | None = None) -> bytes:
+    n = len(payload) if declared is None else declared
+    return bytes([2, 1]) + b"\x22" * 32 + n.to_bytes(4, "little") + payload + bytes(8)
+
+
+def test_tagged_payload_inner_lengths_overrun():
+    too_long_tag = (5).to_bytes(4, "little") + bytes([200]) + b"ab"
+    too_long_data = (5).to_bytes(4, "little") + b"\x01t" + (50).to_bytes(4, "little") + b"xy"
+    for payload in (too_long_tag, too_long_data):
+        with pytest.raises(codec.DecodeError):
+            codec.parse_block(_block_with_payload(payload))
+
+
+def test_trailing_bytes_in_milestone_block_and_inside_payload(vectors):
+    ms = next(v for v in vectors("blocks") if v["kind"] == "milestone")
+    with pytest.raises(codec.DecodeError):
+        codec.parse_block(_raw(ms) + b"\x00")
+    tagged = (5).to_bytes(4, "little") + b"\x01t" + (2).to_bytes(4, "little") + b"{}"
+    codec.parse_block(_block_with_payload(tagged))
+    with pytest.raises(codec.DecodeError):
+        codec.parse_block(_block_with_payload(tagged + b"\x00"))
+    payload, _ = _payload_with_options(vectors, 0, b"")
+    codec.parse_block(_block_with_payload(payload))
+    with pytest.raises(codec.DecodeError):
+        codec.parse_block(_block_with_payload(payload + b"\x00"))
+
+
+def test_from_hex_rejects_whitespace():
+    for bad in ("0xab  01", "ab 01", "0xab\n"):
+        with pytest.raises(ValueError):
+            ids.from_hex(bad)

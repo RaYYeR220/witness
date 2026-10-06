@@ -16,9 +16,15 @@ SIG_ED25519 = 0
 ID_LEN = 32
 PUBKEY_LEN = 32
 SIG_LEN = 64
-# The only milestone option type this codec can measure (TIP-29 protocol params).
-OPT_PROTOCOL_PARAMS = 4
-_OPT_HEADER = 8  # type u8 | targetMilestoneIndex u32 | protocolVersion u8 | paramsLength u16
+# Milestone option types (TIP-29 / TIP-34).
+OPT_RECEIPT = 0
+OPT_PROTOCOL_PARAMS = 1
+# Treasury Transaction payload type (TIP-34), carried inside a receipt.
+PAYLOAD_TREASURY_TRANSACTION = 4
+TREASURY_INPUT_TYPE = 1
+TREASURY_OUTPUT_TYPE = 2
+ED25519_ADDRESS_TYPE = 0
+TAIL_TX_HASH_LEN = 49
 
 
 class DecodeError(ValueError):
@@ -113,29 +119,49 @@ def _read_parents(r: _Reader) -> list[bytes]:
     return [r.take(ID_LEN, f"parent[{i}]") for i in range(count)]
 
 
+def _scan_option(r: _Reader, i: int) -> None:
+    """Advance past one milestone option, validating its layout."""
+    name = f"option[{i}]"
+    otype = r.uint(1, f"{name}.type")
+    if otype == OPT_PROTOCOL_PARAMS:
+        r.take(4 + 1, f"{name}.targetMilestoneIndex/protocolVersion")
+        r.take(r.uint(2, f"{name}.paramsLength"), f"{name}.params")
+    elif otype == OPT_RECEIPT:
+        r.take(4 + 1, f"{name}.migratedAt/final")
+        for j in range(r.uint(2, f"{name}.fundsCount")):
+            r.take(TAIL_TX_HASH_LEN, f"{name}.funds[{j}].tailTransactionHash")
+            atype = r.uint(1, f"{name}.funds[{j}].addressType")
+            if atype != ED25519_ADDRESS_TYPE:
+                raise DecodeError(f"milestone {name}.funds[{j}]: unsupported address type {atype}")
+            r.take(32 + 8, f"{name}.funds[{j}].pubKeyHash/deposit")
+        ptype = r.uint(4, f"{name}.treasury.payloadType")
+        if ptype != PAYLOAD_TREASURY_TRANSACTION:
+            raise DecodeError(f"milestone {name}: expected treasury transaction, got {ptype}")
+        if r.uint(1, f"{name}.treasury.inputType") != TREASURY_INPUT_TYPE:
+            raise DecodeError(f"milestone {name}: bad treasury input type")
+        r.take(32, f"{name}.treasury.milestoneId")
+        if r.uint(1, f"{name}.treasury.outputType") != TREASURY_OUTPUT_TYPE:
+            raise DecodeError(f"milestone {name}: bad treasury output type")
+        r.take(8, f"{name}.treasury.amount")
+    else:
+        raise DecodeError(f"milestone {name}: unsupported option type {otype}")
+
+
 def _read_options(r: _Reader) -> bytes:
     """Consume the options and return their raw bytes (count byte excluded)."""
     count = r.uint(1, "optionsCount")
     start = r.pos
     for i in range(count):
-        otype = r.uint(1, f"option[{i}].type")
-        if otype != OPT_PROTOCOL_PARAMS:
-            raise DecodeError(f"milestone option[{i}]: unsupported option type {otype}")
-        r.take(5, f"option[{i}].header")
-        plen = r.uint(2, f"option[{i}].paramsLength")
-        r.take(plen, f"option[{i}].params")
+        _scan_option(r, i)
     return r.buf[start : r.pos]
 
 
 def _count_options(options: bytes) -> int:
-    n, pos = 0, 0
-    while pos < len(options):
-        if options[pos] != OPT_PROTOCOL_PARAMS or pos + _OPT_HEADER > len(options):
-            raise ValueError("malformed milestone options")
-        pos += _OPT_HEADER + int.from_bytes(options[pos + 6 : pos + 8], "little")
+    r = _Reader(options, "milestone options")
+    n = 0
+    while r.pos < len(options):
+        _scan_option(r, n)
         n += 1
-    if pos != len(options):
-        raise ValueError("malformed milestone options")
     return n
 
 

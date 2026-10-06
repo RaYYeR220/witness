@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import hashlib
+import re
 
 
 def blake2b256(data: bytes) -> bytes:
@@ -15,6 +16,8 @@ def to_hex(b: bytes) -> str:
 
 def from_hex(s: str) -> bytes:
     body = s[2:] if s[:2] in ("0x", "0X") else s
+    if not re.fullmatch(r"[0-9a-fA-F]*", body):
+        raise ValueError(f"invalid hex string: {s!r}")
     if len(body) % 2:
         raise ValueError(f"odd-length hex string: {s!r}")
     try:
