@@ -495,7 +495,8 @@ async def test_reverify_detects_db_tamper(env):
     for name in ("a", "b", "c"):
         raw, bid, data = make_block({"score": 0.5, "id": f"MyDomain:{name}"})
         serve(bid, raw, [meta(bid, ms=3)])
-        await handle_record(store, v, rec(f"s-{name}", bid, data), source="mqtt")
+        await handle_record(store, RecordingValidator(), rec(f"s-{name}", bid, data),
+                            source="mqtt")
         await store.put_message(MessageRow(block_id=bid, tag="trust.score", data=data))
         assert await v.validate_once(bid, f"s-{name}") == "CONTENT_VERIFIED"
         blocks[name] = (bid, data)
@@ -527,7 +528,8 @@ async def test_reverify_detects_db_tamper(env):
 async def verified_block(store, v, name, *, with_message=True):
     raw, bid, data = make_block({"score": 0.5, "id": f"MyDomain:{name}"})
     _, block_route = serve(bid, raw, [meta(bid, ms=3)])
-    await handle_record(store, v, rec(f"s-{name}", bid, data), source="mqtt")
+    # Validated directly below, so not left queued (in flight) on `v`.
+    await handle_record(store, RecordingValidator(), rec(f"s-{name}", bid, data), source="mqtt")
     if with_message:
         await store.put_message(MessageRow(block_id=bid, tag="trust.score", data=data))
     assert await v.validate_once(bid, f"s-{name}") == "CONTENT_VERIFIED"
@@ -656,42 +658,71 @@ async def test_reverify_survives_wiped_validation_history(env):
 
 
 @respx.mock
-async def test_partly_wiped_history_goes_back_to_the_validator(env):
+async def test_partly_wiped_history_is_still_judged(env):
     store, v, _ = env
     bid, data, _ = await verified_block(store, v, "a", with_message=False)
     await delete_rows(store, "content_checks", bid)
     await delete_rows(store, "lifecycle", bid, "AND status = 'CONTENT_VERIFIED'")
     await tamper_submission(store, bid, "0x" + data.replace(b"0.5", b"0.9").hex())
-    node_says_confirmed(bid)
-    assert await v.reverify_all() == []  # latest status CONFIRMED: the validator's block
-    assert await v.resume() == 1  # ... which the periodic resume hands back to it
-    assert await v.validate_once(bid, "s-a") == "CONTENT_MISMATCH"
-    assert [a["rule"] for a in await store.alerts()] == ["CONTENT_MISMATCH"]
+    node_says_confirmed(bid)  # latest status now CONFIRMED, but nothing is in flight
+    [alert] = await v.reverify_all()
+    assert alert.rule == "DB_TAMPER"
 
 
 @respx.mock
-async def test_reverify_leaves_unverified_blocks_to_the_validator(env):
+async def test_forged_verdict_rows_do_not_exempt_a_block(env):
     store, v, _ = env
-    # Pending: forwarded bytes differ from the Tangle, validation not run yet.
+    bid, data, _ = await verified_block(store, v, "a")
+    await delete_rows(store, "content_checks", bid)
+    await delete_rows(store, "lifecycle", bid, "AND status = 'CONTENT_VERIFIED'")
+    # Forged: a terminal "verdict" and a failed check, as if the block were settled.
+    await store.set_lifecycle(block_id=bid, sub_id="s-a", status="ORPHANED",
+                              at_ms=4_000_000_000_000)
+    await store.put_content_check(bid, 4_000_000_000_000, "MISMATCH", {"forged": True})
+    await tamper_submission(store, bid, "0x" + data.replace(b"0.5", b"0.9").hex())
+    node_says_confirmed(bid)
+    [alert] = await v.reverify_all()
+    assert alert.rule == "DB_TAMPER"
+    assert [f["field"] for f in alert.evidence["fields"]] == ["submissions.data_hex"]
+
+
+def confirmed_always(bid):
+    return lambda request: httpx.Response(200, json=meta(bid, ms=3))
+
+
+@respx.mock
+async def test_reverify_skips_only_blocks_in_flight(env):
+    store, v, _ = env
+    # In flight: queued on `v`; its forwarded bytes differ from the Tangle.
     raw_p, pending, data_p = make_block({"id": "pending"})
-    serve(pending, raw_p, [meta(pending, ms=3)])
+    p_meta, p_block = serve(pending, raw_p, confirmed_always(pending))
     await handle_record(store, v, rec("s-p", pending, data_p.replace(b"pending", b"PENDING")),
                         source="mqtt")
-    # Validated as CONTENT_MISMATCH: the difference is already reported as such.
+    assert v.is_in_flight(pending)
+    # Validated as CONTENT_MISMATCH and done: its stored copy differs from the Tangle too.
     raw_m, mism, data_m = make_block({"id": "mismatch"})
-    serve(mism, raw_m, [meta(mism, ms=3)])
-    await handle_record(store, v, rec("s-m", mism, data_m.replace(b"mismatch", b"MISMATCH")),
+    serve(mism, raw_m, confirmed_always(mism))
+    await handle_record(store, RecordingValidator(),
+                        rec("s-m", mism, data_m.replace(b"mismatch", b"MISMATCH")),
                         source="mqtt")
     assert await v.validate_once(mism, "s-m") == "CONTENT_MISMATCH"
+    assert not v.is_in_flight(mism)
     # Indexed but not (yet) confirmed according to the node.
     raw_u, unconf, data_u = make_block({"id": "unconfirmed"})
     serve(unconf, raw_u, lambda request: httpx.Response(200, json=meta(unconf, solid=True)))
     await store.put_message(MessageRow(block_id=unconf, tag="trust.score", data=data_u + b" "))
 
-    calls = len(respx.calls)
-    assert await v.reverify_all() == []
-    assert [a["rule"] for a in await store.alerts()] == ["CONTENT_MISMATCH"]
-    assert len(respx.calls) - calls == 1  # only the unconfirmed block's metadata
+    before = (p_meta.call_count, p_block.call_count)
+    [alert] = await v.reverify_all()
+    assert (alert.rule, alert.block_id) == ("DB_TAMPER", mism)
+    assert (p_meta.call_count, p_block.call_count) == before  # in flight: not touched
+
+    # Once nothing has it in flight (here: a validator in another process), it is judged.
+    other = Validator(store, v.hornet)
+    [alert] = await other.reverify_all()
+    assert (alert.rule, alert.block_id) == ("DB_TAMPER", pending)
+    assert sorted(a["rule"] for a in await store.alerts()) == [
+        "CONTENT_MISMATCH", "DB_TAMPER", "DB_TAMPER"]
 
 
 @respx.mock
@@ -725,7 +756,8 @@ async def test_reverify_respects_limit(env):
     for name in ("a", "b", "c"):
         raw, bid, data = make_block({"id": name})
         serve(bid, raw, [meta(bid, ms=3)])
-        await handle_record(store, v, rec(f"s-{name}", bid, data), source="mqtt")
+        await handle_record(store, RecordingValidator(), rec(f"s-{name}", bid, data),
+                            source="mqtt")
         await v.validate_once(bid, f"s-{name}")
     before = len(respx.calls)
     assert await v.reverify_all(limit=2) == []
@@ -792,7 +824,7 @@ async def test_live_validate(store):
     hornet = HornetRest(LIVE_HORNET)
     v = Validator(store, hornet, ValidatorConfig(timeout_s=90))
     try:
-        assert await handle_record(store, v, record, source="http")
+        assert await handle_record(store, RecordingValidator(), record, source="http")
         bid = bytes.fromhex(block_hex[2:])
         assert await v.validate_once(bid, record["subId"]) == "CONTENT_VERIFIED"
         assert await statuses(store, bid) == [

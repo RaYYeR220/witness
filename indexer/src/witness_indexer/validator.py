@@ -58,9 +58,6 @@ BLOCK_VIA = "GET /api/core/v2/blocks/{blockId}"
 OUTCOMES = frozenset({"CONTENT_VERIFIED", "CONTENT_MISMATCH", "NOT_FOUND", "ORPHANED"})
 # A worker stops retrying a block once its status is one of these.
 TERMINAL = OUTCOMES | {"RECEIVED"}
-# Statuses of a block whose content verdict belongs to the validator (pending or reported).
-VALIDATOR_OWNED = frozenset({"RECEIVED", "SUBMITTED", "SOLID", "CONFIRMED", "CONTENT_MISMATCH",
-                             "NOT_FOUND", "ORPHANED"})
 MAX_JSON_CHANGES = 200
 _PLAIN_KEY = re.compile(r"[A-Za-z_][A-Za-z0-9_]*")
 
@@ -271,6 +268,12 @@ class Validator:
     def pending(self) -> int:
         """Blocks queued, being validated or waiting for a retry."""
         return len(self._pending)
+
+    def is_in_flight(self, block_id: bytes) -> bool:
+        """Whether this validator has the block queued, being validated or waiting for a
+        retry. Held in memory only, so no database row can fake it; it clears when the
+        block's validation concludes."""
+        return block_id in self._pending
 
     def enqueue(self, block_id: bytes | None, sub_id: str) -> None:
         """Queue a submission for validation. A failed submit (no block id) has nothing on the
@@ -573,11 +576,15 @@ class Validator:
 
         Candidates come from four tables (MATCH content checks, submissions, messages and
         CONTENT_VERIFIED lifecycle rows), so deleting one kind of row does not hide a block.
-        A block that was verified once is always judged, and all its copies being gone is
-        itself DB_TAMPER ("content removed"). A block never verified is left to the validator
-        while it owns it (validation pending, or its verdict already recorded); otherwise it is
-        judged only once the node confirms it is referenced by a milestone, so a pending block
-        can never raise DB_TAMPER.
+        The only block skipped is one in flight in this validator (queued, being validated or
+        waiting for a retry: `is_in_flight`), which is in-memory state and cannot be forged
+        through the database; lifecycle rows and content checks never exempt a block. A block
+        that was verified once is always judged, and all its copies being gone is itself
+        DB_TAMPER ("content removed"). A block never verified is judged once the node confirms
+        it is referenced by a milestone (definitive answers only), so an unconfirmed block can
+        never raise DB_TAMPER. A block the validator found CONTENT_MISMATCH also gets DB_TAMPER
+        when its stored copy differs from the Tangle, which is true; the alert is deduplicated
+        per block and stored content.
 
         The parallel DB is not the trust root: an attacker who wipes every copy of a block from
         all four tables leaves nothing to re-verify here. That is detected by re-indexing the
@@ -614,10 +621,10 @@ class Validator:
             return await self._reverify_block(bid, row)
 
     async def _reverify_block(self, bid: bytes, row: dict) -> Alert | None:
+        if self.is_in_flight(bid):
+            return None  # its validation is running; judge it on a later pass
         verified = row["verified_once"]
         if not verified:
-            if row["has_failed_check"] or row["latest_status"] in VALIDATOR_OWNED:
-                return None  # the validator is on it, or has already reported its verdict
             meta = await self.hornet.block_metadata(bid)
             if meta is None or _referenced_index(meta) is None:
                 return None  # not confirmed on the Tangle: nothing to hold the copies to

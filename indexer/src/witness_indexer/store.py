@@ -462,8 +462,7 @@ class Store:
         a submission with a block id, an indexed message or a CONTENT_VERIFIED lifecycle row
         (hiding a block takes wiping all four). In block id order after `after`, with every
         copy of its content (submission tag/data_hex, message tag/data, for whichever rows
-        exist) and what is known about its validation: `verified_once` (a MATCH check or a
-        CONTENT_VERIFIED row), `latest_status` and `has_failed_check` (MISMATCH/NOT_FOUND)."""
+        exist) and `verified_once` (a MATCH check or a CONTENT_VERIFIED row)."""
         return await self._fetch(
             "WITH ids AS ("
             " SELECT block_id FROM content_checks WHERE result = 'MATCH'"
@@ -479,11 +478,7 @@ class Store:
             "m.tag AS msg_tag, m.data AS msg_data, "
             "(EXISTS (SELECT 1 FROM content_checks c WHERE c.block_id = p.block_id "
             "AND c.result = 'MATCH') OR EXISTS (SELECT 1 FROM lifecycle l "
-            "WHERE l.block_id = p.block_id AND l.status = 'CONTENT_VERIFIED')) AS verified_once, "
-            "(SELECT l.status FROM lifecycle l WHERE l.block_id = p.block_id "
-            "ORDER BY l.at_ms DESC, l.id DESC LIMIT 1) AS latest_status, "
-            "EXISTS (SELECT 1 FROM content_checks c WHERE c.block_id = p.block_id "
-            "AND c.result <> 'MATCH') AS has_failed_check "
+            "WHERE l.block_id = p.block_id AND l.status = 'CONTENT_VERIFIED')) AS verified_once "
             "FROM page p LEFT JOIN submissions s ON s.block_id = p.block_id "
             "LEFT JOIN messages m ON m.block_id = p.block_id "
             "ORDER BY p.block_id", (after, after, limit))
