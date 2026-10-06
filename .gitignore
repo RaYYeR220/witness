@@ -1,0 +1,37 @@
+# dependencies / builds
+node_modules/
+dist/
+.venv/
+__pycache__/
+*.pyc
+.pytest_cache/
+.hypothesis/
+.ruff_cache/
+coverage/
+*.egg-info/
+
+# local data and secrets
+.env
+.env.*
+!.env.example
+secrets/
+data/
+*.db
+*.db-wal
+*.db-shm
+
+# third-party checkouts fetched by scripts
+vendor/
+
+# local tooling and scratch
+.idea/
+.vscode/
+*.bundle
+ui-prototypes/
+mockups/
+design-ref/
+variants/
+BRIEF.md
+PLAN.md
+DESIGN.md
+POSITIONING.md
