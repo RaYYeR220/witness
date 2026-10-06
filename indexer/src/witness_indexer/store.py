@@ -428,6 +428,48 @@ class Store:
             "WHERE block_id = %(b)s OR sub_id IN (SELECT sub_id FROM submissions "
             "WHERE block_id = %(b)s) ORDER BY at_ms, id", {"b": block_id})  # type: ignore[arg-type]
 
+    async def submission(self, *, sub_id: str | None = None,
+                         block_id: bytes | None = None) -> dict | None:
+        """One stored submission, looked up by submission id or else by block id."""
+        if sub_id is not None:
+            return await self._one("SELECT * FROM submissions WHERE sub_id = %s", (sub_id,))
+        if block_id is not None:
+            return await self._one("SELECT * FROM submissions WHERE block_id = %s", (block_id,))
+        raise ValueError("sub_id or block_id is required")
+
+    async def validations(self, block_id: bytes) -> list[dict]:
+        return await self._fetch(
+            "SELECT * FROM validations WHERE block_id = %s ORDER BY checked_at_ms, id",
+            (block_id,))
+
+    async def content_checks(self, block_id: bytes) -> list[dict]:
+        return await self._fetch(
+            "SELECT * FROM content_checks WHERE block_id = %s ORDER BY checked_at_ms, id",
+            (block_id,))
+
+    async def unfinished_submissions(self, limit: int) -> list[dict]:
+        """Submitted blocks whose validation never concluded (latest status SUBMITTED, SOLID
+        or CONFIRMED), oldest first; picked up again after a restart."""
+        return await self._fetch(
+            "SELECT s.block_id, s.sub_id FROM submissions s "
+            "WHERE s.block_id IS NOT NULL "
+            "AND (SELECT l.status FROM lifecycle l WHERE l.block_id = s.block_id "
+            "ORDER BY l.at_ms DESC, l.id DESC LIMIT 1) IN ('SUBMITTED', 'SOLID', 'CONFIRMED') "
+            "ORDER BY s.received_at_ms, s.sub_id LIMIT %s", (limit,))
+
+    async def verified_content(self, after: bytes | None, limit: int) -> list[dict]:
+        """Submitted blocks whose latest lifecycle status is CONTENT_VERIFIED, in block id order
+        after `after`, with every copy of their content the explorer holds: the submission's
+        tag/data_hex and, when indexed, the message's tag/data."""
+        return await self._fetch(
+            "SELECT s.block_id, s.sub_id, s.tag AS sub_tag, s.data_hex, "
+            "m.block_id IS NOT NULL AS has_message, m.tag AS msg_tag, m.data AS msg_data "
+            "FROM submissions s LEFT JOIN messages m ON m.block_id = s.block_id "
+            "WHERE s.block_id IS NOT NULL AND (%s::bytea IS NULL OR s.block_id > %s::bytea) "
+            "AND (SELECT l.status FROM lifecycle l WHERE l.block_id = s.block_id "
+            "ORDER BY l.at_ms DESC, l.id DESC LIMIT 1) = 'CONTENT_VERIFIED' "
+            "ORDER BY s.block_id LIMIT %s", (after, after, limit))
+
     # -- events -----------------------------------------------------------------------------
 
     async def emit(self, type: str, payload: dict) -> int:
