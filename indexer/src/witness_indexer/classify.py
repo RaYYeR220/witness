@@ -5,7 +5,8 @@ characters, no lone surrogates, no nesting deeper than MAX_DEPTH) and extracts b
 the trust score. `resolve_keys` looks up every signing key a milestone needs, before any
 database transaction is opened. `judge` gives the single verdict, in this order: envelope
 structure and signature, writer policy, replay (an issuer's seq or nonce already used by
-another block), key revocation at the milestone's time.
+another block), key revocation at the milestone's time (second precision: a revocation
+anywhere inside the milestone's second revokes).
 """
 
 from __future__ import annotations
@@ -16,6 +17,7 @@ from dataclasses import dataclass
 from typing import Any, Protocol, runtime_checkable
 
 from witness_core import canon, envelope, ids, policy, schema, verdicts
+from witness_core.bundle import valid_through_second
 from witness_core.envelope import EnvelopeCheck, KeyInfo
 from witness_core.policy import WriterPolicy
 from witness_core.schema import Classified
@@ -271,9 +273,9 @@ async def judge(store: Store, pol: WriterPolicy, keys: Mapping[str, KeyInfo | No
             return Judgement(verdicts.REPLAY, chk, f"nonce already used by 0x{earlier.hex()}")
 
     info = keys.get(chk.kid)
-    if info is not None and info.revoked_at_ms is not None \
-            and info.revoked_at_ms < ms_timestamp * 1000:
-        return Judgement(verdicts.REVOKED_KEY, chk, "key revoked before the milestone")
+    if info is not None and not valid_through_second(info.revoked_at_ms, ms_timestamp):
+        return Judgement(verdicts.REVOKED_KEY, chk,
+                         "key revoked before or within the milestone's second")
     return Judgement(chk.verdict, chk)
 
 

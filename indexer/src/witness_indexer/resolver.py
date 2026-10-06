@@ -5,7 +5,9 @@ Sources, in order: `offline_docs` (resolve-shaped replies pinned by the operator
 `GET {base_url}/resolve/{did}`, which reads the DID's history on IOTA Rebased and answers
 `{doc, version, keys: [{kid, type, publicKeyHex, revokedAtMs}], historyComplete}`. A key that
 was replaced in place appears there once per key; `resolve_kid(kid, at_ms)` picks the one in
-force at `at_ms` (see `witness_core.bundle.snapshot_keys`).
+force throughout the second holding `at_ms` (see `witness_core.bundle.snapshot_keys`):
+milestone timestamps have second precision, so a key revoked anywhere in that second counts
+as revoked, as in `witness_core.bundle.valid_through_second`.
 
 Answers are cached per DID for `cache_ttl_s`, including "no such DID": a 404 or any other
 definitive 4xx. A registry that cannot be asked (connection error, timeout, 5xx, 408, 429),
@@ -29,7 +31,7 @@ from collections.abc import Callable
 from urllib.parse import quote
 
 import httpx
-from witness_core.bundle import snapshot_resolver
+from witness_core.bundle import second_end_ms, snapshot_resolver
 from witness_core.envelope import KeyInfo
 
 DID_RE = re.compile(r"did:(iota|key):[A-Za-z0-9:._%-]+")
@@ -108,10 +110,13 @@ def _is_answer(value: object, did: str) -> bool:
 
 
 def _pick(reply: dict | None, kid: str, at_ms: int | None) -> KeyInfo | None:
+    """The key of `kid` valid through the whole second holding `at_ms` (the current key when
+    None): never revoked, or revoked at or after the end of that second."""
     if reply is None:
         return None
+    at = None if at_ms is None else second_end_ms(at_ms // 1000)
     try:
-        return snapshot_resolver(reply)(kid, at_ms)
+        return snapshot_resolver(reply)(kid, at)
     except ValueError:
         return None
 

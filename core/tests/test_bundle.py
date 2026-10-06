@@ -639,7 +639,12 @@ def test_envelope_revocation_is_time_aware(vectors, syn):
     revoked = _registry(_snapshot(revoked_at_ms=ms_time_ms - 1))
     step = _step(bundle.verify(syn.bundle, _cfg(vectors), resolve_did=revoked), "envelope")
     assert (step.ok, step.detail) == (False, "key revoked before inclusion")
-    for later in (ms_time_ms, ms_time_ms + 1000):
+    # The milestone time has second precision: a revocation inside that second revokes.
+    for same_second in (ms_time_ms, ms_time_ms + 500, ms_time_ms + 999):
+        registry = _registry(_snapshot(revoked_at_ms=same_second))
+        step = _step(bundle.verify(syn.bundle, _cfg(vectors), resolve_did=registry), "envelope")
+        assert (step.ok, step.detail) == (False, "key revoked within the inclusion second")
+    for later in (ms_time_ms + 1000, ms_time_ms + 60_000):
         registry = _registry(_snapshot(revoked_at_ms=later))
         ladder = bundle.verify(syn.bundle, _cfg(vectors), resolve_did=registry)
         assert _step(ladder, "envelope").ok is True, later
@@ -754,9 +759,10 @@ def test_snapshot_keys_lists_every_entry():
 
 def test_envelope_signed_with_a_replaced_key(vectors):
     """A message signed before its key was replaced still verifies; one included after the
-    replacement does not, and the new key verifies new messages."""
+    replacement does not, and the new key verifies new messages. A replacement inside the
+    inclusion second counts as before it."""
     ms_time_ms = (vectors("milestones")[-1]["timestamp"] + 5) * 1000
-    later, earlier = _replaced(ms_time_ms + 1), _replaced(ms_time_ms - 1)
+    later, earlier = _replaced(ms_time_ms + 1000), _replaced(ms_time_ms - 1)
     old = _synthetic(vectors, _envelope(sign_key=OLD_SIGNER), snapshot=later)
     step = _step(bundle.verify(old.bundle, _cfg(vectors), resolve_did=_registry(later)), "envelope")
     assert step.ok is True, step.detail
@@ -769,6 +775,21 @@ def test_envelope_signed_with_a_replaced_key(vectors):
         bundle.verify(new.bundle, _cfg(vectors), resolve_did=_registry(earlier)), "envelope"
     )
     assert step.ok is True, step.detail
+    same = _replaced(ms_time_ms + 500)
+    old = _synthetic(vectors, _envelope(sign_key=OLD_SIGNER), snapshot=same)
+    step = _step(bundle.verify(old.bundle, _cfg(vectors), resolve_did=_registry(same)), "envelope")
+    assert step.ok is False
+    new = _synthetic(vectors, _envelope(), snapshot=same)
+    step = _step(bundle.verify(new.bundle, _cfg(vectors), resolve_did=_registry(same)), "envelope")
+    assert step.ok is True, step.detail
+
+
+def test_valid_through_second():
+    ts = 1_790_000_000
+    assert bundle.valid_through_second(None, ts)
+    assert bundle.valid_through_second((ts + 1) * 1000, ts)
+    for revoked in (0, ts * 1000 - 1, ts * 1000, ts * 1000 + 999):
+        assert not bundle.valid_through_second(revoked, ts), revoked
 
 
 # ---------------------------------------------------------------- step 5 anchor
@@ -1000,7 +1021,9 @@ def _registries(vectors) -> dict[str, dict[str, dict]]:
         "registry": {DID: _snapshot()},
         "registry_key_revoked": {DID: _snapshot(revoked_at_ms=ms_time_ms - 1)},
         "registry_key_revoked_at_inclusion": {DID: _snapshot(revoked_at_ms=ms_time_ms)},
-        "registry_key_revoked_after_inclusion": {DID: _snapshot(revoked_at_ms=ms_time_ms + 1000)},
+        "registry_key_revoked_same_second_after": {DID: _snapshot(revoked_at_ms=ms_time_ms + 500)},
+        "registry_key_revoked_next_second": {DID: _snapshot(revoked_at_ms=ms_time_ms + 1000)},
+        "registry_key_revoked_after_inclusion": {DID: _snapshot(revoked_at_ms=ms_time_ms + 60_000)},
         "registry_wrong_issuer": {DID: wrong_issuer},
         "registry_weak_key": {DID: _weak_signer_snapshot()},
     }
@@ -1116,6 +1139,10 @@ def _cases(vectors) -> list[dict]:
               "TTTTF INVALID"),
         _case("duplicate_signature_counted_once", _dup_sig(b), cfg, rec, reg, "TTFTT INVALID"),
         _case("key_revoked_at_inclusion", b, cfg, rec, "registry_key_revoked_at_inclusion",
+              "TTTFT INVALID"),
+        _case("key_revoked_same_second_after", b, cfg, rec,
+              "registry_key_revoked_same_second_after", "TTTFT INVALID"),
+        _case("key_revoked_next_second", b, cfg, rec, "registry_key_revoked_next_second",
               "TTTTT VALID"),
         _case("key_revoked_after_inclusion", b, cfg, rec, "registry_key_revoked_after_inclusion",
               "TTTTT VALID"),

@@ -202,6 +202,23 @@ def snapshot_keys(snapshot: dict) -> dict[str, list[KeyInfo]]:
     return {kid: keys for kid, keys in table.items() if kid not in unreadable}
 
 
+def second_end_ms(ts_s: int) -> int:
+    """First millisecond after the second `ts_s` (a milestone timestamp, in seconds)."""
+    return (ts_s + 1) * 1000
+
+
+def valid_through_second(revoked_at_ms: int | None, ts_s: int) -> bool:
+    """Whether a key revoked at `revoked_at_ms` may sign a message confirmed by a milestone
+    with timestamp `ts_s`.
+
+    Milestone timestamps have second precision, so the inclusion instant is only known to
+    lie somewhere inside that second. Fail closed: a revocation anywhere in the second, or
+    before it, revokes. The key is valid only if never revoked or revoked at or after the
+    end of the second.
+    """
+    return revoked_at_ms is None or revoked_at_ms >= second_end_ms(ts_s)
+
+
 def _in_force(keys: list[KeyInfo], at_ms: int | None) -> KeyInfo | None:
     """The key in force at `at_ms`, or the current one when `at_ms` is None.
 
@@ -445,23 +462,27 @@ def _step_envelope(
     trusted = _trusted_keys(resolve_did, iss)
     if trusted is None:
         return None, UNRESOLVED_SIGNER
-    # A key replaced in place has several entries; use the one in force at inclusion.
+    # A key replaced in place has several entries; use the one in force through the whole
+    # inclusion second (milestone timestamps have second precision).
     try:
-        included_ms: int | None = _essence(b)[1].timestamp * 1000
+        ts: int | None = _essence(b)[1].timestamp
     except _Fail:
-        included_ms = None
-    check = envelope.verify(env, tag, lambda k: trusted(k, included_ms))
+        ts = None
+    at_ms = None if ts is None else second_end_ms(ts)
+    check = envelope.verify(env, tag, lambda k: trusted(k, at_ms))
     if check.verdict not in (verdicts.PRODUCER_SIGNED, verdicts.RELAY_ATTESTED):
         return False, f"{check.verdict}: {check.reason}"
-    info = trusted(kid, included_ms)
+    info = trusted(kid, at_ms)
     if info is None:  # unreachable: verify() just resolved it
         return False, "signing key not resolvable"
-    _snapshot_matches(b, kid, info, included_ms)
+    _snapshot_matches(b, kid, info, at_ms)
     if info.revoked_at_ms is not None:
-        if included_ms is None:
+        if ts is None:
             return False, "key revoked; inclusion time unknown"
-        if included_ms > info.revoked_at_ms:
+        if info.revoked_at_ms < ts * 1000:
             return False, "key revoked before inclusion"
+        if not valid_through_second(info.revoked_at_ms, ts):
+            return False, "key revoked within the inclusion second"
     return True, f"{check.verdict} by {kid}"
 
 

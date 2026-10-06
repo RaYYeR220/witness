@@ -91,6 +91,20 @@ def test_replaced_key_is_chosen_by_time():
 
 
 @respx.mock
+def test_key_replaced_inside_the_second_is_not_picked():
+    """Milestone times have second precision: a key replaced anywhere in the second holding
+    at_ms was not in force for all of it, so its successor is picked."""
+    respx.get(URL).mock(
+        return_value=httpx.Response(200, json=reply(entry(NEW, None), entry(OLD, 4500)))
+    )
+    r = DidResolver(BASE)
+    for at_ms in (4000, 4499, 4999):
+        assert r.resolve_kid(KID, at_ms=at_ms).ed25519_public == pub(NEW), at_ms
+    old = r.resolve_kid(KID, at_ms=3999)
+    assert (old.ed25519_public, old.revoked_at_ms) == (pub(OLD), 4500)
+
+
+@respx.mock
 def test_only_revoked_entries_report_the_revocation():
     respx.get(URL).mock(
         return_value=httpx.Response(200, json=reply(entry(OLD, 10, kid=KID), entry(NEW, 20)))

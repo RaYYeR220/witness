@@ -31,10 +31,10 @@ const run = (c: any, extra: Partial<VerifyOptions> = {}) => verifyBundle(...wire
 const marks = (l: Ladder) => l.steps.map((s) => (s.ok === null ? "N" : s.ok ? "T" : "F")).join("") + " " + l.overall;
 
 describe("bundles.json parity", () => {
-  it("has the 34 named cases", () => {
+  it("has the 36 named cases", () => {
     const names = bundles.cases.map((c: any) => c.name);
-    expect(names).toHaveLength(34);
-    expect(new Set(names).size).toBe(34);
+    expect(names).toHaveLength(36);
+    expect(new Set(names).size).toBe(36);
   });
 
   it.each(bundles.cases.map((c: any) => [c.name, c] as const))("%s", async (_name, c: any) => {
@@ -84,6 +84,9 @@ const PYTHON_DETAILS: Record<string, Partial<Record<(typeof STEP_NAMES)[number],
   self_made_snapshot_resolved: { envelope: "FORGED: signature invalid" },
   snapshot_differs_from_registry: { envelope: "DID snapshot does not match resolved document" },
   key_revoked_before_inclusion: { envelope: "key revoked before inclusion" },
+  key_revoked_at_inclusion: { envelope: "key revoked within the inclusion second" },
+  key_revoked_same_second_after: { envelope: "key revoked within the inclusion second" },
+  key_revoked_next_second: { envelope: "PRODUCER_SIGNED by did:iota:testnet:0x5e1f#sig-1" },
   resolved_doc_not_issuer: { envelope: "resolved DID document does not belong to the issuer" },
   anchor_mismatch: { anchor: "checkpoint does not match on-chain record" },
   milestone_not_in_window: { anchor: "milestone not in anchored checkpoint" },

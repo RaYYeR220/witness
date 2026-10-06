@@ -362,17 +362,21 @@ async def test_verdict_pipeline(store: Store):
     assert row["encrypted"] is False
 
 
-async def test_key_revoked_at_the_milestone_time_is_still_valid(store: Store):
+async def test_key_revoked_inside_the_milestone_second_is_revoked(store: Store):
+    """Milestone timestamps have second precision: a revocation anywhere in the milestone's
+    second (or before it) revokes; one at the next second does not."""
     ie = "D:aabbccddeeff"
+    signers = (CAROL, ALICE, BOB, RELAY)
     chain = FakeChain()
-    chain.add([("trust.score", signed(CAROL, "trust.score", score(ie, 0.5), 1)),
-               ("trust.score", signed(ALICE, "trust.score", score(ie, 0.5), 1))])
+    chain.add([("trust.score", signed(sk, "trust.score", score(ie, 0.5), 1)) for sk in signers])
     at = chain.ms[1].timestamp * 1000
-    pinned = {kid_of(sk): KeyInfo(kid_of(sk), sk.public_key().public_bytes_raw(), None, when)
-              for sk, when in ((CAROL, at), (ALICE, at - 1))}
-    await indexer(FakeSource(chain), store, resolve=OfflineResolver(pinned)).sync()
-    assert [(await msg(store, chain.block_id(1, n)))["verdict"] for n in (0, 1)] == [
-        "PRODUCER_SIGNED", "REVOKED_KEY"]
+    when = (at + 1000, at + 999, at, at - 1)
+    pinned = {kid_of(sk): KeyInfo(kid_of(sk), sk.public_key().public_bytes_raw(), None, t)
+              for sk, t in zip(signers, when, strict=True)}
+    await indexer(FakeSource(chain), store, resolve=OfflineResolver(pinned),
+                  policy=ALLOW_ALL).sync()
+    assert [(await msg(store, chain.block_id(1, n)))["verdict"] for n in range(4)] == [
+        "PRODUCER_SIGNED", "REVOKED_KEY", "REVOKED_KEY", "REVOKED_KEY"]
 
 
 async def test_out_of_order_seqs_are_not_replays(store: Store):

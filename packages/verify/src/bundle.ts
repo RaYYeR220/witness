@@ -408,7 +408,10 @@ async function stepEnvelope(b: JsonObject, resolveDid: VerifyOptions["resolveDid
       if (e instanceof Fail) return [false, "key revoked; inclusion time unknown"];
       throw e;
     }
-    if (essence.timestamp * 1000 > info.revokedAtMs) return [false, "key revoked before inclusion"];
+    // Milestone timestamps have second precision: a revocation anywhere in the inclusion
+    // second, or before it, revokes (Python `valid_through_second`).
+    if (info.revokedAtMs < essence.timestamp * 1000) return [false, "key revoked before inclusion"];
+    if (info.revokedAtMs < (essence.timestamp + 1) * 1000) return [false, "key revoked within the inclusion second"];
   }
   return [true, `${check.verdict} by ${kid}`];
 }
