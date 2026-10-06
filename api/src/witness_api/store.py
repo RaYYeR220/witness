@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from psycopg.types.json import Jsonb
 from witness_indexer.store import Store
 
 
@@ -64,3 +65,77 @@ class ExplorerStore(Store):
 
     async def db_ping(self) -> None:
         await self._one("SELECT 1 AS ok")
+
+    # -- posture --------------------------------------------------------------------------
+
+    async def payload_ratio(self) -> dict:
+        """How many stored messages carry a plaintext payload vs an encrypted one."""
+        row = await self._one(
+            "SELECT count(*) AS total, "
+            "count(*) FILTER (WHERE NOT encrypted) AS plaintext, "
+            "count(*) FILTER (WHERE encrypted) AS encrypted FROM messages")
+        total = int(row["total"]) if row else 0
+        plaintext = int(row["plaintext"]) if row else 0
+        encrypted = int(row["encrypted"]) if row else 0
+        ratio = plaintext / total if total else 0.0
+        return {"total": total, "plaintext": plaintext, "encrypted": encrypted, "ratio": ratio}
+
+    # -- reports --------------------------------------------------------------------------
+
+    @staticmethod
+    def _report_filter(ie: str | None, ms_from: int | None,
+                       ms_to: int | None) -> tuple[str, list]:
+        where, params = ["true"], []
+        if ie is not None:
+            where.append("ie_id = %s")
+            params.append(ie)
+        if ms_from is not None:
+            where.append("ms_index >= %s")
+            params.append(ms_from)
+        if ms_to is not None:
+            where.append("ms_index <= %s")
+            params.append(ms_to)
+        return " AND ".join(where), params
+
+    async def report_verdicts(self, *, ie: str | None, ms_from: int | None,
+                              ms_to: int | None) -> list[dict]:
+        """Message totals in a range, grouped by verdict and whether they are encrypted."""
+        clause, params = self._report_filter(ie, ms_from, ms_to)
+        return await self._fetch(
+            f"SELECT verdict, encrypted, count(*) AS n FROM messages WHERE {clause} "
+            f"GROUP BY verdict, encrypted", params)
+
+    async def report_messages(self, *, ie: str | None, ms_from: int | None,
+                              ms_to: int | None, limit: int) -> list[dict]:
+        """Confirmed messages in a range (each one has a proof bundle), oldest first."""
+        clause, params = self._report_filter(ie, ms_from, ms_to)
+        return await self._fetch(
+            f"SELECT block_id, tag, kind, ie_id, iss, verdict, ms_index, wf_index, ts "
+            f"FROM messages WHERE {clause} AND ms_index IS NOT NULL "
+            f"ORDER BY ms_index, wf_index, block_id LIMIT %s", [*params, limit])
+
+    async def put_report(self, *, report_hash: bytes, ie: str | None, ms_from: int | None,
+                         ms_to: int | None, json: dict, html: str, block_id: bytes | None,
+                         generated_at_ms: int, created_at_ms: int) -> None:
+        await self._fetch(
+            "INSERT INTO reports (report_hash, ie, ms_from, ms_to, json, html, block_id, "
+            "generated_at_ms, created_at_ms) VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s) "
+            "ON CONFLICT (report_hash) DO UPDATE SET block_id = COALESCE("
+            "excluded.block_id, reports.block_id) RETURNING report_hash",
+            (report_hash, ie, ms_from, ms_to, Jsonb(json), html, block_id, generated_at_ms,
+             created_at_ms))
+
+    async def set_report_block(self, report_hash: bytes, block_id: bytes) -> None:
+        await self._fetch(
+            "UPDATE reports SET block_id = %s WHERE report_hash = %s RETURNING report_hash",
+            (block_id, report_hash))
+
+    async def get_report(self, report_hash: bytes) -> dict | None:
+        return await self._one(
+            "SELECT report_hash, ie, ms_from, ms_to, json, html, block_id, generated_at_ms, "
+            "created_at_ms FROM reports WHERE report_hash = %s", (report_hash,))
+
+    async def list_reports(self, limit: int) -> list[dict]:
+        return await self._fetch(
+            "SELECT report_hash, ie, ms_from, ms_to, block_id, generated_at_ms, created_at_ms "
+            "FROM reports ORDER BY generated_at_ms DESC, report_hash LIMIT %s", (limit,))

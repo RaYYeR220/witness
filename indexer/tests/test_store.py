@@ -22,7 +22,7 @@ def row(n: int, **kw) -> MessageRow:
 async def test_migrate_idempotent(store: Store):
     await store.migrate()
     await store.migrate()
-    assert await store.applied_versions() == [1, 2]
+    assert await store.applied_versions() == [1, 2, 4]
 
 
 async def test_service_status_in_stats(store: Store):

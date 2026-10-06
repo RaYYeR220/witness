@@ -29,7 +29,9 @@ from . import (
     routes_ie,
     routes_ingest,
     routes_messages,
+    routes_posture,
     routes_proofs,
+    routes_reports,
     routes_stream,
     routes_system,
 )
@@ -45,7 +47,8 @@ log = logging.getLogger(__name__)
 ROUTERS: tuple[APIRouter, ...] = (
     routes_messages.router, routes_messages.lookups, routes_ingest.router, routes_ie.router,
     routes_proofs.router, routes_flows.router, routes_alerts.router, routes_anchors.router,
-    routes_identity.router, routes_stream.router, routes_system.router,
+    routes_identity.router, routes_posture.router, routes_reports.router,
+    routes_stream.router, routes_system.router,
 )
 
 TAGS = [
@@ -63,6 +66,10 @@ TAGS = [
     {"name": "integrity", "description": "Alerts and incidents."},
     {"name": "anchors", "description": "Checkpoints anchored on IOTA Rebased."},
     {"name": "identity", "description": "Component DIDs and the writer policy."},
+    {"name": "posture", "description": "Node security posture: constructive findings about "
+     "the HORNET deployment (sample keys, open admin routes, debug API, dashboard, …)."},
+    {"name": "reports", "description": "Signed audit reports whose hash is anchored on the "
+     "Tangle as an audit.report message, with JSON and a self-contained HTML page."},
     {"name": "stream", "description": "Live events over Server-Sent Events."},
     {"name": "system", "description": "Health and statistics."},
 ]

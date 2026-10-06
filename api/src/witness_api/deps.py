@@ -6,7 +6,7 @@ from __future__ import annotations
 import asyncio
 import json
 import re
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import UTC, date, datetime, time, timedelta
 from typing import TYPE_CHECKING, Annotated, Any
 
@@ -44,6 +44,8 @@ class Services:
     policy: WriterPolicy | None = None
     verify_slots: asyncio.Semaphore | None = None
     stats_cache: tuple[float, dict[str, int]] | None = None
+    posture_cache: Any = None  # the last posture scan (m.Posture), served by GET /posture
+    posture_lock: asyncio.Lock = field(default_factory=asyncio.Lock)
 
     @property
     def validating(self) -> bool:

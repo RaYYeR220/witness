@@ -1,0 +1,125 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Witness audit report {{ report_hash[:18] }}…</title>
+<style>
+  :root { color-scheme: light dark; }
+  * { box-sizing: border-box; }
+  body { margin: 0; padding: 2rem 1rem; font: 15px/1.5 -apple-system, "Segoe UI", Roboto,
+         Helvetica, Arial, sans-serif; color: #15202b; background: #f7f8fa; }
+  main { max-width: 56rem; margin: 0 auto; }
+  h1 { font-size: 1.5rem; margin: 0 0 .25rem; }
+  h2 { font-size: 1.05rem; margin: 2rem 0 .5rem; border-bottom: 1px solid #d6dbe0;
+       padding-bottom: .3rem; }
+  .sub { color: #5b6b7b; margin: 0 0 1rem; }
+  .hash { font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace; font-size: .85rem;
+          word-break: break-all; background: #eef1f4; border: 1px solid #d6dbe0;
+          border-radius: 6px; padding: .6rem .7rem; }
+  .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(9rem, 1fr));
+          gap: .6rem; margin: .5rem 0; }
+  .card { background: #fff; border: 1px solid #d6dbe0; border-radius: 8px; padding: .7rem .8rem; }
+  .card .n { font-size: 1.4rem; font-weight: 600; }
+  .card .k { color: #5b6b7b; font-size: .8rem; text-transform: uppercase; letter-spacing: .03em; }
+  table { width: 100%; border-collapse: collapse; margin: .3rem 0 1rem; font-size: .9rem; }
+  th, td { text-align: left; padding: .35rem .5rem; border-bottom: 1px solid #e4e8ec; }
+  th { color: #5b6b7b; font-weight: 600; }
+  code { font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace; font-size: .82rem;
+         word-break: break-all; }
+  .muted { color: #5b6b7b; }
+  footer { margin-top: 2.5rem; color: #5b6b7b; font-size: .8rem; }
+  @media (prefers-color-scheme: dark) {
+    body { color: #e5e9ee; background: #0f141a; }
+    .sub, .card .k, th, .muted, footer { color: #93a1b0; }
+    .hash { background: #182029; border-color: #2a333d; }
+    .card { background: #151c24; border-color: #2a333d; }
+    h2 { border-color: #2a333d; }
+    th, td { border-color: #222b34; }
+  }
+</style>
+</head>
+<body>
+<main>
+  <h1>Witness audit report</h1>
+  <p class="sub">Network <strong>{{ report.network }}</strong> &middot; generated
+     {{ report.generatedAt }} (epoch ms){% if report.ie %} &middot; IE
+     <code>{{ report.ie }}</code>{% endif %}{% if report.range.msFrom is not none
+     or report.range.msTo is not none %} &middot; milestones
+     {{ report.range.msFrom if report.range.msFrom is not none else "…" }}–{{ report.range.msTo
+     if report.range.msTo is not none else "…" }}{% endif %}</p>
+
+  <h2>Report hash</h2>
+  <p class="muted">BLAKE2b-256 of this report's canonical JSON. It is written to the Tangle as
+     an <code>audit.report</code> message so the report is verifiable against the ledger.</p>
+  <div class="hash" id="report-hash">{{ report_hash }}</div>
+
+  <h2>Messages</h2>
+  <div class="grid">
+    <div class="card"><div class="n">{{ report.messages.total }}</div><div class="k">total</div></div>
+    <div class="card"><div class="n">{{ report.messages.encrypted }}</div><div class="k">encrypted</div></div>
+    <div class="card"><div class="n">{{ report.messages.plaintext }}</div><div class="k">plaintext</div></div>
+  </div>
+  {% if report.messages.byVerdict %}
+  <table>
+    <thead><tr><th>Verdict</th><th>Count</th></tr></thead>
+    <tbody>
+      {% for verdict, n in report.messages.byVerdict.items() %}
+      <tr><td>{{ verdict }}</td><td>{{ n }}</td></tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  {% else %}<p class="muted">No messages in range.</p>{% endif %}
+
+  <h2>Alerts</h2>
+  {% if report.alerts.total %}
+  <div class="grid">
+    {% for sev, n in report.alerts.bySeverity.items() %}
+    <div class="card"><div class="n">{{ n }}</div><div class="k">{{ sev }}</div></div>
+    {% endfor %}
+  </div>
+  <table>
+    <thead><tr><th>Rule</th><th>Count</th></tr></thead>
+    <tbody>
+      {% for rule, n in report.alerts.byRule.items() %}
+      <tr><td>{{ rule }}</td><td>{{ n }}</td></tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  {% else %}<p class="muted">No alerts recorded.</p>{% endif %}
+
+  <h2>Anchors</h2>
+  {% if report.anchors.total %}
+  <p>{{ report.anchors.total }} checkpoint(s).
+     {% for status, n in report.anchors.byStatus.items() %}<span class="muted">{{ status }}:
+     {{ n }}</span>{% if not loop.last %} &middot; {% endif %}{% endfor %}</p>
+  {% if report.anchors.latest %}
+  <p class="muted">Latest: seq {{ report.anchors.latest.seq }}, milestones
+     {{ report.anchors.latest.fromMilestone }}–{{ report.anchors.latest.toMilestone }},
+     status {{ report.anchors.latest.status }}{% if report.anchors.latest.tx %}, tx
+     <code>{{ report.anchors.latest.tx }}</code>{% endif %}.</p>
+  {% endif %}
+  {% else %}<p class="muted">No anchors recorded.</p>{% endif %}
+
+  <h2>Proof index <span class="muted">({{ report.proofs|length }})</span></h2>
+  {% if report.proofs %}
+  <table>
+    <thead><tr><th>Milestone</th><th>Kind</th><th>Verdict</th><th>Block</th></tr></thead>
+    <tbody>
+      {% for p in report.proofs %}
+      <tr>
+        <td>{{ p.msIndex }}.{{ p.wfIndex }}</td>
+        <td>{{ p.kind or p.tag }}</td>
+        <td>{{ p.verdict }}</td>
+        <td><code>{{ p.blockId }}</code></td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  {% else %}<p class="muted">No confirmed messages in range.</p>{% endif %}
+
+  <footer>Witness — an IOTA Advanced Explorer for Eclipse aeriOS. Verify each block with its
+    proof bundle at <code>GET /proofs/&lt;blockId&gt;</code>.</footer>
+</main>
+</body>
+</html>

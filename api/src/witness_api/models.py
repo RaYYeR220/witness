@@ -466,3 +466,55 @@ class IngestResult(ApiModel):
     sub_id: str
     block_id: str | None = None
     status: str | None = None
+
+
+# -- posture ----------------------------------------------------------------------------------
+
+class Finding(ApiModel):
+    id: str = Field(examples=["sample-coordinator-keys"])
+    severity: Literal["high", "medium", "low", "info"]
+    title: str
+    evidence: Any = Field(description="What the check observed (no secrets, no node address)")
+    fix: str = Field(description="Concrete, constructive remediation")
+
+
+class Posture(ApiModel):
+    scanned_at_ms: int | None = Field(None, description="When the cached scan ran; null if "
+                                      "none has run yet")
+    scanned_at: str | None = None
+    active: bool = Field(False, description="True when active probes were allowed to run")
+    summary: dict[str, int] = Field(default_factory=dict,
+                                    description="Finding count per severity")
+    findings: list[Finding] = Field(default_factory=list)
+
+
+# -- reports ----------------------------------------------------------------------------------
+
+class ReportRequest(ApiModel):
+    ie: str | None = Field(None, description="Limit to one Infrastructure Element",
+                           examples=["MyDomain:fa163e5e25ef"])
+    ms_from: int | None = Field(None, ge=0, le=0xFFFFFFFF, description="First milestone index")
+    ms_to: int | None = Field(None, ge=0, le=0xFFFFFFFF, description="Last milestone index")
+
+
+class ReportSummary(ApiModel):
+    report_hash: str = Field(examples=["0x" + "cd" * 32])
+    ie: str | None = None
+    ms_from: int | None = None
+    ms_to: int | None = None
+    block_id: str | None = Field(None, description="The audit.report block on the Tangle")
+    generated_at_ms: int
+    generated_at: str
+    links: dict[str, str] = Field(default_factory=dict)
+
+
+class ReportList(ApiModel):
+    items: list[ReportSummary]
+
+
+class ReportResult(ApiModel):
+    report_hash: str
+    block_id: str | None = Field(None, description="The audit.report block id, when posted")
+    links: dict[str, str]
+    report: Any = Field(description="The full report JSON (its canonical form hashes to "
+                        "reportHash)")
