@@ -458,17 +458,19 @@ class Store:
             "ORDER BY s.received_at_ms, s.sub_id LIMIT %s", (limit,))
 
     async def verified_content(self, after: bytes | None, limit: int) -> list[dict]:
-        """Submitted blocks whose latest lifecycle status is CONTENT_VERIFIED, in block id order
-        after `after`, with every copy of their content the explorer holds: the submission's
-        tag/data_hex and, when indexed, the message's tag/data."""
+        """Blocks whose content matched the Tangle at least once (a MATCH content check),
+        whatever their status is now, in block id order after `after`, with every copy of
+        their content the explorer holds: the submission's tag/data_hex and the message's
+        tag/data, for whichever of those rows exist."""
         return await self._fetch(
-            "SELECT s.block_id, s.sub_id, s.tag AS sub_tag, s.data_hex, "
-            "m.block_id IS NOT NULL AS has_message, m.tag AS msg_tag, m.data AS msg_data "
-            "FROM submissions s LEFT JOIN messages m ON m.block_id = s.block_id "
-            "WHERE s.block_id IS NOT NULL AND (%s::bytea IS NULL OR s.block_id > %s::bytea) "
-            "AND (SELECT l.status FROM lifecycle l WHERE l.block_id = s.block_id "
-            "ORDER BY l.at_ms DESC, l.id DESC LIMIT 1) = 'CONTENT_VERIFIED' "
-            "ORDER BY s.block_id LIMIT %s", (after, after, limit))
+            "SELECT c.block_id, s.sub_id, s.block_id IS NOT NULL AS has_submission, "
+            "s.tag AS sub_tag, s.data_hex, m.block_id IS NOT NULL AS has_message, "
+            "m.tag AS msg_tag, m.data AS msg_data "
+            "FROM (SELECT DISTINCT block_id FROM content_checks WHERE result = 'MATCH' "
+            "AND (%s::bytea IS NULL OR block_id > %s::bytea) ORDER BY block_id LIMIT %s) c "
+            "LEFT JOIN submissions s ON s.block_id = c.block_id "
+            "LEFT JOIN messages m ON m.block_id = c.block_id "
+            "ORDER BY c.block_id", (after, after, limit))
 
     # -- events -----------------------------------------------------------------------------
 

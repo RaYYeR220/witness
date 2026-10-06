@@ -10,7 +10,7 @@ import pytest
 import respx
 from witness_core.codec import serialize_tagged_block
 from witness_core.ids import blake2b256
-from witness_indexer.hornet_rest import HornetRest
+from witness_indexer.hornet_rest import RAW_MEDIA_TYPE, HornetRest
 from witness_indexer.ingest import handle_record
 from witness_indexer.store import MessageRow
 from witness_indexer.validator import Validator, ValidatorConfig, json_diff
@@ -64,11 +64,17 @@ def meta(bid, solid=True, ms=None):
 
 
 def as_response(item):
+    if isinstance(item, httpx.Response):
+        return item
     if isinstance(item, Exception):
         return item
     if isinstance(item, int):
         return httpx.Response(item, json={"error": {"code": str(item)}})
     return httpx.Response(200, json=item)
+
+
+def binary(raw):
+    return httpx.Response(200, content=raw, headers={"Content-Type": RAW_MEDIA_TYPE})
 
 
 def serve(bid, raw, metas):
@@ -79,7 +85,7 @@ def serve(bid, raw, metas):
     else:
         meta_route = respx.get(url + "/metadata").mock(
             side_effect=[as_response(m) for m in metas])
-    block = httpx.Response(404) if raw is None else httpx.Response(200, content=raw)
+    block = httpx.Response(404) if raw is None else binary(raw)
     block_route = respx.get(url).mock(return_value=block)
     return meta_route, block_route
 
@@ -267,6 +273,174 @@ async def test_orphan_timeout(env):
     assert alert["evidence"]["lastMetadata"]["isSolid"] is True
 
 
+UNAVAILABLE = httpx.Response(503, text="node restarting")
+
+
+def answers(bid, pattern):
+    """Metadata answers by poll number for one 60 s window (12 polls with the defaults):
+    "503" unreachable, "404" unknown block, "meta" known but not referenced."""
+    calls = {"n": 0}
+
+    def answer(request):
+        kind = pattern[min(calls["n"], len(pattern) - 1)]
+        calls["n"] += 1
+        if kind == "503":
+            return httpx.Response(503, text="node restarting")
+        if kind == "404":
+            return httpx.Response(404, json={"error": {}})
+        return httpx.Response(200, json=meta(bid, solid=False))
+
+    return answer
+
+
+@respx.mock
+@pytest.mark.parametrize(("pattern", "expected"), [
+    (["503"] * 12, "SUBMITTED"),                   # never answered
+    (["meta"] * 11 + ["503"], "SUBMITTED"),        # unreachable at the deadline
+    (["503"] * 11 + ["404"], "SUBMITTED"),         # only the last poll answered
+    (["404"] + ["503"] * 10 + ["404"], "ORPHANED"),
+    (["404"] * 12, "ORPHANED"),                    # the node never heard of the block
+], ids=["all-503", "last-503", "only-last-404", "first-and-last-404", "all-404"])
+async def test_orphan_needs_definitive_answers(env, pattern, expected):
+    store, v, _ = env
+    raw, bid, data = make_block()
+    meta_route, block_route = serve(bid, raw, answers(bid, pattern))
+    await handle_record(store, v, rec("s-1", bid, data), source="mqtt")
+
+    assert await v.validate_once(bid, "s-1") == expected
+    assert meta_route.call_count == 12
+    assert not block_route.called
+    alerts = await store.alerts()
+    if expected == "ORPHANED":
+        assert await statuses(store, bid) == ["RECEIVED", "SUBMITTED", "ORPHANED"]
+        assert [a["rule"] for a in alerts] == ["ORPHANED"]
+        assert alerts[0]["evidence"]["answeredPolls"] == pattern.count("404")
+    else:
+        assert await statuses(store, bid) == ["RECEIVED", "SUBMITTED"]
+        assert alerts == []
+
+
+@respx.mock
+@pytest.mark.parametrize("answer", [
+    UNAVAILABLE,
+    httpx.Response(200, json={"protocolVersion": 2}),  # Accept ignored
+    httpx.Response(200, text="<html>maintenance</html>"),  # proxy page
+], ids=["503", "json", "html"])
+async def test_raw_fetch_unavailable_leaves_confirmed(env, answer):
+    store, v, _ = env
+    raw, bid, data = make_block()
+    _, block_route = serve(bid, raw, [meta(bid, ms=3)])
+    block_route.mock(return_value=answer)
+    await handle_record(store, v, rec("s-1", bid, data), source="mqtt")
+
+    assert await v.validate_once(bid, "s-1") == "CONFIRMED"
+    assert (await statuses(store, bid))[-1] == "CONFIRMED"
+    assert await store.content_checks(bid) == []
+    assert await store.alerts() == []
+    assert block_route.call_count > 1  # retried within the window
+
+
+@respx.mock
+async def test_direct_call_cannot_race_worker(env):
+    store, v, _ = env
+    raw, bid, data = make_block()
+    serve(bid, raw, [meta(bid, ms=3), meta(bid, ms=3)])
+    await handle_record(store, v, rec("s-1", bid, data), source="mqtt")
+    results = await asyncio.gather(v.validate_once(bid, "s-1"), v.validate_once(bid, None))
+    assert results == ["CONTENT_VERIFIED", "CONTENT_VERIFIED"]
+    assert await statuses(store, bid) == [
+        "RECEIVED", "SUBMITTED", "SOLID", "CONFIRMED", "CONTENT_VERIFIED"]
+
+
+async def eventually(check, timeout_s=15.0):
+    for _ in range(int(timeout_s / 0.05)):
+        if await check():
+            return True
+        await asyncio.sleep(0.05)
+    return False
+
+
+def quick_retry_validator(store, hornet, clock, **cfg):
+    return Validator(store, hornet,
+                     ValidatorConfig(retry_initial_s=0.01, retry_max_s=0.05, **cfg),
+                     sleep=clock.sleep, clock=clock.clock)
+
+
+@respx.mock
+async def test_worker_requeues_unconcluded_validation(env):
+    store, v, clock = env
+    raw, bid, data = make_block()
+    # A whole window unreachable, then the node is back and the block confirmed.
+    meta_route, _ = serve(bid, raw, [503] * 12 + [meta(bid, ms=9)])
+    worker_v = quick_retry_validator(store, v.hornet, clock, resume_every_s=3600)
+    worker = asyncio.create_task(worker_v.run())
+    try:
+        await handle_record(store, worker_v, rec("s-1", bid, data), source="mqtt")
+
+        async def verified():
+            return (await statuses(store, bid))[-1] == "CONTENT_VERIFIED"
+
+        assert await eventually(verified)
+        assert meta_route.call_count == 13
+        assert "ORPHANED" not in await statuses(store, bid)
+        assert await store.alerts() == []
+
+        async def settled():
+            return worker_v.pending == 0
+
+        assert await eventually(settled)
+    finally:
+        await worker_v.stop()
+        await asyncio.wait_for(worker, 5)
+
+
+@respx.mock
+async def test_worker_retries_after_an_error(env):
+    store, v, clock = env
+    raw, bid, data = make_block()
+    serve(bid, raw, [RuntimeError("bug in a dependency"), meta(bid, ms=9)])
+    worker_v = quick_retry_validator(store, v.hornet, clock, resume_every_s=3600)
+    worker = asyncio.create_task(worker_v.run())
+    try:
+        await handle_record(store, worker_v, rec("s-1", bid, data), source="mqtt")
+
+        async def verified():
+            return (await statuses(store, bid))[-1] == "CONTENT_VERIFIED"
+
+        assert await eventually(verified)
+    finally:
+        await worker_v.stop()
+        await asyncio.wait_for(worker, 5)
+
+
+@respx.mock
+async def test_periodic_resume_picks_up_unfinished(env):
+    store, v, clock = env
+    raw, bid, data = make_block()
+    serve(bid, raw, [meta(bid, ms=9)])
+    worker_v = quick_retry_validator(store, v.hornet, clock, resume_every_s=0.05)
+    worker = asyncio.create_task(worker_v.run())
+    try:
+        # Stored by another process (or before a crash): never enqueued on this validator.
+        await handle_record(store, RecordingValidator(), rec("s-1", bid, data), source="http")
+
+        async def verified():
+            return (await statuses(store, bid))[-1] == "CONTENT_VERIFIED"
+
+        assert await eventually(verified)
+    finally:
+        await worker_v.stop()
+        await asyncio.wait_for(worker, 5)
+
+
+class RecordingValidator:
+    def __init__(self):
+        self.enqueued = []
+
+    def enqueue(self, block_id, sub_id):
+        self.enqueued.append((block_id, sub_id))
+
+
 async def test_failed_submit_not_polled(env):
     store, v, _ = env
     with respx.mock(base_url=BASE, assert_all_called=False) as mock:
@@ -347,6 +521,91 @@ async def test_reverify_detects_db_tamper(env):
 
     assert await v.reverify_all() == []
     assert len(await store.alerts({"rule": "DB_TAMPER"})) == 2
+
+
+async def verified_block(store, v, name, *, with_message=True):
+    raw, bid, data = make_block({"score": 0.5, "id": f"MyDomain:{name}"})
+    _, block_route = serve(bid, raw, [meta(bid, ms=3)])
+    await handle_record(store, v, rec(f"s-{name}", bid, data), source="mqtt")
+    if with_message:
+        await store.put_message(MessageRow(block_id=bid, tag="trust.score", data=data))
+    assert await v.validate_once(bid, f"s-{name}") == "CONTENT_VERIFIED"
+    return bid, data, block_route
+
+
+async def tamper_submission(store, bid, data_hex):
+    await store._fetch("UPDATE submissions SET data_hex = %s WHERE block_id = %s RETURNING 1",
+                       (data_hex, bid))
+
+
+@respx.mock
+async def test_reverify_flags_consistent_edit_of_both_copies(env):
+    store, v, _ = env
+    bid, data, _ = await verified_block(store, v, "a")
+    forged = data.replace(b"0.5", b"0.9")
+    await tamper_submission(store, bid, "0x" + forged.hex())
+    await store._fetch("UPDATE messages SET data = %s WHERE block_id = %s RETURNING 1",
+                       (forged, bid))
+    [alert] = await v.reverify_all()
+    assert alert.rule == "DB_TAMPER"
+    assert [f["field"] for f in alert.evidence["fields"]] == [
+        "submissions.data_hex", "messages.data"]
+
+
+@respx.mock
+async def test_reverify_flags_nulled_message_copy(env):
+    store, v, _ = env
+    bid, _, _ = await verified_block(store, v, "a")
+    await store._fetch("UPDATE messages SET tag = NULL, data = NULL WHERE block_id = %s "
+                       "RETURNING 1", (bid,))
+    [alert] = await v.reverify_all()
+    assert [(f["field"], f["actual"]) for f in alert.evidence["fields"]] == [
+        ("messages.tag", None), ("messages.data", None)]
+
+
+@respx.mock
+async def test_reverify_rechecks_blocks_already_flagged(env):
+    store, v, _ = env
+    bid, data, _ = await verified_block(store, v, "a")
+    await tamper_submission(store, bid, "0x" + data.replace(b"0.5", b"0.9").hex())
+    [first] = await v.reverify_all()
+    assert (await statuses(store, bid))[-1] == "CONTENT_MISMATCH"
+    assert await v.reverify_all() == []  # same tampering, already reported
+    await tamper_submission(store, bid, "0x" + data.replace(b"0.5", b"0.1").hex())
+    [second] = await v.reverify_all()  # the block is still re-verified after its first alert
+    assert second.dedupe_key != first.dedupe_key
+    assert len(await store.alerts({"rule": "DB_TAMPER"})) == 2
+
+
+@respx.mock
+@pytest.mark.parametrize("answer", ["404", "other-block", "503", "html"])
+async def test_reverify_does_not_judge_without_the_block(env, answer):
+    store, v, _ = env
+    bid, data, block_route = await verified_block(store, v, "a")
+    await tamper_submission(store, bid, "0x" + data.replace(b"0.5", b"0.9").hex())
+    other, _, _ = make_block({"id": "someone else"})
+    block_route.mock(return_value={
+        "404": httpx.Response(404),
+        "other-block": binary(other),
+        "503": UNAVAILABLE,
+        "html": httpx.Response(200, text="<html>"),
+    }[answer])
+    assert await v.reverify_all() == []
+    assert await store.alerts() == []
+    assert (await statuses(store, bid))[-1] == "CONTENT_VERIFIED"
+
+
+@respx.mock
+async def test_reverify_stops_when_node_goes_away_mid_pass(env):
+    store, v, _ = env
+    blocks = sorted([await verified_block(store, v, n) for n in ("a", "b", "c")])
+    for bid, data, _ in blocks:
+        await tamper_submission(store, bid, "0x" + data.replace(b"0.5", b"0.9").hex())
+    blocks[1][2].mock(return_value=UNAVAILABLE)
+    calls_before = blocks[2][2].call_count
+    found = await v.reverify_all()
+    assert [a.block_id for a in found] == [blocks[0][0]]
+    assert blocks[2][2].call_count == calls_before  # not reached
 
 
 @respx.mock

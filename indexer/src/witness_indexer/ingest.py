@@ -24,6 +24,7 @@ from .store import Store, Submission
 log = logging.getLogger(__name__)
 
 SUBMISSIONS_TOPIC = "aerios/iota/submissions/#"
+MAX_QUEUED = 10_000
 RECORD_KEYS = ("subId", "receivedAtMs", "tag", "message", "dataHex", "blockId", "hornetStatus",
                "relay")
 _HEX = re.compile(r"0x(?:[0-9a-fA-F]{2})*")
@@ -162,9 +163,32 @@ def _payload_bytes(payload: Any) -> bytes:
     return str(payload).encode()
 
 
-def aiomqtt_source(url: str, topic: str, *, client_id: str) -> Connect:
+def counting_queue(on_drop: Callable[[], None]) -> type[asyncio.Queue]:
+    """Queue class for aiomqtt's incoming buffer that reports each message it has to drop
+    because the buffer is full (aiomqtt itself only logs it)."""
+
+    class CountingQueue(asyncio.Queue):
+        def put_nowait(self, item: Any) -> None:
+            try:
+                super().put_nowait(item)
+            except asyncio.QueueFull:
+                on_drop()
+                raise
+
+    return CountingQueue
+
+
+def aiomqtt_source(url: str, topic: str, *, client_id: str, max_queued: int = MAX_QUEUED,
+                   stats: dict[str, int] | None = None) -> Connect:
     """Connect factory for a real broker. A fixed client id with a persistent session lets
-    Mosquitto keep QoS 1 records queued while the explorer is reconnecting."""
+    Mosquitto keep QoS 1 records queued while the explorer is reconnecting. Records arriving
+    faster than they are stored wait in a buffer of `max_queued`; overflow is dropped and
+    counted in `stats["dropped"]`, the current buffer depth is `stats["backlog"]`."""
+    stats = stats if stats is not None else {}
+
+    def dropped() -> None:
+        stats["dropped"] = stats.get("dropped", 0) + 1
+
     parts = urlsplit(url)
     params = {
         "hostname": parts.hostname or "127.0.0.1",
@@ -173,6 +197,8 @@ def aiomqtt_source(url: str, topic: str, *, client_id: str) -> Connect:
         "password": unquote(parts.password) if parts.password else None,
         "identifier": client_id,
         "clean_session": False,
+        "max_queued_incoming_messages": max_queued,
+        "queue_type": counting_queue(dropped),
     }
 
     @asynccontextmanager
@@ -184,6 +210,7 @@ def aiomqtt_source(url: str, topic: str, *, client_id: str) -> Connect:
 
             async def payloads() -> AsyncIterator[bytes]:
                 async for message in client.messages:
+                    stats["backlog"] = len(client.messages)
                     yield _payload_bytes(message.payload)
 
             yield payloads()
@@ -194,14 +221,15 @@ def aiomqtt_source(url: str, topic: str, *, client_id: str) -> Connect:
 class MqttIngest:
     """Subscribes to the relay's submission records and feeds them to `handle_record`.
 
-    Survives anything a message can do (bad JSON, bad record, a failing store write): the
-    message is logged and counted in `stats`, and the next one is read. A lost connection
-    is retried with exponential backoff.
+    Survives anything a message can do (bad or absurdly nested JSON, a bad record, a failing
+    store write): the message is logged and counted in `stats`, and the next one is read on
+    the same connection. A lost connection is retried with exponential backoff. `stats` also
+    reports the broker buffer: `backlog` (records waiting) and `dropped` (buffer overflow).
     """
 
     def __init__(self, store: Store, validator: Enqueuer, mqtt_url: str,
                  topic: str = SUBMISSIONS_TOPIC, *, client_id: str = "witness-indexer-ingest",
-                 connect: Connect | None = None,
+                 connect: Connect | None = None, max_queued: int = MAX_QUEUED,
                  sleep: Callable[[float], Awaitable[Any]] = asyncio.sleep,
                  initial_backoff_s: float = 0.5, max_backoff_s: float = 8.0) -> None:
         scheme = urlsplit(mqtt_url).scheme
@@ -210,14 +238,15 @@ class MqttIngest:
         self.store = store
         self.validator = validator
         self.topic = topic
-        self._connect = connect or aiomqtt_source(mqtt_url, topic, client_id=client_id)
+        self.stats = {"received": 0, "accepted": 0, "duplicates": 0, "bad": 0, "errors": 0,
+                      "connect_failures": 0, "disconnects": 0, "dropped": 0, "backlog": 0}
+        self._connect = connect or aiomqtt_source(mqtt_url, topic, client_id=client_id,
+                                                  max_queued=max_queued, stats=self.stats)
         self._sleep = sleep
         self._initial = initial_backoff_s
         self._max = max_backoff_s
         self._stopping = False
         self._task: asyncio.Task | None = None
-        self.stats = {"received": 0, "accepted": 0, "duplicates": 0, "bad": 0, "errors": 0,
-                      "connect_failures": 0, "disconnects": 0}
 
     async def run(self) -> None:
         self._task = asyncio.current_task()
@@ -231,7 +260,12 @@ class MqttIngest:
                         backoff = self._initial
                         log.info("subscribed to %s", self.topic)
                         async for payload in payloads:
-                            await self._on_payload(payload)
+                            try:
+                                await self._on_payload(payload)
+                            except Exception:
+                                # Whatever one record does must not tear the connection down.
+                                self.stats["bad"] += 1
+                                log.exception("dropped a submission record that broke ingest")
                     self.stats["disconnects"] += 1
                 except Exception as e:  # noqa: BLE001 - any broker/transport failure: back off, retry
                     key = "disconnects" if connected else "connect_failures"
@@ -257,9 +291,10 @@ class MqttIngest:
         self.stats["received"] += 1
         try:
             obj = json.loads(payload)
-        except ValueError as e:
+        except (ValueError, RecursionError) as e:
             self.stats["bad"] += 1
-            log.warning("dropped submission record that is not JSON: %s", e)
+            log.warning("dropped submission record that is not JSON: %s",
+                        type(e).__name__ if isinstance(e, RecursionError) else e)
             return
         try:
             new = await handle_record(self.store, self.validator, obj, source="mqtt")

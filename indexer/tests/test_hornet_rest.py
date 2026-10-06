@@ -28,11 +28,34 @@ async def test_block_json(hornet):
     assert route.calls.last.request.headers["accept"] == "application/json"
 
 
+def binary(raw):
+    return httpx.Response(200, content=raw, headers={"Content-Type": RAW_MEDIA_TYPE})
+
+
 @respx.mock
 async def test_block_raw_asks_for_binary(hornet):
-    route = respx.get(BLOCK_URL).mock(return_value=httpx.Response(200, content=RAW))
+    route = respx.get(BLOCK_URL).mock(return_value=binary(RAW))
     assert await hornet.block_raw(BID) == RAW
     assert route.calls.last.request.headers["accept"] == RAW_MEDIA_TYPE
+
+
+@respx.mock
+@pytest.mark.parametrize("answer", [
+    httpx.Response(200, json={"protocolVersion": 2}),  # node ignored Accept
+    httpx.Response(200, text="<html>maintenance</html>"),  # proxy page
+    httpx.Response(200, content=RAW),  # no content type at all
+], ids=["json", "html", "untyped"])
+async def test_block_raw_rejects_non_binary_answer(hornet, answer):
+    respx.get(BLOCK_URL).mock(return_value=answer)
+    with pytest.raises(HornetUnavailable):
+        await hornet.block_raw(BID)
+
+
+@respx.mock
+async def test_block_raw_accepts_media_type_parameters(hornet):
+    respx.get(BLOCK_URL).mock(return_value=httpx.Response(
+        200, content=RAW, headers={"Content-Type": RAW_MEDIA_TYPE.upper() + "; charset=x"}))
+    assert await hornet.block_raw(BID) == RAW
 
 
 @respx.mock

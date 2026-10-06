@@ -6,7 +6,8 @@ For every submission that got a block id the validator walks the lifecycle
 
 (c) polls HORNET `GET /api/core/v2/blocks/{id}/metadata` with exponential backoff until the
 block is referenced by a milestone, or gives up after `timeout_s` (ORPHANED). Every metadata
-answer is kept in `validations`.
+answer is kept in `validations`. ORPHANED is only ever concluded from answers the node gave;
+an unreachable node (or one returning something that is not an answer) decides nothing.
 
 (d) then fetches the original block with `GET /api/core/v2/blocks/{id}` as raw bytes and
 compares it with what the explorer received: the BLAKE2b-256 of the bytes must be the block
@@ -14,8 +15,12 @@ id (a node serving another block for an id is a mismatch too), the payload must 
 data, and tag and data must be byte-for-byte what the Messages API sent. Each comparison is
 kept in `content_checks`; a mismatch carries a field diff and a canonical-JSON diff for the UI.
 
-`reverify_all` repeats (d) later for verified messages, against the copies held in the
-parallel database. If those no longer match the Tangle, the database was altered: DB_TAMPER.
+A validation that could not conclude keeps its current status and is retried by the worker
+with a growing delay; a periodic `resume` also re-queues anything left unfinished.
+
+`reverify_all` repeats (d) later for every block whose content ever matched, against the
+copies held in the parallel database. If those no longer match the Tangle, the database was
+altered: DB_TAMPER.
 """
 
 from __future__ import annotations
@@ -25,7 +30,8 @@ import json
 import logging
 import re
 import time
-from collections.abc import Awaitable, Callable
+from collections.abc import AsyncIterator, Awaitable, Callable
+from contextlib import asynccontextmanager
 from dataclasses import dataclass, field
 from typing import Any
 
@@ -50,6 +56,8 @@ METADATA_VIA = "GET /api/core/v2/blocks/{blockId}/metadata"
 BLOCK_VIA = "GET /api/core/v2/blocks/{blockId}"
 # Statuses that close a validation run; written again only when the outcome changes.
 OUTCOMES = frozenset({"CONTENT_VERIFIED", "CONTENT_MISMATCH", "NOT_FOUND", "ORPHANED"})
+# A worker stops retrying a block once its status is one of these.
+TERMINAL = OUTCOMES | {"RECEIVED"}
 MAX_JSON_CHANGES = 200
 _PLAIN_KEY = re.compile(r"[A-Za-z_][A-Za-z0-9_]*")
 
@@ -61,6 +69,9 @@ class ValidatorConfig:
     timeout_s: float = 60.0
     reverify_batch: int = 200
     max_concurrent: int = 32
+    retry_initial_s: float = 5.0
+    retry_max_s: float = 300.0
+    resume_every_s: float = 60.0
 
 
 def _hex(b: bytes) -> str:
@@ -212,12 +223,26 @@ class _Unavailable:
 _UNAVAILABLE = _Unavailable()
 
 
+class _BlockLock:
+    __slots__ = ("lock", "users")
+
+    def __init__(self) -> None:
+        self.lock = asyncio.Lock()
+        self.users = 0
+
+
 def _referenced_index(meta: dict) -> int | None:
     ms = meta.get("referencedByMilestoneIndex")
     return ms if type(ms) is int else None
 
 
 class Validator:
+    """Runs checks (c) and (d) for queued submissions.
+
+    `sleep` and `clock` drive the polling backoff inside one validation (tests inject fakes);
+    the worker's retry and resume timers run on the event loop's own clock.
+    """
+
     def __init__(self, store: Store, hornet: HornetRest, cfg: ValidatorConfig | None = None, *,
                  sleep: Callable[[float], Awaitable[Any]] = asyncio.sleep,
                  clock: Callable[[], float] = time.monotonic,
@@ -230,7 +255,10 @@ class Validator:
         self._now_ms = now_ms
         self._queue: asyncio.Queue[tuple[bytes, str]] = asyncio.Queue()
         self._pending: set[bytes] = set()
+        self._attempts: dict[bytes, int] = {}
+        self._locks: dict[bytes, _BlockLock] = {}
         self._workers: set[asyncio.Task] = set()
+        self._timers: set[asyncio.Task] = set()
         self._task: asyncio.Task | None = None
         self._stopping = False
 
@@ -238,12 +266,13 @@ class Validator:
 
     @property
     def pending(self) -> int:
-        """Blocks queued or being validated."""
+        """Blocks queued, being validated or waiting for a retry."""
         return len(self._pending)
 
     def enqueue(self, block_id: bytes | None, sub_id: str) -> None:
         """Queue a submission for validation. A failed submit (no block id) has nothing on the
-        Tangle to check and is not queued; a block already queued is not queued twice."""
+        Tangle to check and is not queued; a block already queued, running or waiting for a
+        retry is not queued twice."""
         if block_id is None:
             log.debug("submission %s has no block id; not validated", sub_id)
             return
@@ -253,17 +282,23 @@ class Validator:
         self._queue.put_nowait((block_id, sub_id))
 
     async def resume(self, limit: int = 10_000) -> int:
-        """Queue submissions whose validation was cut short (e.g. by a restart); returns how
-        many were queued. Call once before `run`."""
+        """Queue submissions whose validation has not concluded (cut short by a restart, an
+        unreachable node or an error); returns how many rows were found. Idempotent: blocks
+        already pending are skipped. `run` calls it at start and every `resume_every_s`."""
         rows = await self.store.unfinished_submissions(limit)
         for row in rows:
             self.enqueue(bytes(row["block_id"]), row["sub_id"])
         return len(rows)
 
     async def run(self) -> None:
-        """Validate queued blocks, up to `max_concurrent` at a time, until stopped."""
+        """Validate queued blocks, up to `max_concurrent` at a time, until stopped.
+
+        A validation that ends without an outcome (node unreachable, content check still
+        owed) or raises is queued again after `retry_initial_s`, doubling up to `retry_max_s`.
+        """
         self._task = asyncio.current_task()
         slots = asyncio.Semaphore(self.cfg.max_concurrent)
+        resumer = asyncio.create_task(self._resume_loop())
         try:
             while True:
                 block_id, sub_id = await self._queue.get()
@@ -275,18 +310,46 @@ class Validator:
             if not self._stopping:
                 raise
         finally:
-            for task in list(self._workers):
+            tasks = [resumer, *self._workers, *self._timers]
+            for task in tasks:
                 task.cancel()
-            await asyncio.gather(*self._workers, return_exceptions=True)
+            await asyncio.gather(*tasks, return_exceptions=True)
+
+    async def _resume_loop(self) -> None:
+        while True:
+            try:
+                await self.resume()
+            except Exception:
+                log.exception("could not look up unfinished validations")
+            await asyncio.sleep(self.cfg.resume_every_s)
 
     async def _work(self, block_id: bytes, sub_id: str, slots: asyncio.Semaphore) -> None:
+        status = None
         try:
-            await self.validate_once(block_id, sub_id)
+            status = await self.validate_once(block_id, sub_id)
         except Exception:
             log.exception("validation of block %s failed", _hex(block_id))
         finally:
             slots.release()
+        if status in TERMINAL:
+            self._attempts.pop(block_id, None)
             self._pending.discard(block_id)
+        else:
+            self._retry_later(block_id, sub_id)
+
+    def _retry_later(self, block_id: bytes, sub_id: str) -> None:
+        n = self._attempts.get(block_id, 0)
+        self._attempts[block_id] = n + 1
+        delay = min(self.cfg.retry_initial_s * 2 ** min(n, 20), self.cfg.retry_max_s)
+        log.info("validation of block %s not concluded; retry %d in %.1f s",
+                 _hex(block_id), n + 1, delay)
+        timer = asyncio.create_task(self._requeue_after(block_id, sub_id, delay))
+        self._timers.add(timer)
+        timer.add_done_callback(self._timers.discard)
+
+    async def _requeue_after(self, block_id: bytes, sub_id: str, delay: float) -> None:
+        await asyncio.sleep(delay)
+        self._queue.put_nowait((block_id, sub_id))  # still in _pending
 
     async def stop(self) -> None:
         self._stopping = True
@@ -295,24 +358,43 @@ class Validator:
             task.cancel()
             await asyncio.gather(task, return_exceptions=True)
 
+    @asynccontextmanager
+    async def _block_lock(self, block_id: bytes) -> AsyncIterator[None]:
+        """Serialise all work on one block (worker, direct API calls, re-verification)."""
+        entry = self._locks.get(block_id)
+        if entry is None:
+            entry = self._locks[block_id] = _BlockLock()
+        entry.users += 1
+        try:
+            async with entry.lock:
+                yield
+        finally:
+            entry.users -= 1
+            if entry.users == 0:
+                del self._locks[block_id]
+
     # -- one validation --------------------------------------------------------------------
 
     async def validate_once(self, block_id: bytes | None, sub_id: str | None) -> str:
-        """Run checks (c) and (d) for one block and return its final lifecycle status.
+        """Run checks (c) and (d) for one block and return its lifecycle status afterwards.
 
         A submission without a block id stays RECEIVED and nothing is asked of the node.
-        Returns CONFIRMED when the node stayed unreachable for the content fetch, so the
-        content check is still owed.
+        When the node could not be asked (unreachable, or answering with something that is
+        not an answer about the block), nothing is concluded or written: the current status
+        (SUBMITTED, SOLID or CONFIRMED) is returned and the block stays due for a retry. Calls
+        for the same block are serialised, so a direct call cannot race the worker.
         """
         if block_id is None:
             return "RECEIVED"
-        expected = await self._expected(block_id, sub_id)
-        run = _Run(block_id, expected.sub_id)
-        for row in await self.store.lifecycle(block_id):
-            run.note(row["status"])
-        if not await self._await_confirmation(run):
-            return "ORPHANED"
-        return await self._check_content(run, expected)
+        async with self._block_lock(block_id):
+            expected = await self._expected(block_id, sub_id)
+            run = _Run(block_id, expected.sub_id)
+            for row in await self.store.lifecycle(block_id):
+                run.note(row["status"])
+            outcome = await self._await_confirmation(run)
+            if outcome != "CONFIRMED":
+                return outcome or run.latest or "SUBMITTED"
+            return await self._check_content(run, expected)
 
     async def _expected(self, block_id: bytes, sub_id: str | None) -> _Expected:
         sub = await self.store.submission(sub_id=sub_id) if sub_id else None
@@ -326,27 +408,43 @@ class Validator:
             return _Expected(msg["tag"].encode("utf-8"), bytes(msg["data"]), sub_id)
         raise LookupError(f"no received content stored for block {_hex(block_id)}")
 
-    async def _await_confirmation(self, run: _Run) -> bool:
-        """Check (c): poll metadata until referenced by a milestone (True) or timed out."""
+    async def _await_confirmation(self, run: _Run) -> str | None:
+        """Check (c): poll metadata until the block is referenced by a milestone (CONFIRMED).
+
+        At the deadline the block is ORPHANED only if the node itself said so: the final poll
+        got a definitive answer (metadata, or 404 "unknown block") and so did at least one
+        poll inside the window. Otherwise the node was not really asked and None is returned
+        with nothing written.
+        """
         cfg = self.cfg
         deadline = self._clock() + cfg.timeout_s
         backoff = cfg.initial_backoff_s
-        polls, last, last_error = 0, None, None
+        polls = answered = 0
+        last: dict | None = None
+        last_error: str | None = None
         while True:
             polls += 1
+            definitive = True
             try:
                 meta = await self.hornet.block_metadata(run.block_id)
             except HornetUnavailable as e:
-                meta, last_error = None, str(e)
+                meta, definitive, last_error = None, False, str(e)
             if meta is not None:
                 last = meta
                 await self._record_metadata(run, meta)
                 if _referenced_index(meta) is not None:
-                    return True
+                    return "CONFIRMED"
             remaining = deadline - self._clock()
             if remaining <= 0:
-                await self._orphan(run, polls, last, last_error)
-                return False
+                if definitive and answered > 0:
+                    await self._orphan(run, polls, answered + 1, last, last_error)
+                    return "ORPHANED"
+                log.warning("block %s: no usable answer from the node at the deadline "
+                            "(%d of %d polls answered, last error: %s); not concluding",
+                            _hex(run.block_id), answered + int(definitive), polls, last_error)
+                return None
+            if definitive:
+                answered += 1
             await self._sleep(min(backoff, remaining))
             backoff = min(backoff * 2, cfg.max_backoff_s)
 
@@ -377,12 +475,14 @@ class Validator:
         for status, _ in steps:
             run.note(status)
 
-    async def _orphan(self, run: _Run, polls: int, last: dict | None,
+    async def _orphan(self, run: _Run, polls: int, answered: int, last: dict | None,
                       last_error: str | None) -> None:
         at = self._now_ms()
         evidence = {"subId": run.sub_id, "via": METADATA_VIA, "timeoutS": self.cfg.timeout_s,
-                    "polls": polls, "lastMetadata": last, "lastError": last_error}
+                    "polls": polls, "answeredPolls": answered, "lastMetadata": last,
+                    "lastError": last_error}
         detail = {"via": METADATA_VIA, "timeoutS": self.cfg.timeout_s, "polls": polls,
+                  "answeredPolls": answered,
                   "solid": bool(last and last.get("isSolid") is True)}
         await self._conclude(run, "ORPHANED", at, detail,
                              alert=Alert("ORPHANED", "high", run.block_id, None, evidence, at))
@@ -406,7 +506,7 @@ class Validator:
         """Check (d): the block on the Tangle carries exactly the bytes that were received."""
         raw = await self._fetch_raw(run)
         if isinstance(raw, _Unavailable):
-            return "CONFIRMED"
+            return run.latest or "CONFIRMED"  # content check still owed; nothing written
         at = self._now_ms()
         if raw is None:
             evidence = {"subId": run.sub_id, "via": BLOCK_VIA,
@@ -458,7 +558,8 @@ class Validator:
     # -- re-verification of the parallel database -------------------------------------------
 
     async def reverify_all(self, limit: int | None = None) -> list[Alert]:
-        """Re-fetch verified blocks and compare them with the content stored for them.
+        """Re-fetch every block whose content ever matched (a MATCH content check) and compare
+        it with the content stored for it now.
 
         Returns the DB_TAMPER alerts raised by this pass. Stops early, keeping what it found,
         if the node becomes unreachable.
@@ -487,6 +588,10 @@ class Validator:
 
     async def _reverify_row(self, row: dict) -> Alert | None:
         bid = bytes(row["block_id"])
+        async with self._block_lock(bid):
+            return await self._reverify_block(bid, row)
+
+    async def _reverify_block(self, bid: bytes, row: dict) -> Alert | None:
         raw = await self.hornet.block_raw(bid)
         if raw is None:
             log.info("block %s is no longer served by the node (pruned?)", _hex(bid))
@@ -510,7 +615,9 @@ class Validator:
                     "fields": fields}
         alert = Alert("DB_TAMPER", "critical", bid, None, evidence, at,
                       dedupe_key=f"{bid.hex()}:{stored}")
-        run = _Run(bid, row["sub_id"], {"CONTENT_VERIFIED"}, "CONTENT_VERIFIED")
+        run = _Run(bid, row["sub_id"])
+        for r in await self.store.lifecycle(bid):
+            run.note(r["status"])
         detail = {"cause": "DB_TAMPER", "via": BLOCK_VIA, "fields": [f["field"] for f in fields]}
         new = await self._conclude(run, "CONTENT_MISMATCH", at, detail,
                                    check=("MISMATCH", {"cause": "DB_TAMPER", "fields": fields}),
@@ -520,7 +627,8 @@ class Validator:
 
 def _stored_differences(row: dict, payload: TaggedData) -> list[dict]:
     """Compare every stored copy of a block's content with the Tangle. `expected` is the
-    Tangle value, `actual` the value found in the database."""
+    Tangle value, `actual` the value found in the database; a copy NULLed on an existing row
+    is a difference too."""
     out: list[dict] = []
     try:
         tangle_tag: str | None = payload.tag.decode("utf-8")
@@ -535,18 +643,17 @@ def _stored_differences(row: dict, payload: TaggedData) -> list[dict]:
         if stored != payload.data:
             out.append({"field": name, "expected": _hex(payload.data), "actual": shown})
 
-    text("submissions.tag", row["sub_tag"])
-    try:
-        sub_data = from_hex(row["data_hex"]) if row["data_hex"] is not None else None
-    except ValueError:
-        sub_data = None
-    data("submissions.data_hex", sub_data, row["data_hex"])
+    if row["has_submission"]:
+        text("submissions.tag", row["sub_tag"])
+        try:
+            sub_data = from_hex(row["data_hex"]) if row["data_hex"] is not None else None
+        except ValueError:
+            sub_data = None
+        data("submissions.data_hex", sub_data, row["data_hex"])
     if row["has_message"]:
-        if row["msg_tag"] is not None:
-            text("messages.tag", row["msg_tag"])
-        if row["msg_data"] is not None:
-            msg_data = bytes(row["msg_data"])
-            data("messages.data", msg_data, _hex(msg_data))
+        text("messages.tag", row["msg_tag"])
+        msg_data = None if row["msg_data"] is None else bytes(row["msg_data"])
+        data("messages.data", msg_data, None if msg_data is None else _hex(msg_data))
     return out
 
 

@@ -69,9 +69,20 @@ class HornetRest:
         return await self._get_json(block_path(block_id))
 
     async def block_raw(self, block_id: bytes) -> bytes | None:
-        """The block exactly as serialized on the Tangle; its BLAKE2b-256 is the block id."""
+        """The block exactly as serialized on the Tangle; its BLAKE2b-256 is the block id.
+
+        A 200 that is not the binary serialization (an HTML page from a proxy, JSON from a
+        node ignoring Accept) is not an answer about the block: HornetUnavailable.
+        """
         resp = await self._get(block_path(block_id), RAW_MEDIA_TYPE)
-        return None if resp is None else resp.content
+        if resp is None:
+            return None
+        media = resp.headers.get("content-type", "").split(";")[0].strip().lower()
+        if media != RAW_MEDIA_TYPE:
+            raise HornetUnavailable(
+                f"GET {block_path(block_id)}: expected {RAW_MEDIA_TYPE}, got {media or 'none'}",
+                resp.status_code)
+        return resp.content
 
     async def block_metadata(self, block_id: bytes) -> dict | None:
         """Solidity and confirmation state: isSolid, referencedByMilestoneIndex, ..."""
