@@ -16,4 +16,8 @@ RUN UV_PYTHON_INSTALL_DIR=/opt/python uv venv --python 3.12 /opt/witness \
  && rm -rf .git /tmp/witness /var/lib/apt/lists/* \
  && apt-get purge -y git && apt-get autoremove -y
 
-ENV WITNESS_PYTHON=/opt/witness/bin/python
+# Signer state (seq/prev chain) and the salts log must outlive the container: mount /data.
+ENV WITNESS_PYTHON=/opt/witness/bin/python \
+    WITNESS_STATE_PATH=/data/witness-state.json \
+    WITNESS_DISCLOSURES_PATH=/data/disclosures.jsonl
+VOLUME /data

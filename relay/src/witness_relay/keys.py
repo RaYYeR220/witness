@@ -183,9 +183,12 @@ class KeyResolver:
             if len(pub) != 32:
                 continue
             at = entry.get("revokedAtMs")
-            found.append((pub, at if isinstance(at, int) and not isinstance(at, bool) else None))
+            if at is not None and (not isinstance(at, int) or isinstance(at, bool)):
+                continue  # malformed revocation time: fail closed, ignore the entry
+            found.append((pub, at))
         if not found:
             return None
         live = [f for f in found if f[1] is None or f[1] > now]
-        pub, revoked = live[0] if live else max(found, key=lambda f: f[1] or 0)
+        # several live entries for one kid: the resolver lists oldest first, take the last
+        pub, revoked = live[-1] if live else max(found, key=lambda f: f[1] or 0)
         return KeyInfo(kid, pub, None, revoked)

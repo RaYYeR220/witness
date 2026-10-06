@@ -243,3 +243,24 @@ async def test_resolver_revoked_only_key_reports_revocation():
     old = Ed25519PrivateKey.generate().public_key().public_bytes_raw()
     info = await _resolve_with(_resolve_body(did, (kid, old, 1_000)), kid)
     assert info.ed25519_public == old and info.revoked_at_ms == 1_000
+
+
+async def test_resolver_ignores_malformed_revocation_time():
+    did = "did:iota:testnet:0xabc"
+    kid = did + "#sig-1"
+    good = Ed25519PrivateKey.generate().public_key().public_bytes_raw()
+    bad = Ed25519PrivateKey.generate().public_key().public_bytes_raw()
+    for junk in ("123", 1.5, True):
+        body = _resolve_body(did, (kid, bad, junk))
+        assert await _resolve_with(body, kid) is None
+        body = _resolve_body(did, (kid, good, None), (kid, bad, junk))
+        assert (await _resolve_with(body, kid)).ed25519_public == good
+
+
+async def test_resolver_prefers_last_live_entry():
+    did = "did:iota:testnet:0xabc"
+    kid = did + "#sig-1"
+    first = Ed25519PrivateKey.generate().public_key().public_bytes_raw()
+    last = Ed25519PrivateKey.generate().public_key().public_bytes_raw()
+    info = await _resolve_with(_resolve_body(did, (kid, first, None), (kid, last, None)), kid)
+    assert info.ed25519_public == last

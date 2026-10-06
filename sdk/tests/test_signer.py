@@ -123,3 +123,89 @@ def test_load_component_reads_anchor_jwk(tmp_path):
     assert key.public_key().public_bytes_raw() == priv.public_key().public_bytes_raw()
     s = WitnessSigner(iss, kid, str(d / "sig-1.jwk.json"), str(tmp_path / "st.json"))
     assert s.seal("t", {})[0]["kid"] == KID
+
+
+_WORKER = """
+import sys
+from witness_sdk.signer import WitnessSigner
+import httpx
+s = WitnessSigner(sys.argv[1], sys.argv[2], sys.argv[3], sys.argv[4])
+orig = httpx.post
+def slow(*a, **k):
+    import time; time.sleep(0.15)
+    return orig(*a, **k)
+httpx.post = slow
+s.upload("http://127.0.0.1:%s" % sys.argv[5], "n", "trust.score", {"w": sys.argv[6]})
+"""
+
+
+def test_concurrent_processes_form_one_chain(tmp_path):
+    import http.server
+    import subprocess
+    import sys
+    import threading
+
+    seen = []
+
+    class H(http.server.BaseHTTPRequestHandler):
+        def do_POST(self):
+            msg = json.loads(self.rfile.read(int(self.headers["content-length"])))["message"]
+            seen.append(msg)
+            block = "0x" + format(len(seen), "064x")
+            out = json.dumps({"witness": {"blockId": block}}).encode()
+            self.send_response(200)
+            self.send_header("content-length", str(len(out)))
+            self.end_headers()
+            self.wfile.write(out)
+
+        def log_message(self, *a):
+            pass
+
+    srv = http.server.ThreadingHTTPServer(("127.0.0.1", 0), H)
+    threading.Thread(target=srv.serve_forever, daemon=True).start()
+    try:
+        pem = str(tmp_path / "secrets" / "tm" / "sig.pem")
+        keys.generate("tm", str(tmp_path / "secrets"))
+        state = str(tmp_path / "state.json")
+        procs = [
+            subprocess.Popen(
+                [sys.executable, "-c", _WORKER, DID, KID, pem, state, str(srv.server_port), str(i)]
+            )
+            for i in range(4)
+        ]
+        assert [p.wait(timeout=60) for p in procs] == [0, 0, 0, 0]
+    finally:
+        srv.shutdown()
+    assert sorted(m["seq"] for m in seen) == [1, 2, 3, 4]
+    ordered = sorted(seen, key=lambda m: m["seq"])
+    assert ordered[0].get("prev") is None
+    for n, m in enumerate(ordered[1:], start=1):
+        assert m["prev"] == "0x" + format(n, "064x")
+
+
+@respx.mock
+def test_disclosures_written_before_upload(tmp_path):
+    s = _signer(tmp_path)()
+    log = tmp_path / "disc.jsonl"
+    seen = {}
+
+    def handler(request):
+        seen["lines"] = [json.loads(line) for line in log.read_text().splitlines()]
+        return _ok(BLOCK_1)
+
+    respx.post("http://relay.test/upload").mock(side_effect=handler)
+    s.upload("http://relay.test", "n", "trust.score", {}, {"rel": 1},
+             disclosures_path=str(log), meta={"id": "ie"})
+    assert [x["status"] for x in seen["lines"]] == ["pending"]
+    assert seen["lines"][0]["salts"] and seen["lines"][0]["id"] == "ie"
+    lines = [json.loads(line) for line in log.read_text().splitlines()]
+    assert lines[-1] == {"status": "uploaded", "seq": 1, "blockId": BLOCK_1}
+
+
+def test_main_reports_errors_as_json(tmp_path):
+    import subprocess
+    import sys
+
+    r = subprocess.run([sys.executable, "-m", "witness_sdk"], input="{}", capture_output=True,
+                       text=True, check=False, env={"PATH": "", "SYSTEMROOT": "C:/Windows"})
+    assert r.returncode == 1 and "error" in json.loads(r.stdout)

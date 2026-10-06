@@ -1,5 +1,5 @@
 diff --git a/src/trustmanager/main.py b/src/trustmanager/main.py
-index c4d05bc..cd25ed3 100644
+index c4d05bc..2319c20 100644
 --- a/src/trustmanager/main.py
 +++ b/src/trustmanager/main.py
 @@ -1,4 +1,7 @@
@@ -20,7 +20,7 @@ index c4d05bc..cd25ed3 100644
          try:
              # Post update to Iota Node
              response = requests.post(url='http://' + iota_api_url + '/upload?node=' + iota_node_url, headers= {"content-type":"application/json"}, data=json.dumps({"tag":"trust.score","message":{"score":score, "id":id}}))
-@@ -421,4 +427,44 @@ class TrustManager:
+@@ -421,4 +427,40 @@ class TrustManager:
              response.raise_for_status()
          except requests.exceptions.RequestException as error:
              print(f"[TrustManager] Error updating entity {error}")
@@ -36,7 +36,7 @@ index c4d05bc..cd25ed3 100644
 +        """
 +        Upload the score as an envelope signed with this component's own key, with salted
 +        commitments to the rel/sec/rep sub-scores. The signing runs in the witness_sdk
-+        interpreter (WITNESS_PYTHON); the salts it returns stay in disclosures.jsonl.
++        interpreter (WITNESS_PYTHON), which logs the salts to WITNESS_DISCLOSURES_PATH.
 +        """
 +        stored = self.storage.read_item(id) or {}
 +        commitments = {}
@@ -49,6 +49,7 @@ index c4d05bc..cd25ed3 100644
 +            "tag": "trust.score",
 +            "body": {"score": score, "id": id},
 +            "commitments": commitments,
++            "meta": {"id": id},
 +        }
 +        try:
 +            proc = subprocess.run(
@@ -56,14 +57,9 @@ index c4d05bc..cd25ed3 100644
 +                input=json.dumps(request), capture_output=True, text=True, timeout=60,
 +            )
 +            reply = json.loads(proc.stdout.strip().splitlines()[-1]) if proc.stdout.strip() else {}
++            reply.pop("salts", None)
 +            if proc.returncode != 0:
 +                raise RuntimeError("signed upload failed: " + (proc.stderr.strip() or json.dumps(reply)))
-+            salts = reply.get("salts") or {}
-+            if salts:
-+                path = os.environ.get("WITNESS_DISCLOSURES_PATH", "disclosures.jsonl")
-+                block_id = (reply.get("witness") or {}).get("blockId")
-+                with open(path, "a") as f:
-+                    f.write(json.dumps({"id": id, "blockId": block_id, "values": commitments, "salts": salts}) + "\n")
 +            print(reply.get("return_payload", reply))
 +        except (OSError, ValueError, RuntimeError, subprocess.SubprocessError) as error:
 +            print(f"[TrustManager] Error updating entity {error}")
