@@ -53,35 +53,17 @@ async def test_resolver_static_keys(tmp_path):
     assert await resolver.resolve("did:iota:x#kex-1") is None
 
 
-async def test_resolver_http_document():
-    pub = Ed25519PrivateKey.generate().public_key().public_bytes_raw()
+async def test_resolver_caches_resolution():
     did = "did:iota:testnet:0xabc"
-    doc = {
-        "id": did,
-        "verificationMethod": [
-            {
-                "id": "#sig-1",
-                "type": "JsonWebKey2020",
-                "publicKeyJwk": {"kty": "OKP", "crv": "Ed25519", "x": _b64u(pub)},
-            },
-        ],
-    }
+    pub = Ed25519PrivateKey.generate().public_key().public_bytes_raw()
     with respx.mock() as router:
         route = router.get(f"http://anchor.test/resolve/{quote(did, safe='')}").mock(
-            return_value=httpx.Response(
-                200,
-                json={
-                    "doc": doc,
-                    "version": 3,
-                    "revokedMethods": [{"kid": did + "#sig-1", "revokedAtMs": 123}],
-                },
-            )
+            return_value=httpx.Response(200, json=_resolve_body(did, (did + "#sig-1", pub, 123)))
         )
         async with httpx.AsyncClient() as http:
             resolver = KeyResolver(resolver_url="http://anchor.test", http=http)
             info = await resolver.resolve(did + "#sig-1")
             again = await resolver.resolve(did + "#sig-1")
-    assert info.ed25519_public == pub
     assert info.revoked_at_ms == 123
     assert again == info
     assert route.call_count == 1
@@ -197,3 +179,67 @@ async def test_gate_resolves_only_well_formed_envelopes():
 
     assert (await gate.check_envelope("t", good)).verdict == verdicts.FORGED  # unknown key
     assert spy.asked == [did + "#sig-1"]
+
+
+def _resolve_body(did, *entries):
+    """Shape of the anchor service's GET /resolve/:did reply."""
+    return {
+        "doc": {"id": did, "verificationMethod": []},
+        "version": 5,
+        "keys": [
+            {
+                "kid": kid,
+                "type": "Ed25519",
+                "publicKeyHex": pub.hex(),
+                "revokedAtMs": revoked,
+            }
+            for kid, pub, revoked in entries
+        ],
+        "historyComplete": True,
+    }
+
+
+async def _resolve_with(body, kid):
+    did = kid.partition("#")[0]
+    with respx.mock() as router:
+        router.get(f"http://anchor.test/resolve/{quote(did, safe='')}").mock(
+            return_value=httpx.Response(200, json=body)
+        )
+        async with httpx.AsyncClient() as http:
+            resolver = KeyResolver(resolver_url="http://anchor.test", http=http)
+            return await resolver.resolve(kid)
+
+
+async def test_resolver_reads_anchor_keys_list():
+    did = "did:iota:testnet:0xabc"
+    kid = did + "#sig-1"
+    pub = Ed25519PrivateKey.generate().public_key().public_bytes_raw()
+    x25519 = bytes(range(32))
+    body = _resolve_body(did, (kid, pub, None), (did + "#kex-1", x25519, None))
+    body["keys"][1]["type"] = "X25519"
+    info = await _resolve_with(body, kid)
+    assert info.ed25519_public == pub
+    assert info.revoked_at_ms is None
+    assert await _resolve_with(body, did + "#kex-1") is None
+    assert await _resolve_with(body, did + "#missing") is None
+
+
+async def test_resolver_picks_key_valid_now_when_kid_was_replaced():
+    did = "did:iota:testnet:0xabc"
+    kid = did + "#sig-1"
+    old = Ed25519PrivateKey.generate().public_key().public_bytes_raw()
+    new = Ed25519PrivateKey.generate().public_key().public_bytes_raw()
+    body = _resolve_body(did, (kid, new, None), (kid, old, 1_000))
+    info = await _resolve_with(body, kid)
+    assert info.ed25519_public == new and info.revoked_at_ms is None
+    # order must not matter
+    body["keys"].reverse()
+    assert (await _resolve_with(body, kid)).ed25519_public == new
+
+
+async def test_resolver_revoked_only_key_reports_revocation():
+    did = "did:iota:testnet:0xabc"
+    kid = did + "#sig-1"
+    old = Ed25519PrivateKey.generate().public_key().public_bytes_raw()
+    info = await _resolve_with(_resolve_body(did, (kid, old, 1_000)), kid)
+    assert info.ed25519_public == old and info.revoked_at_ms == 1_000

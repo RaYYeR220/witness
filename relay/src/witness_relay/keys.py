@@ -161,20 +161,31 @@ class KeyResolver:
 
     @staticmethod
     def _from_document(kid: str, resolution: dict | None) -> KeyInfo | None:
-        if not resolution:
+        """Pick the Ed25519 key for `kid` from an anchor `/resolve` reply.
+
+        The reply lists every key the DID has had (`keys`), so a kid that was replaced
+        appears twice. Prefer the entry that is valid now; otherwise the one revoked last.
+        """
+        if not isinstance(resolution, dict):
             return None
-        doc = resolution.get("doc") or {}
         fragment = "#" + kid.partition("#")[2]
-        pub = None
-        for method in doc.get("verificationMethod") or []:
-            if isinstance(method, dict) and method.get("id") in (kid, fragment):
-                pub = _jwk_ed25519(method.get("publicKeyJwk"))
-                break
-        if pub is None:
+        now = int(time.time() * 1000)
+        found: list[tuple[bytes, int | None]] = []
+        for entry in resolution.get("keys") or []:
+            if not isinstance(entry, dict) or entry.get("kid") not in (kid, fragment):
+                continue
+            if entry.get("type") != "Ed25519":
+                continue
+            try:
+                pub = bytes.fromhex(entry.get("publicKeyHex") or "")
+            except ValueError:
+                continue
+            if len(pub) != 32:
+                continue
+            at = entry.get("revokedAtMs")
+            found.append((pub, at if isinstance(at, int) and not isinstance(at, bool) else None))
+        if not found:
             return None
-        revoked = None
-        for entry in resolution.get("revokedMethods") or []:
-            if isinstance(entry, dict) and entry.get("kid") in (kid, fragment):
-                at = entry.get("revokedAtMs")
-                revoked = at if isinstance(at, int) else 0
+        live = [f for f in found if f[1] is None or f[1] > now]
+        pub, revoked = live[0] if live else max(found, key=lambda f: f[1] or 0)
         return KeyInfo(kid, pub, None, revoked)
