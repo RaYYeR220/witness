@@ -628,6 +628,106 @@ def test_snapshot_resolver_shapes():
         bundle.snapshot_resolver({"doc": {"id": DID}, "keys": None})
 
 
+OLD_SIGNER = Ed25519PrivateKey.from_private_bytes(b"\x07" * 32)
+
+
+def _ed_entry(signer: Ed25519PrivateKey, revoked_at_ms: int | None, kid: str = KID) -> dict:
+    return {
+        "kid": kid,
+        "type": "Ed25519",
+        "publicKeyHex": to_hex(signer.public_key().public_bytes_raw()),
+        "revokedAtMs": revoked_at_ms,
+    }
+
+
+def _replaced(replaced_at_ms: int) -> dict:
+    """`#sig-1` replaced in place: the anchor lists current keys first, then revoked ones."""
+    snap = _snapshot()
+    snap["keys"].append(_ed_entry(OLD_SIGNER, replaced_at_ms))
+    return snap
+
+
+def _pub(k: Ed25519PrivateKey) -> bytes:
+    return k.public_key().public_bytes_raw()
+
+
+def test_snapshot_resolver_replaced_key_is_chosen_by_time():
+    resolve = bundle.snapshot_resolver(_replaced(1000))
+    # Without a time: the key in the current document.
+    assert resolve(KID).ed25519_public == _pub(SIGNER)
+    assert resolve(KID).revoked_at_ms is None
+    # Before (and at) the replacement the old key was in force.
+    for at in (0, 999, 1000):
+        info = resolve(KID, at)
+        assert (info.ed25519_public, info.revoked_at_ms) == (_pub(OLD_SIGNER), 1000), at
+    assert resolve(KID, 1001).ed25519_public == _pub(SIGNER)
+    # The X25519 key of the same document is unaffected.
+    assert resolve(DID + "#kex-1", 5).x25519_public == KEX.public_key().public_bytes_raw()
+
+
+def test_snapshot_resolver_all_revoked_and_ties():
+    k1, k2, k3 = (Ed25519PrivateKey.from_private_bytes(bytes([n]) * 32) for n in (0x21, 0x22, 0x23))
+    snap = {"doc": {"id": DID}, "keys": [_ed_entry(k1, 10), _ed_entry(k2, 20)]}
+    resolve = bundle.snapshot_resolver(snap)
+    assert resolve(KID, 5).ed25519_public == _pub(k1)
+    assert resolve(KID, 15).ed25519_public == _pub(k2)
+    # Nothing valid any more: the key revoked last, so callers see the revocation.
+    for at in (None, 25):
+        info = resolve(KID, at)
+        assert (info.ed25519_public, info.revoked_at_ms) == (_pub(k2), 20)
+    # Equal validity: the entry listed last wins.
+    snap = {"doc": {"id": DID}, "keys": [_ed_entry(k1, None), _ed_entry(k3, None)]}
+    assert bundle.snapshot_resolver(snap)(KID).ed25519_public == _pub(k3)
+
+
+@pytest.mark.parametrize(
+    "bad",
+    [
+        {"publicKeyHex": "0xzz"},
+        {"publicKeyHex": "0x" + "11" * 31},
+        {"revokedAtMs": "1000"},
+        {"revokedAtMs": -1},
+        {"revokedAtMs": True},
+        {"type": "RSA"},
+    ],
+)
+def test_snapshot_resolver_unreadable_entry_fails_closed(bad):
+    """An entry for a kid that cannot be read makes the kid unresolvable, never a guess."""
+    snap = _replaced(1000)
+    snap["keys"][-1].update(bad)
+    resolve = bundle.snapshot_resolver(snap)
+    assert resolve(KID) is None and resolve(KID, 5) is None
+    assert resolve(DID + "#kex-1") is not None  # other kids are still served
+
+
+def test_snapshot_keys_lists_every_entry():
+    keys = bundle.snapshot_keys(_replaced(1000))
+    assert [(k.ed25519_public, k.revoked_at_ms) for k in keys[KID]] == [
+        (_pub(SIGNER), None),
+        (_pub(OLD_SIGNER), 1000),
+    ]
+    assert bundle.snapshot_keys({"doc": {"id": DID}, "keys": [{"kid": KID}]}) == {}
+
+
+def test_envelope_signed_with_a_replaced_key(vectors):
+    """A message signed before its key was replaced still verifies; one included after the
+    replacement does not, and the new key verifies new messages."""
+    ms_time_ms = (vectors("milestones")[-1]["timestamp"] + 5) * 1000
+    later, earlier = _replaced(ms_time_ms + 1), _replaced(ms_time_ms - 1)
+    old = _synthetic(vectors, _envelope(sign_key=OLD_SIGNER), snapshot=later)
+    step = _step(bundle.verify(old.bundle, _cfg(vectors), resolve_did=_registry(later)), "envelope")
+    assert step.ok is True, step.detail
+    step = _step(
+        bundle.verify(old.bundle, _cfg(vectors), resolve_did=_registry(earlier)), "envelope"
+    )
+    assert step.ok is False
+    new = _synthetic(vectors, _envelope(), snapshot=earlier)
+    step = _step(
+        bundle.verify(new.bundle, _cfg(vectors), resolve_did=_registry(earlier)), "envelope"
+    )
+    assert step.ok is True, step.detail
+
+
 # ---------------------------------------------------------------- step 5 anchor
 
 

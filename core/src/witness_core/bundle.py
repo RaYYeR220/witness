@@ -19,7 +19,7 @@ import json
 import re
 from collections.abc import Callable
 from dataclasses import dataclass
-from typing import Any, Literal
+from typing import Any, Literal, Protocol
 
 from cryptography.exceptions import InvalidSignature
 from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PublicKey
@@ -155,19 +155,31 @@ def _key_bytes(entry: dict) -> bytes | None:
     return raw if len(raw) == 32 else None
 
 
-def snapshot_resolver(snapshot: dict) -> Callable[[str], KeyInfo | None]:
-    """Key lookup over a DID document snapshot in the anchor service's resolve shape.
+class KeyLookup(Protocol):
+    """`kid` -> key, optionally as it stood at `at_ms` (epoch ms)."""
+
+    def __call__(self, kid: str, at_ms: int | None = None) -> KeyInfo | None: ...
+
+
+def snapshot_keys(snapshot: dict) -> dict[str, list[KeyInfo]]:
+    """Every key entry of a DID snapshot in the anchor service's resolve shape, per kid.
 
     `{"doc": {"id": did, ...}, "version": ..., "keys": [{"kid", "type", "publicKeyHex",
-    "revokedAtMs"}]}`. Fragment kids (`#sig-1`) are expanded against `doc.id`; keys that
-    name another DID are ignored. Raises ValueError if the snapshot is not usable.
+    "revokedAtMs"}]}`. The list covers the key history: a kid whose key was replaced in
+    place appears once per key, each entry carrying its own revocation time (None while
+    current), in the order the snapshot lists them. Fragment kids (`#sig-1`) are expanded
+    against `doc.id`; entries that name another DID are ignored. Fails closed: a kid with
+    any entry that cannot be read (unknown type, bad key, bad revocation time) is left out
+    entirely, since which of its keys was in force when can no longer be told. Raises
+    ValueError if the snapshot is not usable at all.
     """
     if not isinstance(snapshot, dict) or not isinstance(snapshot.get("keys"), list):
         raise ValueError("DID snapshot must be an object with a keys list")  # noqa: TRY004
     doc = snapshot.get("doc")
     did = doc.get("id") if isinstance(doc, dict) else None
     did = did if isinstance(did, str) else None
-    table: dict[str, dict[str, Any]] = {}
+    table: dict[str, list[KeyInfo]] = {}
+    unreadable: set[str] = set()
     for entry in snapshot["keys"]:
         if not isinstance(entry, dict) or not isinstance(entry.get("kid"), str):
             continue
@@ -181,19 +193,59 @@ def snapshot_resolver(snapshot: dict) -> Callable[[str], KeyInfo | None]:
         public = _key_bytes(entry)
         revoked = entry.get("revokedAtMs")
         if slot is None or public is None or not (revoked is None or _uint(revoked)):
+            unreadable.add(kid)
             continue
-        row = table.setdefault(kid, {"ed": None, "x": None, "revoked": None})
-        if row[slot] is not None:
-            raise ValueError(f"DID snapshot lists {kid} twice")
-        row[slot] = public
-        if revoked is not None:
-            row["revoked"] = revoked if row["revoked"] is None else min(row["revoked"], revoked)
+        ed, x = (public, None) if slot == "ed" else (None, public)
+        table.setdefault(kid, []).append(KeyInfo(kid, ed, x, revoked))
+    return {kid: keys for kid, keys in table.items() if kid not in unreadable}
 
-    def resolve(kid: str) -> KeyInfo | None:
-        row = table.get(kid) if isinstance(kid, str) else None
-        if row is None:
+
+def _in_force(keys: list[KeyInfo], at_ms: int | None) -> KeyInfo | None:
+    """The key in force at `at_ms`, or the current one when `at_ms` is None.
+
+    A key is valid at `at_ms` while it is not revoked or revoked at or after `at_ms` (a
+    message is revoked only when included strictly after the revocation). A replaced key
+    was revoked when its successor took over, so among the valid ones the key that expires
+    first is the one that was in force; ties go to the entry listed last. With nothing valid
+    the key revoked last is returned, so the caller sees the revocation instead of nothing.
+    """
+    if not keys:
+        return None
+
+    def expiry(k: KeyInfo) -> float:
+        return float("inf") if k.revoked_at_ms is None else k.revoked_at_ms
+
+    if at_ms is None:
+        valid = [k for k in keys if k.revoked_at_ms is None]
+    else:
+        valid = [k for k in keys if k.revoked_at_ms is None or k.revoked_at_ms >= at_ms]
+    if valid:
+        return min(reversed(valid), key=expiry)
+    return max(reversed(keys), key=expiry)
+
+
+def snapshot_resolver(snapshot: dict) -> KeyLookup:
+    """Key lookup over a DID snapshot (see `snapshot_keys`), time-aware for replaced keys.
+
+    `resolve(kid)` serves the current key; `resolve(kid, at_ms)` the key in force at that
+    time. A kid listing both an Ed25519 and an X25519 key gets both, each chosen by time;
+    `revoked_at_ms` is the earlier revocation of the two chosen keys.
+    """
+    table = snapshot_keys(snapshot)
+
+    def resolve(kid: str, at_ms: int | None = None) -> KeyInfo | None:
+        keys = table.get(kid) if isinstance(kid, str) else None
+        if not keys:
             return None
-        return KeyInfo(kid, row["ed"], row["x"], row["revoked"])
+        ed = _in_force([k for k in keys if k.ed25519_public is not None], at_ms)
+        x = _in_force([k for k in keys if k.x25519_public is not None], at_ms)
+        revoked = [k.revoked_at_ms for k in (ed, x) if k is not None and k.revoked_at_ms is not None]
+        return KeyInfo(
+            kid,
+            None if ed is None else ed.ed25519_public,
+            None if x is None else x.x25519_public,
+            min(revoked) if revoked else None,
+        )
 
     return resolve
 
@@ -331,7 +383,7 @@ UNRESOLVED_SIGNER = "signer identity not resolved (bundle snapshot is unauthenti
 
 def _trusted_keys(
     resolve_did: Callable[[str], dict | None] | None, iss: str
-) -> Callable[[str], KeyInfo | None] | None:
+) -> KeyLookup | None:
     """Keys of `iss` from the trusted resolver; None if it cannot be resolved."""
     if resolve_did is None:
         return None
@@ -350,14 +402,14 @@ def _trusted_keys(
         raise _Fail(f"resolved DID document is malformed: {exc}") from None
 
 
-def _snapshot_matches(b: dict, kid: str, trusted: KeyInfo) -> None:
+def _snapshot_matches(b: dict, kid: str, trusted: KeyInfo, at_ms: int | None) -> None:
     """The bundle's snapshot is display-only, but it must not contradict the registry."""
     section = b.get("envelope")
     snapshot = section.get("didDoc") if isinstance(section, dict) else None
     if snapshot is None:
         return
     try:
-        claimed = snapshot_resolver(snapshot)(kid)
+        claimed = snapshot_resolver(snapshot)(kid, at_ms)
     except ValueError:
         claimed = None
     if claimed is None or claimed.ed25519_public != trusted.ed25519_public:
@@ -393,19 +445,22 @@ def _step_envelope(
     trusted = _trusted_keys(resolve_did, iss)
     if trusted is None:
         return None, UNRESOLVED_SIGNER
-    check = envelope.verify(env, tag, trusted)
+    # A key replaced in place has several entries; use the one in force at inclusion.
+    try:
+        included_ms: int | None = _essence(b)[1].timestamp * 1000
+    except _Fail:
+        included_ms = None
+    check = envelope.verify(env, tag, lambda k: trusted(k, included_ms))
     if check.verdict not in (verdicts.PRODUCER_SIGNED, verdicts.RELAY_ATTESTED):
         return False, f"{check.verdict}: {check.reason}"
-    info = trusted(kid)
+    info = trusted(kid, included_ms)
     if info is None:  # unreachable: verify() just resolved it
         return False, "signing key not resolvable"
-    _snapshot_matches(b, kid, info)
+    _snapshot_matches(b, kid, info, included_ms)
     if info.revoked_at_ms is not None:
-        try:
-            _, essence = _essence(b)
-        except _Fail:
+        if included_ms is None:
             return False, "key revoked; inclusion time unknown"
-        if essence.timestamp * 1000 > info.revoked_at_ms:
+        if included_ms > info.revoked_at_ms:
             return False, "key revoked before inclusion"
     return True, f"{check.verdict} by {kid}"
 
