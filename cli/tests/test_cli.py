@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import copy
 import json
 import stat
 import sys
@@ -12,10 +13,12 @@ import pytest
 import respx
 from typer.testing import CliRunner
 from witness_cli.main import app
+from witness_core import canon, checkpoint
+from witness_core.ids import to_hex
 
 VECTORS = Path(__file__).resolve().parents[2] / "core" / "tests" / "vectors" / "bundles.json"
 API = "http://api.test"
-ANCHOR = "http://anchor.test"
+RPC = "https://rpc.test"
 RESOLVER = "http://resolver.test"
 
 runner = CliRunner()
@@ -23,7 +26,7 @@ runner = CliRunner()
 
 @pytest.fixture(autouse=True)
 def _clean_env(monkeypatch):
-    for name in ("WITNESS_API_URL", "WITNESS_ANCHOR_URL", "WITNESS_RESOLVER_URL",
+    for name in ("WITNESS_API_URL", "WITNESS_REBASED_RPC", "WITNESS_RESOLVER_URL",
                  "WITNESS_VERIFIER_CONFIG", "WITNESS_REPORT_TOKEN", "WITNESS_POSTURE_TOKEN"):
         monkeypatch.delenv(name, raising=False)
     monkeypatch.setenv("COLUMNS", "220")
@@ -56,15 +59,6 @@ def files(tmp_path, vectors):
     return make
 
 
-def anchor_reply(vectors: dict, name: str = "valid_anchored") -> dict:
-    c = case(vectors, name)
-    a = c["bundle"]["anchor"]
-    return {"seq": a["rebased"]["record"], "checkpoint": a["checkpoint"],
-            "checkpointHash": c["fetcher"]["record"]["checkpointHash"], "tx": "x",
-            "record": a["rebased"]["record"], "network": a["rebased"]["network"],
-            "trail": a["rebased"]["trail"], "source": "chain", "readAtMs": 1}
-
-
 # ---------------------------------------------------------------- verify
 
 def test_verify_valid_without_anchor_is_partial(files):
@@ -90,53 +84,6 @@ def test_verify_negative_is_invalid(files, name):
                             "--did-snapshot", str(f["snapshot"])])
     assert r.exit_code == 1, r.output
     assert "INVALID" in r.output
-
-
-@respx.mock
-def test_verify_valid_with_mocked_anchor_and_resolver_service(files, vectors):
-    f = files("valid_anchored")
-    respx.get(f"{ANCHOR}/checkpoints/3").mock(
-        return_value=httpx.Response(200, json=anchor_reply(vectors)))
-    did = next(iter(vectors["resolvers"]["registry"]))
-    respx.get(url__regex=rf"{RESOLVER}/resolve/.*").mock(
-        return_value=httpx.Response(200, json=vectors["resolvers"]["registry"][did]))
-    r = runner.invoke(app, ["verify", str(f["bundle"]), "--config", str(f["config"]),
-                            "--anchor-url", ANCHOR, "--resolver", RESOLVER])
-    assert r.exit_code == 0, r.output
-    assert "VALID" in r.output and "PARTIAL" not in r.output
-
-
-@respx.mock
-def test_verify_anchor_url_from_env_and_no_anchor_flag(files, vectors, monkeypatch):
-    f = files("valid_anchored")
-    route = respx.get(f"{ANCHOR}/checkpoints/3").mock(
-        return_value=httpx.Response(200, json=anchor_reply(vectors)))
-    monkeypatch.setenv("WITNESS_ANCHOR_URL", ANCHOR)
-    args = ["verify", str(f["bundle"]), "--config", str(f["config"]),
-            "--did-snapshot", str(f["snapshot"])]
-    assert runner.invoke(app, args).exit_code == 0
-    assert route.call_count == 1
-    assert runner.invoke(app, [*args, "--no-anchor"]).exit_code == 2
-    assert route.call_count == 1
-
-
-@respx.mock
-def test_verify_anchor_on_other_trail_is_not_trusted(files, vectors):
-    f = files("valid_anchored")
-    reply = anchor_reply(vectors) | {"trail": "0x" + "11" * 33}
-    respx.get(f"{ANCHOR}/checkpoints/3").mock(return_value=httpx.Response(200, json=reply))
-    r = runner.invoke(app, ["verify", str(f["bundle"]), "--config", str(f["config"]),
-                            "--did-snapshot", str(f["snapshot"]), "--anchor-url", ANCHOR])
-    assert r.exit_code == 2, r.output
-
-
-@respx.mock
-def test_verify_anchor_service_down_is_partial(files):
-    f = files("valid_anchored")
-    respx.get(f"{ANCHOR}/checkpoints/3").mock(return_value=httpx.Response(502, json={"error": "x"}))
-    r = runner.invoke(app, ["verify", str(f["bundle"]), "--config", str(f["config"]),
-                            "--did-snapshot", str(f["snapshot"]), "--anchor-url", ANCHOR])
-    assert r.exit_code == 2
 
 
 def test_verify_without_config_exits_3(files):
@@ -390,3 +337,178 @@ def test_keys_gen_refuses_overwrite_and_keeps_file(tmp_path):
 def test_keys_gen_rejects_path_components(tmp_path):
     r = runner.invoke(app, ["keys", "gen", "../evil", "--out-dir", str(tmp_path)])
     assert r.exit_code == 4
+
+
+# ---------------------------------------------------------------- step 5 via the Rebased RPC
+
+REC = json.loads((VECTORS.parent / "rebased_record.json").read_text(encoding="utf-8"))
+PACKAGE = REC["trailObject"]["result"]["data"]["type"].split("::")[0]
+WRITER = "0xd40892daf5c81e3d67ffe9806575970b973ecf6625eb8a88562afae0d8c940c8"
+
+
+def rpc_record(cp: dict, index: int) -> dict:
+    record = copy.deepcopy(REC["record"])
+    f = record["result"]["data"]["content"]["fields"]["value"]["fields"]["value"]["fields"]
+    f["data"]["fields"]["pos0"] = canon.jcs(cp).decode()
+    f["sequence_number"] = str(index)
+    f["metadata"] = json.dumps({"kind": "witness.checkpoint", "seq": 1,
+                                "checkpointHash": to_hex(checkpoint.hash(cp))})
+    return record
+
+
+def mock_rpc(record: dict, calls: list | None = None, url: str = RPC):
+    def answer(request: httpx.Request) -> httpx.Response:
+        body = json.loads(request.content)
+        if calls is not None:
+            calls.append(body)
+        doc = REC["trailObject"] if body["method"] == "iota_getObject" else record
+        return httpx.Response(200, json=doc)
+    return respx.post(url).mock(side_effect=answer)
+
+
+def pinned_config(tmp_path, vectors, **extra) -> Path:
+    cfg = case(vectors, "valid_anchored")["config"] | {
+        "rebasedRpc": RPC, "auditTrailPackage": PACKAGE} | extra
+    path = tmp_path / "pinned.config.json"
+    path.write_text(json.dumps(cfg), encoding="utf-8")
+    return path
+
+
+def bundle_of(f) -> dict:
+    return json.loads(f["bundle"].read_text(encoding="utf-8"))
+
+
+def verify_args(f, cfg) -> list[str]:
+    return ["verify", str(f["bundle"]), "--config", str(cfg), "--did-snapshot", str(f["snapshot"])]
+
+
+@respx.mock
+def test_verify_valid_with_chain_record_from_pinned_rpc(files, vectors, tmp_path):
+    f = files("valid_anchored")
+    a = bundle_of(f)["anchor"]
+    calls: list = []
+    mock_rpc(rpc_record(a["checkpoint"], a["rebased"]["record"]), calls)
+    r = runner.invoke(app, verify_args(f, pinned_config(tmp_path, vectors)))
+    assert r.exit_code == 0, r.output
+    assert [c["method"] for c in calls] == ["iota_getObject", "iotax_getDynamicFieldObject"]
+    assert calls[0]["params"][0] == case(vectors, "valid_anchored")["config"]["trailId"]
+
+
+@respx.mock
+def test_verify_tampered_chain_record_is_invalid(files, vectors, tmp_path):
+    f = files("valid_anchored")
+    a = bundle_of(f)["anchor"]
+    cp = copy.deepcopy(a["checkpoint"])
+    cp["msgCount"] += 1
+    mock_rpc(rpc_record(cp, a["rebased"]["record"]))
+    r = runner.invoke(app, verify_args(f, pinned_config(tmp_path, vectors)))
+    assert r.exit_code == 1, r.output
+
+
+@respx.mock
+def test_verify_missing_record_and_rpc_failure_are_partial(files, vectors, tmp_path):
+    f = files("valid_anchored")
+    args = verify_args(f, pinned_config(tmp_path, vectors))
+    mock_rpc({"jsonrpc": "2.0", "id": 1, "result": {"error": {"code": "dynamicFieldNotFound"}}})
+    assert runner.invoke(app, args).exit_code == 2
+    respx.reset()
+    respx.post(RPC).mock(return_value=httpx.Response(503))
+    assert runner.invoke(app, args).exit_code == 2
+
+
+@respx.mock
+def test_verify_wrong_writer_pin_is_invalid(files, vectors, tmp_path):
+    f = files("valid_anchored")
+    a = bundle_of(f)["anchor"]
+    mock_rpc(rpc_record(a["checkpoint"], a["rebased"]["record"]))
+    bad = pinned_config(tmp_path, vectors, anchorWriter="0x" + "ee" * 32)
+    assert runner.invoke(app, verify_args(f, bad)).exit_code == 1
+    good = pinned_config(tmp_path, vectors, anchorWriter=WRITER)
+    assert runner.invoke(app, verify_args(f, good)).exit_code == 0
+
+
+@respx.mock
+def test_verify_rpc_override_no_anchor_and_plain_http(files, vectors, tmp_path):
+    f = files("valid_anchored")
+    a = bundle_of(f)["anchor"]
+    base = verify_args(f, pinned_config(tmp_path, vectors))
+    record = rpc_record(a["checkpoint"], a["rebased"]["record"])
+    route = mock_rpc(record)
+    assert runner.invoke(app, [*base, "--no-anchor"]).exit_code == 2
+    assert not route.called
+    # plain http is refused unless explicitly allowed; the refusal is PARTIAL, not a crash
+    assert runner.invoke(app, [*base, "--rebased-rpc", "http://rpc.test"]).exit_code == 2
+    mock_rpc(record, url="http://rpc.test")
+    assert runner.invoke(app, [*base, "--rebased-rpc", "http://rpc.test",
+                               "--insecure-rpc"]).exit_code == 0
+
+
+def test_verify_warns_on_plain_http_resolver(files):
+    f = files("valid_anchored")
+    r = runner.invoke(app, ["verify", str(f["bundle"]), "--config", str(f["config"]),
+                            "--resolver", "http://resolver.test"])
+    assert "plain http" in r.output
+
+
+# ---------------------------------------------------------------- output injection
+
+EVIL = "[/x][link=http://e]x\x1b]8;;\x9b31m[bold red]\x07"
+
+
+def assert_clean(r) -> None:
+    assert "\x1b" not in r.output and "\x9b" not in r.output and "\x07" not in r.output
+    assert "MarkupError" not in r.output and "Traceback" not in r.output
+
+
+def test_ladder_detail_cannot_inject(files, tmp_path):
+    f = files("valid_anchored")
+    b = bundle_of(f)
+    b["envelope"]["didDoc"] = {"doc": {"id": EVIL}, "keys": []}
+    b["network"] = EVIL  # lands in a step detail ("does not match pinned")
+    path = tmp_path / "evil.bundle.json"
+    path.write_text(json.dumps(b), encoding="utf-8")
+    r = runner.invoke(app, ["verify", str(path), "--config", str(f["config"]),
+                            "--did-snapshot", str(f["snapshot"])])
+    assert r.exit_code == 1
+    assert_clean(r)
+    assert "INVALID" in r.output
+
+
+@respx.mock
+def test_search_row_and_error_body_cannot_inject():
+    row = MSG | {"tag": EVIL, "iss": EVIL, "ieId": EVIL}
+    respx.get(f"{API}/messages").mock(return_value=httpx.Response(
+        200, json={"items": [row], "nextCursor": EVIL, "limit": 50}))
+    r = runner.invoke(app, ["search", "--api", API])
+    assert r.exit_code == 0
+    assert "[/x][link=http://e]x" in r.output  # shown literally, never interpreted
+    assert_clean(r)
+    respx.reset()
+    respx.get(f"{API}/messages").mock(return_value=httpx.Response(400, json={"detail": EVIL}))
+    r = runner.invoke(app, ["search", "--api", API])
+    assert r.exit_code == 4
+    assert_clean(r)
+
+
+@respx.mock
+def test_posture_hostile_fields_are_plain_and_json_is_ascii():
+    doc = POSTURE | {"findings": [{"id": EVIL, "severity": EVIL, "title": EVIL,
+                                   "evidence": {}, "fix": EVIL}]}
+    respx.get(f"{API}/posture").mock(return_value=httpx.Response(200, json=doc))
+    r = runner.invoke(app, ["posture", "--api", API])
+    assert r.exit_code == 0
+    assert_clean(r)
+    r = runner.invoke(app, ["posture", "--api", API, "--json"])
+    assert r.exit_code == 0
+    assert_clean(r)
+    assert json.loads(r.stdout) == doc
+
+
+@respx.mock
+def test_search_sends_milestone_range():
+    route = respx.get(f"{API}/messages").mock(return_value=httpx.Response(
+        200, json={"items": [], "nextCursor": None, "limit": 50}))
+    r = runner.invoke(app, ["search", "--api", API, "--ms-from", "5", "--ms-to", "9"])
+    assert r.exit_code == 0
+    q = dict(route.calls.last.request.url.params)
+    assert q["ms_from"] == "5" and q["ms_to"] == "9"

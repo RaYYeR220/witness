@@ -20,7 +20,9 @@ import httpx
 import typer
 from rich.console import Console
 from rich.table import Table
+from rich.text import Text
 from witness_core import bundle as wbundle
+from witness_core import rebased
 from witness_core.ids import from_hex
 
 EXIT_VALID, EXIT_INVALID, EXIT_PARTIAL, EXIT_CONFIG, EXIT_ERROR = 0, 1, 2, 3, 4
@@ -38,17 +40,40 @@ TokenFileOpt = Annotated[Path | None, typer.Option(
     "--token-file", help="Read the bearer token from this file (default: the environment)")]
 
 
+_CTRL = re.compile(r"[\x00-\x08\x0b-\x1f\x7f-\x9f]")
+
+
+def strip_ctrl(s: str) -> str:
+    """Drop control characters (ESC included) so server text cannot drive the terminal."""
+    return _CTRL.sub("", s)
+
+
 def out() -> Console:
-    return Console(highlight=False, soft_wrap=False)
+    # Nothing a server or bundle says is ever interpreted as markup, emoji or ANSI.
+    return Console(markup=False, emoji=False, highlight=False, soft_wrap=False)
+
+
+def err_console() -> Console:
+    return Console(stderr=True, markup=False, emoji=False, highlight=False, soft_wrap=False)
+
+
+def cell(v: Any, style: str | None = None) -> Text:
+    """An untrusted value as a plain, control-free cell."""
+    return Text(strip_ctrl(short(v)), style=style or "")
+
+
+def warn(message: str) -> None:
+    err_console().print(Text(f"witness: warning: {' '.join(strip_ctrl(message).split())}"))
 
 
 def fail(message: str, code: int = EXIT_ERROR) -> NoReturn:
-    typer.echo(f"witness: {message}", err=True)
+    err_console().print(Text(f"witness: {' '.join(strip_ctrl(message).split())}"))
     raise typer.Exit(code)
 
 
 def emit_json(doc: Any) -> None:
-    typer.echo(json.dumps(doc, indent=2, ensure_ascii=False))
+    # ASCII-escaped: control and C1 characters in server data cannot reach the terminal.
+    typer.echo(json.dumps(doc, indent=2, ensure_ascii=True))
 
 
 def read_json_file(path: Path, what: str, code: int = EXIT_ERROR) -> Any:
@@ -118,8 +143,11 @@ def load_config(path: Path | None) -> wbundle.VerifierConfig:
         network = pick("network", "network")
         raw_keys = pick("trustedCoordinatorKeys", "trusted_coordinator_keys")
         threshold = pick("threshold", "threshold")
-        rebased = pick("rebasedNetwork", "rebased_network")
+        rebased_network = pick("rebasedNetwork", "rebased_network")
         trail = pick("trailId", "trail_id")
+        rpc = pick("rebasedRpc", "rebased_rpc")
+        package = pick("auditTrailPackage", "audit_trail_package")
+        writer = pick("anchorWriter", "anchor_writer")
         if not isinstance(network, str) or not network:
             raise ValueError("network must be a non-empty string")
         if not isinstance(raw_keys, list) or not raw_keys:
@@ -129,34 +157,17 @@ def load_config(path: Path | None) -> wbundle.VerifierConfig:
             raise ValueError("coordinator keys must be 32 bytes")
         if isinstance(threshold, bool) or not isinstance(threshold, int) or threshold < 1:
             raise ValueError("threshold must be a positive integer")
-        if rebased is not None and not isinstance(rebased, str):
-            raise ValueError("rebasedNetwork must be a string")
-        if trail is not None and not isinstance(trail, str):
-            raise ValueError("trailId must be a string")
+        for name, value in (("rebasedNetwork", rebased_network), ("trailId", trail),
+                            ("rebasedRpc", rpc), ("auditTrailPackage", package),
+                            ("anchorWriter", writer)):
+            if value is not None and not isinstance(value, str):
+                raise ValueError(f"{name} must be a string")
     except (ValueError, TypeError) as exc:
         fail(f"verifier config {path} is unusable: {exc}", EXIT_CONFIG)
-    return wbundle.VerifierConfig(network=network, trusted_coordinator_keys=keys,
-                                  threshold=threshold, rebased_network=rebased, trail_id=trail)
-
-
-def anchor_fetcher(base: str, cfg: wbundle.VerifierConfig) -> Callable[[dict], dict | None]:
-    """Reads the on-chain record via the anchor service; only the pinned trail counts."""
-
-    def fetch(anchor: dict) -> dict | None:
-        record = anchor["rebased"]["record"]
-        resp = httpx.get(f"{base.rstrip('/')}/checkpoints/{record}", timeout=TIMEOUT,
-                         follow_redirects=False)
-        if resp.status_code == 404:
-            return None
-        resp.raise_for_status()
-        doc = resp.json()
-        if not (isinstance(doc, dict) and doc.get("source") == "chain"
-                and doc.get("trail") == cfg.trail_id and doc.get("network") == cfg.rebased_network
-                and doc.get("record") == record):
-            raise ValueError("anchor service answered for another trail, network or record")
-        return {k: doc[k] for k in ("checkpointHash", "checkpoint") if k in doc}
-
-    return fetch
+    return wbundle.VerifierConfig(
+        network=network, trusted_coordinator_keys=keys, threshold=threshold,
+        rebased_network=rebased_network, trail_id=trail, rebased_rpc=rpc,
+        audit_trail_package=package, anchor_writer=writer)
 
 
 def did_resolver(base: str) -> Callable[[str], dict | None]:
@@ -171,17 +182,21 @@ def did_resolver(base: str) -> Callable[[str], dict | None]:
     return resolve
 
 
+_STEP_STATUS = {True: ("ok", "green"), False: ("FAILED", "red"), None: ("not checked", "yellow")}
+_OVERALL_STYLE = {"VALID": "bold green", "INVALID": "bold red", "PARTIAL": "bold yellow"}
+
+
 def render_ladder(ladder: wbundle.Ladder) -> None:
     table = Table(title="Proof ladder")
     for col in ("#", "step", "result", "detail"):
         table.add_column(col)
-    style = {True: "[green]ok[/]", False: "[red]FAILED[/]", None: "[yellow]not checked[/]"}
     for i, s in enumerate(ladder.steps, 1):
-        table.add_row(str(i), s.name, style[s.ok], s.detail, end_section=False)
+        label, color = _STEP_STATUS[s.ok]
+        table.add_row(str(i), cell(s.name), Text(label, style=color), cell(s.detail))
     c = out()
     c.print(table)
-    color = {"VALID": "green", "INVALID": "red", "PARTIAL": "yellow"}[ladder.overall]
-    c.print(f"[bold {color}]{ladder.overall}[/]")
+    # The verdict line comes from a fixed vocabulary, never from bundle or server text.
+    c.print(Text(ladder.overall, style=_OVERALL_STYLE[ladder.overall]))
 
 
 @app.command()
@@ -192,13 +207,16 @@ def verify(
         "--config", envvar="WITNESS_VERIFIER_CONFIG",
         help="Pinned verifier config JSON (required)")] = None,
     anchor: Annotated[bool, typer.Option(
-        "--anchor/--no-anchor", help="Check step 5 against the anchor service when one is "
-        "configured")] = True,
-    anchor_url: Annotated[str | None, typer.Option(
-        "--anchor-url", envvar="WITNESS_ANCHOR_URL", help="Anchor service URL")] = None,
+        "--anchor/--no-anchor", help="Check step 5 by reading the anchor record from the pinned "
+        "IOTA Rebased RPC (the config must pin rebasedRpc, trailId and auditTrailPackage)")] = True,
+    rebased_rpc: Annotated[str | None, typer.Option(
+        "--rebased-rpc", envvar="WITNESS_REBASED_RPC",
+        help="Override the pinned rebasedRpc (https JSON-RPC of an IOTA Rebased fullnode)")] = None,
+    insecure_rpc: Annotated[bool, typer.Option(
+        "--insecure-rpc", help="Allow a plain-http Rebased RPC (local tests only)")] = False,
     resolver: Annotated[str | None, typer.Option(
         "--resolver", envvar="WITNESS_RESOLVER_URL",
-        help="Trusted DID resolver URL (the anchor service's /resolve)")] = None,
+        help="Trusted DID resolver URL (the anchor service's /resolve); use https")] = None,
     did_snapshot: Annotated[Path | None, typer.Option(
         "--did-snapshot", help="Trusted DID document file ({doc, version, keys})")] = None,
     from_api: Annotated[bool, typer.Option(
@@ -206,7 +224,13 @@ def verify(
     api: ApiOpt = DEFAULT_API,
     as_json: JsonOpt = False,
 ) -> None:
-    """Verify a proof bundle offline: exit 0 VALID, 1 INVALID, 2 PARTIAL."""
+    """Verify a proof bundle offline: exit 0 VALID, 1 INVALID, 2 PARTIAL.
+
+    The verifier config (--config) pins: network, trustedCoordinatorKeys, threshold and, for
+    step 5, rebasedNetwork, trailId, rebasedRpc and auditTrailPackage (the package id in the
+    trail object's type) and, optionally, anchorWriter (the address that writes the records).
+    It is never taken from an API.
+    """
     cfg = load_config(config)
     if from_api:
         doc = call("GET", api, f"/proofs/{quote(bundle, safe='')}")
@@ -223,8 +247,14 @@ def verify(
         snapshot = read_json_file(did_snapshot, "DID snapshot")
         resolve_did = lambda _did: snapshot
     elif resolver:
+        if resolver.lower().startswith("http://"):
+            warn("the DID resolver is plain http: issuer keys are fetched without "
+                 "authentication; use https or --did-snapshot")
         resolve_did = did_resolver(resolver)
-    fetch = anchor_fetcher(anchor_url, cfg) if anchor and anchor_url else None
+    fetch = None
+    if anchor and (rebased_rpc or cfg.rebased_rpc):
+        fetch = rebased.make_fetcher(cfg, rpc_url=rebased_rpc, timeout=TIMEOUT,
+                                     allow_http=insecure_rpc)
 
     ladder = wbundle.verify(doc, cfg, fetch, resolve_did)
     if as_json:
@@ -247,9 +277,8 @@ def message_table(rows: list[dict], title: str) -> Table:
     for col in ("block id", "date", "tag", "verdict", "IE", "issuer", "ms"):
         table.add_column(col, overflow="fold")
     for m in rows:
-        table.add_row(short(m.get("blockId")), short(m.get("date")), short(m.get("tag")),
-                      short(m.get("verdict")), short(m.get("ieId")), short(m.get("iss")),
-                      short(m.get("msIndex")))
+        table.add_row(*(cell(m.get(k)) for k in (
+            "blockId", "date", "tag", "verdict", "ieId", "iss", "msIndex")))
     return table
 
 
@@ -262,6 +291,10 @@ def search(
     kind: Annotated[str | None, typer.Option(help="Envelope kind")] = None,
     since: Annotated[str | None, typer.Option(help="From this date or time (ISO 8601)")] = None,
     until: Annotated[str | None, typer.Option(help="Up to this date or time (ISO 8601)")] = None,
+    ms_from: Annotated[int | None, typer.Option("--ms-from", min=0,
+                                                help="First milestone index")] = None,
+    ms_to: Annotated[int | None, typer.Option("--ms-to", min=0,
+                                              help="Last milestone index")] = None,
     block_id: Annotated[str | None, typer.Option("--block-id", help="Block id")] = None,
     query: Annotated[str | None, typer.Option("--query", "-q", help="Full-text in the body")] = None,
     jsonpath: Annotated[str | None, typer.Option(help="path=value inside the JSON body")] = None,
@@ -273,16 +306,17 @@ def search(
     """Search stored messages."""
     wanted = {"tag": tag, "ie": ie, "iss": iss, "verdict": verdict, "kind": kind,
               "date_from": since, "date_to": until, "block_id": block_id, "q": query,
-              "jsonpath": jsonpath, "cursor": cursor}
+              "jsonpath": jsonpath, "cursor": cursor, "ms_from": ms_from, "ms_to": ms_to}
     params = {k: v for k, v in wanted.items() if v is not None} | {"limit": limit}
     page = call("GET", api, "/messages", params=params)
     if as_json:
         emit_json(page)
         return
     c = out()
-    c.print(message_table(page.get("items", []), f"{len(page.get('items', []))} messages"))
+    items = page.get("items", [])
+    c.print(message_table(items, f"{len(items)} messages"))
     if page.get("nextCursor"):
-        c.print(f"next page: --cursor {page['nextCursor']}")
+        c.print(Text("next page: --cursor ") + cell(page["nextCursor"]))
 
 
 @app.command()
@@ -297,12 +331,12 @@ def lookup(
         emit_json(result)
         return
     c = out()
-    c.print(f"canon hash: {short(result.get('canonHash'))}")
+    c.print(Text("canon hash: ") + cell(result.get("canonHash")))
     matches = result.get("matches", [])
     if matches:
         c.print(message_table(matches, f"{len(matches)} matches"))
     else:
-        c.print("no matching message")
+        c.print(Text("no matching message"))
 
 
 @app.command()
@@ -317,19 +351,18 @@ def lineage(
     if as_json:
         emit_json(doc)
         return
-    table = Table(title=f"Lineage of {ie_id} ({doc.get('total', 0)} messages)")
+    table = Table(title=cell(f"Lineage of {ie_id} ({short(doc.get('total'))} messages)"))
     for col in ("seq", "kind", "verdict", "ms", "at", "score", "block id"):
         table.add_column(col, overflow="fold")
     for e in doc.get("entries", []):
-        table.add_row(short(e.get("seq")), short(e.get("kind")), short(e.get("verdict")),
-                      short(e.get("msIndex")), short(e.get("at")), short(e.get("score")),
-                      short(e.get("blockId")))
+        table.add_row(*(cell(e.get(k)) for k in (
+            "seq", "kind", "verdict", "msIndex", "at", "score", "blockId")))
     c = out()
     c.print(table)
     ledger, orion = doc.get("ledger") or {}, doc.get("orion") or {}
-    c.print(f"ledger score: {short(ledger.get('score'))}   orion: {short(orion.get('value'))} "
-            f"({short(orion.get('status'))})   drift: {short(doc.get('drift'))} "
-            f"(epsilon {short(doc.get('epsilon'))})")
+    c.print(cell(f"ledger score: {short(ledger.get('score'))}   orion: "
+                 f"{short(orion.get('value'))} ({short(orion.get('status'))})   drift: "
+                 f"{short(doc.get('drift'))} (epsilon {short(doc.get('epsilon'))})"))
 
 
 @app.command()
@@ -362,10 +395,14 @@ def report(
         emit_json(result)
         return
     c = out()
-    c.print(f"report hash: {short(result.get('reportHash'))}")
-    c.print(f"anchored:    {short(result.get('anchored'))}  block: {short(result.get('blockId'))}")
+    c.print(cell(f"report hash: {short(result.get('reportHash'))}"))
+    c.print(cell(f"anchored:    {short(result.get('anchored'))}  "
+                 f"block: {short(result.get('blockId'))}"))
     if out_file is not None:
-        c.print(f"written to {out_file}")
+        c.print(cell(f"written to {out_file}"))
+
+
+_SEVERITY_STYLE = {"high": "red", "medium": "yellow", "low": "cyan", "info": "white"}
 
 
 @app.command()
@@ -388,14 +425,14 @@ def posture(
     if as_json:
         emit_json(doc)
         return
-    table = Table(title=f"Node posture ({short(doc.get('scannedAt')) or 'never scanned'})")
+    table = Table(title=cell(f"Node posture ({short(doc.get('scannedAt')) or 'never scanned'})"))
     for col in ("severity", "id", "title", "fix"):
         table.add_column(col, overflow="fold")
-    colors = {"high": "red", "medium": "yellow", "low": "cyan", "info": "white"}
     for f in doc.get("findings", []):
-        sev = short(f.get("severity"))
-        table.add_row(f"[{colors.get(sev, 'white')}]{sev}[/]", short(f.get("id")),
-                      short(f.get("title")), short(f.get("fix")))
+        sev = f.get("severity")
+        style = _SEVERITY_STYLE.get(sev) if isinstance(sev, str) else None  # unknown: plain
+        table.add_row(cell(sev, style), cell(f.get("id")), cell(f.get("title")),
+                      cell(f.get("fix")))
     out().print(table)
 
 
@@ -415,7 +452,12 @@ def keys_gen(
     did: Annotated[str | None, typer.Option(help="Issuer DID, to form the kid <did>#sig-1")] = None,
     as_json: JsonOpt = False,
 ) -> None:
-    """Generate an Ed25519 signing key. The private JWK goes to a file; only the public half is printed."""
+    """Generate an Ed25519 signing key; only the public half is printed.
+
+    The private JWK is written to <out-dir>/<component>/sig-1.jwk.json with mode 0600 and an
+    existing file is never overwritten. On Windows the mode is not enforced: the file inherits
+    the folder's ACL, so put --out-dir in a user-private folder (or tighten it with icacls).
+    """
     from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
 
     if not _COMPONENT.fullmatch(component):
@@ -441,9 +483,11 @@ def keys_gen(
                    "keyFile": str(target)})
         return
     c = out()
-    c.print(f"kid:         {kid}")
-    c.print(f"public JWK:  {json.dumps(public)}")
-    c.print(f"private key: {target} (keep it secret; it is not shown)")
+    c.print(cell(f"kid:         {kid}"))
+    c.print(cell(f"public JWK:  {json.dumps(public)}"))
+    c.print(cell(f"private key: {target} (keep it secret; it is not shown)"))
+    if sys.platform == "win32":
+        warn("Windows does not enforce file mode 0600; keep the key in a user-private folder")
 
 
 def main() -> None:
