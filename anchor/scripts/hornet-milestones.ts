@@ -3,6 +3,9 @@
 // Each milestone id is computed locally: BLAKE2b-256 of the essence of the raw milestone payload
 // (TIP-29), read with `Accept: application/vnd.iota.serializer-v1`.
 //
+// It cannot count the messages of a window, so it reports no msgCount: a loop pointed at it
+// anchors nothing unless ANCHOR_ALLOW_MISSING_MSGCOUNT=1 (development only, commits 0).
+//
 //   HORNET_URL=http://127.0.0.1:14265 MILESTONES_PORT=7200 pnpm --filter @witness/anchor milestones:hornet
 import http from "node:http";
 import { milestoneId, parseMilestonePayload, toHex } from "@witness/verify";
