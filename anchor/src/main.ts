@@ -64,6 +64,7 @@ async function main(): Promise<void> {
       startIndex: cp.startIndex,
       pollMs: cp.pollMs,
       allowMissingMsgCount: cp.allowMissingMsgCount,
+      stallTicks: cp.stallTicks,
     });
     if (cp.allowMissingMsgCount) log.warn("ANCHOR_ALLOW_MISSING_MSGCOUNT is on: checkpoints may commit msgCount 0 (development only)");
   }

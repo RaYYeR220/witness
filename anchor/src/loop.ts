@@ -38,6 +38,11 @@ export interface LoopDeps {
   pollMs: number;
   /** Development only: anchor windows whose message count the source does not report, as 0. */
   allowMissingMsgCount?: boolean;
+  /**
+   * Ticks without a new checkpoint before the loop reports itself stalled (default 60); failing
+   * ticks count faster: min(5, stallTicks) in a row are enough.
+   */
+  stallTicks?: number;
   /** Most records scanned backwards when rebuilding a lost state file from the chain. */
   recoverMax?: number;
 }
@@ -106,6 +111,10 @@ export class AnchorLoop {
   #warnedWindow: number | null = null;
   /** Set when the milestone source disagreed with the node; cleared by the next anchored window. */
   #alarm: string | null = null;
+  /** Ticks since the last checkpoint, and failed ticks in a row. */
+  #idle = 0;
+  #failures = 0;
+  #stallWarned = false;
 
   constructor(deps: LoopDeps) {
     this.#d = deps;
@@ -116,7 +125,38 @@ export class AnchorLoop {
   }
 
   health(): LoopHealth {
-    return this.#alarm ? { status: "degraded", reason: this.#alarm } : { status: "ok", reason: null };
+    if (this.#alarm) return { status: "degraded", reason: this.#alarm };
+    const stall = this.#stallReason();
+    return stall ? { status: "degraded", reason: stall } : { status: "ok", reason: null };
+  }
+
+  #stallReason(): string | null {
+    const ticks = this.#d.stallTicks ?? 60;
+    const last = this.#lastResult;
+    if (this.#failures >= Math.min(5, ticks) && last?.status === "error") {
+      return `${this.#failures} failed ticks in a row (stage ${last.stage})`;
+    }
+    if (this.#idle >= ticks) {
+      const why = last?.status === "waiting" ? `waiting for milestones ${last.window.from}..${last.window.to} (${last.cause})` : last?.status === "error" ? `failing at stage ${last.stage}` : "no progress";
+      return `no checkpoint for ${this.#idle} ticks: ${why}`;
+    }
+    return null;
+  }
+
+  #count(r: TickResult): void {
+    if (r.status === "anchored") {
+      this.#idle = 0;
+      this.#failures = 0;
+      this.#stallWarned = false;
+      return;
+    }
+    this.#idle++;
+    this.#failures = r.status === "error" ? this.#failures + 1 : 0;
+    const stall = this.#alarm ? null : this.#stallReason();
+    if (stall && !this.#stallWarned) {
+      this.#stallWarned = true;
+      log.warn("anchoring loop stalled", { reason: stall });
+    }
   }
 
   /** Runs one tick now; joins the tick already running instead of starting a second one. */
@@ -124,6 +164,7 @@ export class AnchorLoop {
     this.#running ??= this.#tick()
       .then((r) => {
         this.#lastResult = r;
+        this.#count(r);
         return r;
       })
       .finally(() => {

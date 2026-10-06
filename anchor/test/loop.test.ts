@@ -132,6 +132,29 @@ describe("AnchorLoop", () => {
     expect(loop.health().status).toBe("ok");
   });
 
+  it("reports a stall after too many ticks without a checkpoint, and recovers", async () => {
+    const { loop, tangle } = setup({ stallTicks: 3 }, 11);
+    await loop.runOnce();
+    await loop.runOnce();
+    expect(loop.health().status).toBe("ok");
+    await loop.runOnce();
+    expect(loop.health()).toEqual({ status: "degraded", reason: "no checkpoint for 3 ticks: waiting for milestones 1..12 (incomplete)" });
+    tangle.latest = 12;
+    await loop.runOnce();
+    expect(loop.health()).toEqual({ status: "ok", reason: null });
+  });
+
+  it("reports repeated failures sooner than a quiet stall", async () => {
+    const { loop, trail } = setup({ stallTicks: 60 }, 12);
+    trail.ensureTrail = async () => {
+      throw new Error("rpc down");
+    };
+    for (let i = 0; i < 4; i++) await loop.runOnce();
+    expect(loop.health().status).toBe("ok");
+    await loop.runOnce();
+    expect(loop.health()).toEqual({ status: "degraded", reason: "5 failed ticks in a row (stage trail)" });
+  });
+
   it("joins a running tick instead of starting a second one", async () => {
     const { loop, trail } = setup();
     const [x, y] = await Promise.all([loop.runOnce(), loop.runOnce()]);

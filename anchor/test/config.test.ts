@@ -146,6 +146,7 @@ describe("checkpoint settings", () => {
       httpTimeoutMs: 10_000,
       allowMissingMsgCount: false,
       hornetUrl: null,
+      stallTicks: 60,
       writerAddress: null,
       readCacheMs: 5_000,
       coordinatorKeys: [],
