@@ -65,7 +65,6 @@ Protocol facts learned while capturing (relevant for the parsers):
 - The milestone's block id is not exposed by the API. Rebuild the block from the
   milestone JSON (`parents`, nonce 0 on this network) and hash it; the node
   serves the same bytes back.
-  once you know it.
 - A milestone M's block is referenced by milestone M+1 (`whiteFlagIndex` 0),
   and `/blocks/{id}/metadata` of that block reports `milestoneIndex` = M.
 - Debug cone: `GET /api/debug/v1/block-cones/{blockId}` returns the blocks that
