@@ -31,10 +31,10 @@ const run = (c: any, extra: Partial<VerifyOptions> = {}) => verifyBundle(...wire
 const marks = (l: Ladder) => l.steps.map((s) => (s.ok === null ? "N" : s.ok ? "T" : "F")).join("") + " " + l.overall;
 
 describe("bundles.json parity", () => {
-  it("has the 37 named cases", () => {
+  it("has the 40 named cases", () => {
     const names = bundles.cases.map((c: any) => c.name);
-    expect(names).toHaveLength(37);
-    expect(new Set(names).size).toBe(37);
+    expect(names).toHaveLength(40);
+    expect(new Set(names).size).toBe(40);
   });
 
   it.each(bundles.cases.map((c: any) => [c.name, c] as const))("%s", async (_name, c: any) => {
@@ -121,6 +121,9 @@ const PYTHON_DETAILS: Record<string, Partial<Record<(typeof STEP_NAMES)[number],
   },
   small_order_signer_key: { envelope: "FORGED: weak public key" },
   envelope_hostile_nesting: { envelope: "malformed bundle (RecursionError)" },
+  legacy_hostile_nesting: { envelope: "malformed bundle (RecursionError)" },
+  legacy_broken_hostile_nesting: { envelope: "malformed bundle (RecursionError)" },
+  legacy_nesting_at_cap: { envelope: "unsigned legacy message" },
 };
 
 describe("ladder details match the Python reference", () => {
@@ -345,6 +348,8 @@ describe("envelope bytes read with Python's json.loads semantics", () => {
   };
   const utf8 = (s: string) => new TextEncoder().encode(s);
   const deep = (n: number) => `"body":{"a":${"[".repeat(n)}${"]".repeat(n)}}`;
+  const legacy = (n: number, closed = true) =>
+    `{"a":${"[".repeat(n - 1)}${closed ? `${"]".repeat(n - 1)}}` : ""}`;
   const body = /"body":\{[^}]*\}/;
 
   it.each([
@@ -362,13 +367,21 @@ describe("envelope bytes read with Python's json.loads semantics", () => {
     ["whitespace around", ` \n${text}\t`, true, "PRODUCER_SIGNED by did:iota:testnet:0x5e1f#sig-1"],
     ["trailing data", `${text} x`, null, "unsigned legacy message"],
     // Parsed, but deeper than the canonicalizer recurses: the envelope is MALFORMED.
+    // The envelope adds two levels: 2498 is 2500 in all, parsed, then too deep to canonicalize.
     ["nested 1500", text.replace(body, deep(1500)), false, "MALFORMED: not canonicalizable: nested too deeply"],
-    ["nested 2995", text.replace(body, deep(2995)), false, "MALFORMED: not canonicalizable: nested too deeply"],
-    // Past the parser's nesting cap the step fails closed. CPython's own json limit
-    // depends on the platform (about 3000 on Windows, 10000 on Linux), so no depth
-    // may ever turn into "not evaluated" (the reference re-raises RecursionError too).
-    ["nested 2996", text.replace(body, deep(2996)), false, "malformed bundle (RecursionError)"],
+    ["nested 2498", text.replace(body, deep(2498)), false, "MALFORMED: not canonicalizable: nested too deeply"],
+    // Past the cap both sides share (2500) the step fails closed, on every platform:
+    // CPython's own json limit is about 3000 on Windows and 10000 on Linux, so the
+    // reference applies the same fixed cap before json.loads.
+    ["nested 2499", text.replace(body, deep(2499)), false, "malformed bundle (RecursionError)"],
     ["nested 12000", text.replace(body, deep(12000)), false, "malformed bundle (RecursionError)"],
+    // No envelope at all, valid or broken JSON: judged by its brackets alone.
+    ["legacy 2500", legacy(2500), null, "unsigned legacy message"],
+    ["legacy 2501", legacy(2501), false, "malformed bundle (RecursionError)"],
+    ["legacy 5000", legacy(5000), false, "malformed bundle (RecursionError)"],
+    ["legacy broken 2500", legacy(2500, false), null, "unsigned legacy message"],
+    ["legacy broken 2501", legacy(2501, false), false, "malformed bundle (RecursionError)"],
+    ["brackets inside a string", text.replace('"id":"', `"id":"${"[".repeat(5000)}`), false, "FORGED: signature invalid"],
   ] as const)("%s", async (_name, altered, ok, detail) => {
     const ladder = await run({ ...c, bundle: withData(utf8(altered)) });
     expect(ladder.steps[3]).toEqual({ name: "envelope", ok, detail });

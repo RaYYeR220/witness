@@ -232,10 +232,9 @@ function essenceOf(b: JsonObject): [Uint8Array, MilestoneEssence] {
 
 /**
  * Tagged-data JSON as Python's `json.loads` reads it; null only when the bytes
- * are not UTF-8 or not JSON. Hostile nesting (RecursionError, or a RangeError
- * from the engine's stack) is rethrown so the step fails closed: CPython's own
- * nesting limit depends on the platform, so "not evaluated" would let the same
- * bundle come out PARTIAL on one verifier and INVALID on another.
+ * are not UTF-8 or not JSON. Text nested past `PY_JSON_MAX_DEPTH` (valid JSON
+ * or not) throws RecursionError, which is rethrown so the step fails closed,
+ * exactly as the reference does with the same cap (`bundle._json`).
  */
 function jsonOf(data: Uint8Array): Json {
   let text: string;

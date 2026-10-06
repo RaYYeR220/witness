@@ -445,19 +445,72 @@ def _deeply_nested(depth: int) -> bytes:
     return text.replace(body, '{"a":' + "[" * depth + "]" * depth + "}").encode()
 
 
-@pytest.mark.parametrize("depth", [1500, 5000, 12000])
-def test_hostile_nesting_fails_the_envelope_step(vectors, depth):
-    """Whichever of json.loads and the canonicalizer gives up first (that depends on the
-    platform), the step fails: deep nesting is never "unsigned legacy"."""
-    claimed = EnvelopeCheck(verdicts.PRODUCER_SIGNED, DID, KID, 1, NOW_MS, None)
-    s = _synthetic(vectors, _envelope(), claimed=claimed, data=_deeply_nested(depth))
+def _legacy_nested(depth: int, *, closed: bool = True) -> bytes:
+    """Tagged data that is no envelope: an object nesting `depth` containers in all."""
+    inner = depth - 1
+    return ('{"a":' + "[" * inner + ("]" * inner + "}" if closed else "")).encode()
+
+
+CLAIMED = EnvelopeCheck(verdicts.PRODUCER_SIGNED, DID, KID, 1, NOW_MS, None)
+TOO_DEEP = "malformed bundle (RecursionError)"
+
+
+def _envelope_step(vectors, data: bytes) -> tuple[bundle.StepResult, str]:
+    s = _synthetic(vectors, _envelope(), claimed=CLAIMED, data=data)
     ladder = bundle.verify(s.bundle, _cfg(vectors), _fetch(s.record), _registry())
-    step = _step(ladder, "envelope")
-    assert step.ok is False, step.detail
-    assert step.detail in (
-        "malformed bundle (RecursionError)", "MALFORMED: not canonicalizable: nested too deeply"
-    )
-    assert _ok(ladder) == "TTTFT INVALID"
+    return _step(ladder, "envelope"), _ok(ladder)
+
+
+@pytest.mark.parametrize(
+    ("depth", "detail"),
+    [
+        # Parsed (the envelope sits 2 levels up), then too deep to canonicalize.
+        (1500, "MALFORMED: not canonicalizable: nested too deeply"),
+        (2498, "MALFORMED: not canonicalizable: nested too deeply"),
+        # Past the shared cap of 2500: never "unsigned legacy", on any platform.
+        (2499, TOO_DEEP),
+        (5000, TOO_DEEP),
+        (12000, TOO_DEEP),
+    ],
+)
+def test_hostile_nesting_fails_the_envelope_step(vectors, depth, detail):
+    step, marks = _envelope_step(vectors, _deeply_nested(depth))
+    assert (step.ok, step.detail) == (False, detail)
+    assert marks == "TTTFT INVALID"
+
+
+@pytest.mark.parametrize(
+    ("depth", "closed", "ok", "marks"),
+    [
+        (2500, True, None, "TTTNT PARTIAL"),
+        # 2501..2900 parse with json.loads on every platform, so these exercise the cap
+        # itself, not the interpreter's recursion limit.
+        (2501, True, False, "TTTFT INVALID"),
+        (2900, True, False, "TTTFT INVALID"),
+        (5000, True, False, "TTTFT INVALID"),
+        # Broken JSON: judged by its brackets, so hostile-and-broken still fails closed.
+        (2500, False, None, "TTTNT PARTIAL"),
+        (2501, False, False, "TTTFT INVALID"),
+        (5000, False, False, "TTTFT INVALID"),
+    ],
+)
+def test_nesting_cap_on_payloads_that_are_no_envelope(vectors, depth, closed, ok, marks):
+    step, got = _envelope_step(vectors, _legacy_nested(depth, closed=closed))
+    assert (step.ok, step.detail) == (ok, "unsigned legacy message" if ok is None else TOO_DEEP)
+    assert got == marks
+
+
+def test_native_recursion_error_still_fails_closed(vectors, monkeypatch):
+    """json.loads giving up on its own (it cannot below the cap) is treated alike."""
+
+    def boom(*_args, **_kw):
+        raise RecursionError("maximum recursion depth exceeded while decoding a JSON array")
+
+    s = _synthetic(vectors, _envelope(), claimed=CLAIMED, data=_legacy_nested(3))
+    cfg, fetch, registry = _cfg(vectors), _fetch(s.record), _registry()
+    monkeypatch.setattr(bundle.json, "loads", boom)
+    step = _step(bundle.verify(s.bundle, cfg, fetch, registry), "envelope")
+    assert (step.ok, step.detail) == (False, TOO_DEEP)
 
 
 def test_milestone_claims_must_match_essence(vectors):
@@ -1111,12 +1164,12 @@ def _cases(vectors) -> list[dict]:
         snapshot=_weak_signer_snapshot(),
         claimed=EnvelopeCheck(verdicts.PRODUCER_SIGNED, DID, KID, 1, NOW_MS, None),
     )
-    hostile = _synthetic(
-        vectors,
-        env,
-        claimed=EnvelopeCheck(verdicts.PRODUCER_SIGNED, DID, KID, 1, NOW_MS, None),
-        data=_deeply_nested(12000),
+    hostile = _synthetic(vectors, env, claimed=CLAIMED, data=_deeply_nested(12000))
+    legacy_deep = _synthetic(vectors, env, claimed=CLAIMED, data=_legacy_nested(5000))
+    legacy_broken = _synthetic(
+        vectors, env, claimed=CLAIMED, data=_legacy_nested(5000, closed=False)
     )
+    legacy_at_cap = _synthetic(vectors, env, claimed=CLAIMED, data=_legacy_nested(2500))
     reg = "registry"
     return [
         _case("valid_anchored", b, cfg, rec, reg, "TTTTT VALID"),
@@ -1198,6 +1251,12 @@ def _cases(vectors) -> list[dict]:
               "registry_weak_key", "TTTFT INVALID"),
         _case("envelope_hostile_nesting", hostile.bundle, cfg, {"record": hostile.record}, reg,
               "TTTFT INVALID"),
+        _case("legacy_hostile_nesting", legacy_deep.bundle, cfg, {"record": legacy_deep.record},
+              reg, "TTTFT INVALID"),
+        _case("legacy_broken_hostile_nesting", legacy_broken.bundle, cfg,
+              {"record": legacy_broken.record}, reg, "TTTFT INVALID"),
+        _case("legacy_nesting_at_cap", legacy_at_cap.bundle, cfg,
+              {"record": legacy_at_cap.record}, reg, "TTTNT PARTIAL"),
     ]
 
 

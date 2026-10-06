@@ -16,12 +16,40 @@ export const MAX_UINT = Number.MAX_SAFE_INTEGER;
 const MAX_INT_DIGITS = 4300;
 
 /**
- * Container nesting cap for `parseJson`. CPython's own `json.loads` limit
- * depends on the platform (about 3000 on Windows, 10000 on Linux), so this is a
- * fixed cap at the lower figure. Deeper input throws `RecursionError`, never a
- * parse error, and the bundle verifier fails closed on it.
+ * Container nesting cap for `parseJson`, shared with the Python reference
+ * (`witness_core.nesting.MAX_JSON_DEPTH`). CPython's own `json.loads` limit
+ * depends on the platform (about 3000 on Windows, 10000 on Linux), so both
+ * sides apply this fixed cap first. Text whose brackets (outside strings) nest
+ * deeper throws `RecursionError`, valid JSON or not, never a parse error, and
+ * the bundle verifier fails closed on it.
  */
-export const PY_JSON_MAX_DEPTH = 2997;
+export const PY_JSON_MAX_DEPTH = 2500;
+
+/**
+ * True when `[` / `{` outside strings ever nest more than `limit` deep
+ * (Python `nesting.text_too_deep`). Lexical, so it answers the same whether
+ * or not the text is valid JSON.
+ */
+export function textTooDeep(text: string, limit: number = PY_JSON_MAX_DEPTH): boolean {
+  let depth = 0;
+  let inString = false;
+  let escaped = false;
+  for (let i = 0; i < text.length; i++) {
+    const c = text.charCodeAt(i);
+    if (inString) {
+      if (escaped) escaped = false;
+      else if (c === 0x5c) escaped = true;
+      else if (c === 0x22) inString = false;
+    } else if (c === 0x22) {
+      inString = true;
+    } else if (c === 0x5b || c === 0x7b) {
+      if (++depth > limit) return true;
+    } else if (c === 0x5d || c === 0x7d) {
+      depth--;
+    }
+  }
+  return false;
+}
 
 /** Nesting beyond what the verifier will recurse through (Python's RecursionError). */
 export class RecursionError extends RangeError {
@@ -67,7 +95,9 @@ const NUMBER = /-?(?:0|[1-9]\d*)(\.\d+)?([eE][-+]?\d+)?/y;
 
 /** Parse JSON text with Python `json.loads` semantics (see module doc). */
 export function parseJson(text: string, options: ParseOptions = {}): Json {
-  const p = new Parser(text, options.constants === true, options.maxDepth ?? PY_JSON_MAX_DEPTH);
+  const maxDepth = options.maxDepth ?? PY_JSON_MAX_DEPTH;
+  if (textTooDeep(text, maxDepth)) throw new RecursionError("maximum JSON nesting depth exceeded");
+  const p = new Parser(text, options.constants === true, maxDepth);
   p.ws();
   const value = p.value();
   p.ws();

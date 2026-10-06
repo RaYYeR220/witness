@@ -21,7 +21,7 @@ from collections.abc import Callable
 from dataclasses import dataclass
 from typing import Any, Literal, Protocol
 
-from . import checkpoint, codec, ed25519, envelope, merkle, verdicts
+from . import checkpoint, codec, ed25519, envelope, merkle, nesting, verdicts
 from .codec import Ed25519Sig, MilestoneEssence
 from .envelope import EnvelopeCheck, KeyInfo
 from .ids import blake2b256, from_hex, to_hex
@@ -331,17 +331,25 @@ def _uint(v: Any) -> bool:
 def _json(data: bytes) -> Any:
     """Tagged-data JSON; None only when the bytes are not UTF-8 or not JSON.
 
-    Hostile nesting (RecursionError) propagates so the step fails closed: the depth
-    json.loads gives up at depends on the platform, and "unsigned legacy" (not evaluated)
-    would let the same bundle come out PARTIAL on one verifier and INVALID on another.
+    Text nesting deeper than `nesting.MAX_JSON_DEPTH` raises RecursionError, valid JSON or
+    not, so the step fails closed: where json.loads itself gives up depends on the
+    platform, and "unsigned legacy" (not evaluated) on one verifier against a failure on
+    another would split the verdict. A RecursionError from json.loads is let through the
+    same way (it cannot happen below the cap).
     """
 
     def reject(token: str) -> Any:
         raise ValueError(f"non-finite number {token}")
 
     try:
-        return json.loads(data.decode("utf-8"), parse_constant=reject)
-    except (UnicodeDecodeError, ValueError):
+        text = data.decode("utf-8")
+    except UnicodeDecodeError:
+        return None
+    if nesting.text_too_deep(text):
+        raise RecursionError(f"JSON nested deeper than {nesting.MAX_JSON_DEPTH} levels")
+    try:
+        return json.loads(text, parse_constant=reject)
+    except ValueError:
         return None
 
 

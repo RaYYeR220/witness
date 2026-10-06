@@ -11,6 +11,7 @@ import {
   PY_JSON_MAX_DEPTH,
   pyRepr,
   RecursionError,
+  textTooDeep,
 } from "../src/index.js";
 import { toHex } from "../src/bytes.js";
 import { raw } from "./vectors.js";
@@ -71,6 +72,25 @@ describe("parseJson keeps Python's number model", () => {
       expect(() => parseJson(nest(n))).not.toThrow(JsonParseError);
     }
     expect(() => parseJson(nest(20), { maxDepth: 19 })).toThrow(RecursionError);
+  });
+
+  it("shares its cap with the reference and judges nesting by brackets alone", () => {
+    expect(PY_JSON_MAX_DEPTH).toBe(2500); // witness_core.nesting.MAX_JSON_DEPTH
+    const cap = PY_JSON_MAX_DEPTH;
+    const nest = (n: number) => "[".repeat(n) + "]".repeat(n);
+    // Broken text past the cap is still a RecursionError, wherever the syntax breaks.
+    for (const text of ["[".repeat(cap + 1), `${"[".repeat(cap + 1)}x`, `{"a":1 ${"[".repeat(cap + 1)}`, `﻿${nest(cap + 1)}`]) {
+      expect(textTooDeep(text)).toBe(true);
+      expect(() => parseJson(text)).toThrow(RecursionError);
+    }
+    // Brackets inside strings do not count, nor after an escaped quote.
+    expect(textTooDeep(`["${"[".repeat(2 * cap)}"]`)).toBe(false);
+    expect(textTooDeep(`"\\\"${"{".repeat(2 * cap)}"`)).toBe(false);
+    expect(textTooDeep(`["${"[".repeat(2 * cap)}`)).toBe(false); // an open string runs to the end
+    expect(parseJson(`["${"[".repeat(2 * cap)}"]`)).toEqual(["[".repeat(2 * cap)]);
+    const mixed = `${'{"a":'.repeat(cap - 1)}[1]${"}".repeat(cap - 1)}`;
+    expect(textTooDeep(mixed)).toBe(false);
+    expect(() => parseJson(`[${mixed}]`)).toThrow(RecursionError);
   });
 
   it("accepts NaN/Infinity only on request", () => {

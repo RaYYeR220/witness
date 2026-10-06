@@ -34,6 +34,7 @@ export {
   RecursionError,
   parseJson,
   pyRepr,
+  textTooDeep,
   type Json,
   type JsonObject,
   type ParseOptions,
