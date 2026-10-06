@@ -10,4 +10,6 @@ interface ImportMetaEnv {
   readonly VITE_MODE?: "live" | "replay";
   readonly VITE_API_URL?: string;
   readonly VITE_REPLAY_ROOT?: string;
+  /** Trusted DID resolver (the anchor service's /resolve), default /anchor. */
+  readonly VITE_RESOLVER_URL?: string;
 }
