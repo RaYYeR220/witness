@@ -55,6 +55,10 @@ Every event carries its block id and a role: `trigger` (the event that opened th
 orchestrator code, the recovered trust score) or `alert`. An incident's severity is the
 highest of its members'.
 
+Time: an event's time is its confirming milestone's time, or the relay's receipt time when
+that lies within one window before it (a submission record states its own receipt time and
+the broker is unauthenticated, so a record from the future cannot stretch an incident).
+
 Close: `closed:recovered` when, after a trust drop, a PROVEN trust.score is back to (or above)
 the level the incident's first drop fell from; `closed:quiet` after `quiet_close_ms` with no
 new event (measured on the ledger clock, so a backfill does not close incidents early). An
@@ -238,17 +242,24 @@ def _is_error(code: Any) -> bool:
     return False
 
 
-def _msg_time(m: dict | MessageRow | None) -> int | None:
-    """When a message happened: relay receipt, else confirmation, else milestone time."""
+def _msg_time(m: dict | MessageRow | None, window_ms: int) -> int | None:
+    """When a message happened, on the ledger clock: its milestone's time (else its
+    confirmation time), or the relay's receipt time when that lies within `window_ms` before
+    it. A submission record states its own receipt time, so one outside that range (a
+    clock far ahead, a record from the future) is not believed. None while unconfirmed."""
     if m is None:
         return None
     get = m.get if isinstance(m, dict) else (lambda k: getattr(m, k, None))
-    for k in ("received_at_ms", "confirmed_at_ms"):
-        v = get(k)
-        if isinstance(v, int) and v > 0:
-            return v
-    ts = get("ts")
-    return ts * 1000 if isinstance(ts, int) and ts > 0 else None
+    ts, confirmed, received = get("ts"), get("confirmed_at_ms"), get("received_at_ms")
+    if _int(ts) and ts > 0:
+        ledger = ts * 1000
+    elif _int(confirmed) and confirmed > 0:
+        ledger = confirmed
+    else:
+        return None
+    if _int(received) and ledger - window_ms <= received <= ledger:
+        return received
+    return ledger
 
 
 def _max_sev(a: str | None, b: str | None) -> str | None:
@@ -482,7 +493,8 @@ class IncidentEngine:
         else:
             return None
         level = await self._trust(row.block_id, row.verdict)
-        at = _msg_time(await self.store.get_message(row.block_id)) or _msg_time(row)
+        w = self.cfg.window_ms
+        at = _msg_time(await self.store.get_message(row.block_id), w) or _msg_time(row, w)
         obs = _Obs(row.block_id, self._keys(ie, sc), at or self._now(), "alert", level,
                    ie_id=ie or self._host(sc),
                    detail={"kind": kind, "tag": row.tag, "verdict": row.verdict,
@@ -604,7 +616,8 @@ class IncidentEngine:
             ie = ie or host
         label = RULE_TITLES.get(rule, _label(rule, 40))
         where = f"on {ie}" if ie else (f"in block {_hex(bid)[:12]}..." if bid else "")
-        obs = _Obs(bid, keys, _msg_time(msg) or _int(a["ts"]) or self._now(), "alert",
+        at = _msg_time(msg, self.cfg.window_ms) or _int(a["ts"]) or self._now()
+        obs = _Obs(bid, keys, at, "alert",
                    level, opens=opens, witnessed=witnessed, severity=a["severity"], ie_id=ie,
                    title=f"{label} {where}".strip() + f" ({rule})" * (label != rule),
                    detail={"rule": rule, "alertId": a["id"],

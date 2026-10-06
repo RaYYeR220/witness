@@ -451,6 +451,39 @@ async def test_self_orchestrator_error_alone_closes_only_when_quiet(store, engin
     assert actions(await feed(store, engine, so_error(503, ms=200))) == ["opened"]
 
 
+async def test_event_time_comes_from_the_ledger(store, engine):
+    await feed(store, engine, score(0.9, ms=10))
+    drop = score(0.4, ms=11)
+    # the submission record claims the relay received the block in 2100
+    await store.put_submission(Submission(
+        sub_id="sub-future", source="mqtt", received_at_ms=4_102_444_800_000,
+        tag="trust.score", block_id=drop.block_id, hornet_status=201))
+    assert actions(await feed(store, engine, drop)) == ["opened"]
+    [inc] = await store.incidents()
+    assert inc["opened_at_ms"] == inc["last_event_ms"] == drop.ts * 1000
+    # a receipt shortly before the milestone is believed
+    err = so_error("restart", ms=12)
+    await store_row(store, err, submitted=True)  # received 500 ms before its milestone
+    assert actions(await engine.on_message(err)) == ["attached"]
+    [inc] = await store.incidents()
+    assert inc["last_event_ms"] == err.ts * 1000 - 500
+    assert actions(await engine.periodic(now_ms=err.ts * 1000 - 500 + 1_800_001)) == [
+        "closed"]
+
+
+async def test_quiet_close_runs_on_the_ledger_clock(store, engine):
+    await feed(store, engine, score(0.9, ms=10))
+    drop = score(0.4, ms=11)
+    assert actions(await feed(store, engine, drop)) == ["opened"]
+    await store.put_milestone(11, b"\x01" * 32, drop.ts, b"", [], b"\x00" * 32, b"\x00" * 32)
+    # a backfill: the wall clock is days ahead, the ledger is still at the incident
+    far = drop.ts * 1000 + 10 * 86_400_000
+    assert await engine.periodic(now_ms=far) == []
+    await store.put_milestone(12, b"\x02" * 32, drop.ts + 1801, b"", [], b"\x00" * 32,
+                              b"\x01" * 32)
+    assert actions(await engine.periodic(now_ms=far)) == ["closed"]
+
+
 async def test_recovery_target_is_the_level_the_first_drop_fell_from(store, engine):
     await feed(store, engine, score(0.9, ms=10))
     assert actions(await feed(store, engine, so_error("restart", ms=11))) == ["opened"]
