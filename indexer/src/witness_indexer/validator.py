@@ -36,6 +36,7 @@ from contextlib import asynccontextmanager
 from dataclasses import dataclass, field
 from typing import Any
 
+import psycopg
 from witness_core.canon import jcs
 from witness_core.codec import (
     DecodeError,
@@ -391,6 +392,17 @@ class Validator:
             if entry.users == 0:
                 del self._locks[block_id]
 
+    @asynccontextmanager
+    async def _database_lock(self, block_id: bytes) -> AsyncIterator[None]:
+        """Serialise validations of one block across processes: the indexer's worker and the
+        API's on-demand checks share the database, not memory. A session advisory lock on a
+        connection of its own (not a pooled one, which validations need for their writes),
+        held for the whole validation and released when that connection closes."""
+        key = f"{self.store.schema}:validate:{block_id.hex()}"
+        async with await psycopg.AsyncConnection.connect(self.store.dsn, autocommit=True) as c:
+            await c.execute("SELECT pg_advisory_lock(hashtextextended(%s, 0))", (key,))
+            yield
+
     # -- one validation --------------------------------------------------------------------
 
     async def validate_once(self, block_id: bytes | None, sub_id: str | None) -> str:
@@ -400,11 +412,12 @@ class Validator:
         When the node could not be asked (unreachable, or answering with something that is
         not an answer about the block), nothing is concluded or written: the current status
         (SUBMITTED, SOLID or CONFIRMED) is returned and the block stays due for a retry. Calls
-        for the same block are serialised, so a direct call cannot race the worker.
+        for the same block are serialised, in this process and across processes sharing the
+        database, so a direct call cannot race the worker.
         """
         if block_id is None:
             return "RECEIVED"
-        async with self._block_lock(block_id):
+        async with self._block_lock(block_id), self._database_lock(block_id):
             expected = await self._expected(block_id, sub_id)
             run = _Run(block_id, expected.sub_id)
             for row in await self.store.lifecycle(block_id):

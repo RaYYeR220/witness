@@ -3,9 +3,13 @@ re-verification, and lookups by content (canonical JSON) or by blind index token
 
 from __future__ import annotations
 
+import hmac
+import math
+import time
 from typing import Annotated
 
-from fastapi import APIRouter, HTTPException, Query, Request
+from fastapi import APIRouter, Depends, HTTPException, Query, Request
+from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from witness_core import canon, envelope
 from witness_indexer.store import MessageFilter
 from witness_indexer.validator import NoUsableContent
@@ -14,15 +18,21 @@ from . import models as m
 from . import views
 from .deps import BLOCK_ID_EXAMPLE, BLOCK_ID_PATTERN, BlockIdPath, Svc, block_bytes, parse_when
 from .deps import read_json as read_json_body
-from .nodecheck import verify_now
+from .nodecheck import stored_result, verify_now
 
 router = APIRouter(tags=["messages"])
 lookups = APIRouter(tags=["lookup"])
+verify_bearer = HTTPBearer(auto_error=False, scheme_name="verifyToken",
+                           description="WITNESS_VERIFY_TOKEN, when the server sets one")
+
+CONTENT_CHECKS_SHOWN = 50
 
 JSONPATH_PATTERN = r"^[A-Za-z0-9_\-]{1,64}(\.[A-Za-z0-9_\-]{1,64}){0,7}=.{0,200}$"
 DATE_DOC = ("ISO 8601 date or date-time (`2026-10-06`, `2026-10-06T10:46:19Z`, offsets "
-            "allowed; no offset means UTC) or epoch milliseconds. Inclusive. A bare date in "
-            "`date_to` covers that whole day.")
+            "allowed; no offset means UTC) or epoch milliseconds (11-16 digits). Inclusive, to "
+            "the millisecond: `date_to=2026-10-06T10:46:19Z` ends at 10:46:19.000, so write "
+            "`…19.999Z` to include that whole second. A bare date in `date_to` covers that "
+            "whole day.")
 
 
 @router.get(
@@ -65,7 +75,7 @@ async def list_messages(
     start = parse_when(date_from, "date_from")
     end = parse_when(date_to, "date_to", end=True)
     if start is not None and end is not None and start > end:
-        raise HTTPException(422, "date_from is after date_to")
+        raise HTTPException(400, "date_from is after date_to")
     path_eq = None
     if jsonpath is not None:
         path, _, value = jsonpath.partition("=")
@@ -89,6 +99,11 @@ async def _status(svc: Svc, bid: bytes, message: dict | None) -> str | None:
     return history[-1]["status"] if history else None
 
 
+async def _latest_checks(svc: Svc, bid: bytes) -> m.Checks:
+    return views.checks(await svc.store.latest_validation(bid),
+                        await svc.store.latest_content_check(bid))
+
+
 @router.get(
     "/messages/{block_id}", response_model=m.MessageDetail, summary="One stored message",
     description=(
@@ -105,7 +120,7 @@ async def get_message(block_id: BlockIdPath, svc: Svc) -> m.MessageDetail:
     sub = await svc.store.submission(block_id=bid)
     if row is None and sub is None:
         raise HTTPException(404, f"no message {views.hx(bid)}")
-    checks = views.checks(await svc.store.validations(bid), await svc.store.content_checks(bid))
+    checks = await _latest_checks(svc, bid)
     status = await _status(svc, bid, row)
     if row is not None:
         base = views.message(row, svc.link).model_dump()
@@ -126,25 +141,43 @@ async def get_message(block_id: BlockIdPath, svc: Svc) -> m.MessageDetail:
     summary="Lifecycle and Tangle checks of a message",
     description=(
         "RECEIVED → SUBMITTED → SOLID → CONFIRMED → CONTENT_VERIFIED | CONTENT_MISMATCH | "
-        "NOT_FOUND (or ORPHANED), with every metadata answer from the node (check c) and "
-        "every content comparison (check d)."),
+        "NOT_FOUND (or ORPHANED), with the node's metadata answers (check c; every poll is "
+        "kept, so they come in pages: the newest `limit` first, older ones with "
+        "`cursor=validationsCursor`) and the newest 50 content comparisons (check d). "
+        "`checks` always reflects the latest answer of each kind."),
     responses={404: {"description": "Unknown block"}},
 )
-async def lifecycle(block_id: BlockIdPath, svc: Svc) -> m.Lifecycle:
+async def lifecycle(
+    block_id: BlockIdPath, svc: Svc,
+    cursor: Annotated[str | None, Query(pattern=r"^[0-9]{1,18}$", description=(
+        "`validationsCursor` of the previous page"))] = None,
+    limit: Annotated[int, Query(ge=1, le=500, description="Validations per page")] = 50,
+) -> m.Lifecycle:
     bid = block_bytes(block_id)
     history = await svc.store.lifecycle(bid)
     sub = await svc.store.submission(block_id=bid)
     row = await svc.store.get_message(bid)
     if not history and sub is None and row is None:
         raise HTTPException(404, f"no message {views.hx(bid)}")
-    validations = await svc.store.validations(bid)
-    contents = await svc.store.content_checks(bid)
+    validations, older = await svc.store.validations_page(
+        bid, int(cursor) if cursor else None, limit)
+    contents = await svc.store.recent_content_checks(bid, CONTENT_CHECKS_SHOWN)
     return m.Lifecycle(
         block_id=views.hx(bid), status=history[-1]["status"] if history else None,
         transitions=[views.transition(r) for r in history],
         validations=[views.validation(r) for r in validations],
+        validations_cursor=None if older is None else str(older),
         content_checks=[views.content_check(r) for r in contents],
-        checks=views.checks(validations, contents), submission=views.submission(sub))
+        checks=await _latest_checks(svc, bid), submission=views.submission(sub))
+
+
+def _authorize_verify(svc: Svc, creds: HTTPAuthorizationCredentials | None) -> None:
+    token = svc.settings.verify_token
+    if token is None:
+        return
+    if creds is None or not hmac.compare_digest(creds.credentials.encode(), token.encode()):
+        raise HTTPException(401, "a valid bearer token is required",
+                            headers={"WWW-Authenticate": "Bearer"})
 
 
 @router.post(
@@ -155,22 +188,43 @@ async def lifecycle(block_id: BlockIdPath, svc: Svc) -> m.Lifecycle:
         "milestone references the block, (d) `GET /api/core/v2/blocks/{id}` compared byte "
         "for byte with what was received. Results are stored like the background "
         "validation's; `calls` lists what the node answered during this run. Waits at most "
-        "WITNESS_VERIFY_TIMEOUT_S for a block that is not confirmed yet."),
-    responses={404: {"description": "Unknown block"},
+        "WITNESS_VERIFY_TIMEOUT_S for a block that is not confirmed yet.\n\n"
+        "If the node answered about this block less than WITNESS_VERIFY_COOLDOWN_S ago, the "
+        "stored checks are returned with `cached: true` and the node is not asked. Only a few "
+        "checks run at once (429 with Retry-After beyond that). When the server sets "
+        "WITNESS_VERIFY_TOKEN, a bearer token is required."),
+    responses={401: {"description": "WITNESS_VERIFY_TOKEN is set and the bearer is wrong"},
+               404: {"description": "Unknown block"},
                409: {"description": "No stored copy of the content to compare"},
+               429: {"description": "Too many checks running; retry after Retry-After"},
                503: {"description": "No node configured (WITNESS_HORNET_URL)"}},
 )
-async def verify(block_id: BlockIdPath, svc: Svc) -> m.VerifyResult:
+async def verify(
+    block_id: BlockIdPath, svc: Svc,
+    creds: Annotated[HTTPAuthorizationCredentials | None, Depends(verify_bearer)],
+) -> m.VerifyResult:
+    _authorize_verify(svc, creds)
     bid = block_bytes(block_id)
-    if svc.validator is None:
+    if svc.validator is None or svc.verify_slots is None:
         raise HTTPException(503, "no node configured to verify against (WITNESS_HORNET_URL)")
     if await svc.store.submission(block_id=bid) is None and \
             await svc.store.get_message(bid) is None:
         raise HTTPException(404, f"no message {views.hx(bid)}")
-    try:
-        return await verify_now(svc.validator, svc.store, bid, svc.settings.verify_timeout_s)
-    except NoUsableContent as e:
-        raise HTTPException(409, str(e)) from None
+    latest = await svc.store.latest_validation(bid)
+    cooldown_ms = svc.settings.verify_cooldown_s * 1000
+    if latest is not None and time.time() * 1000 - latest["checked_at_ms"] < cooldown_ms:
+        return await stored_result(svc.store, bid, latest)
+    slots = svc.verify_slots
+    if slots.locked():  # no await between this check and acquiring: no race
+        raise HTTPException(429, "too many checks running; try again shortly",
+                            headers={"Retry-After": str(math.ceil(
+                                svc.settings.verify_timeout_s))})
+    async with slots:
+        try:
+            return await verify_now(svc.validator, svc.store, bid,
+                                    svc.settings.verify_timeout_s)
+        except NoUsableContent as e:
+            raise HTTPException(409, str(e)) from None
 
 
 # -- lookups ----------------------------------------------------------------------------------

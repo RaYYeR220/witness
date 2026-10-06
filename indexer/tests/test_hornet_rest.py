@@ -97,6 +97,18 @@ async def test_garbage_json_raises_unavailable(hornet):
         await hornet.block_metadata(BID)
 
 
+@respx.mock
+async def test_errors_name_the_path_not_the_node(hornet):
+    """Error text ends up in alert evidence and API answers; the node's address stays out."""
+    respx.get(BLOCK_URL + "/metadata").mock(side_effect=httpx.ConnectError("refused"))
+    respx.get(BLOCK_URL).mock(return_value=httpx.Response(503, text="busy"))
+    for call in (hornet.block_metadata, hornet.block_raw):
+        with pytest.raises(HornetUnavailable) as e:
+            await call(BID)
+        assert "hornet.test" not in str(e.value)
+        assert f"/api/core/v2/blocks/0x{BID.hex()}" in str(e.value)
+
+
 async def test_rejects_bad_block_id(hornet):
     with pytest.raises(ValueError):
         await hornet.block(b"\x00" * 31)

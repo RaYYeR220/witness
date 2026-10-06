@@ -50,20 +50,33 @@ def _import_grpc() -> Any:
     return grpc
 
 
+def _error_code(e: BaseException) -> str:
+    """A coarse reason for the status page; the full error only goes to the log."""
+    code = getattr(e, "code", None)
+    if callable(code):  # grpc.aio.AioRpcError
+        name = getattr(code(), "name", "")
+        return "unreachable" if name in ("UNAVAILABLE", "DEADLINE_EXCEEDED") else "rejected"
+    return "unreachable"
+
+
 class NodeRoute:
-    """One API route registered on a node over INX."""
+    """One API route registered on a node over INX, kept registered: the node forgets its
+    routes when it restarts, and registering an existing route again simply overrides it."""
 
     def __init__(self, inx_addr: str, route: str, host: str, port: int, *,
-                 timeout_s: float = 5.0, retry_max_s: float = 60.0) -> None:
+                 timeout_s: float = 5.0, retry_max_s: float = 60.0,
+                 refresh_s: float = 180.0) -> None:
         self.inx_addr = inx_addr
         self.route = route
         self.host = host
         self.port = port
         self.timeout_s = timeout_s
         self.retry_max_s = retry_max_s
+        self.refresh_s = refresh_s
         self.registered = False
-        self.error: str | None = None
+        self.error: str | None = None  # unreachable | rejected | grpc_missing
         self._unavailable = False  # grpc missing: retrying cannot help
+        self._announced = False
         self._task: asyncio.Task | None = None
 
     async def _call(self, method: str, request: bytes) -> None:
@@ -79,18 +92,21 @@ class NodeRoute:
         try:
             await self._call(REGISTER, request)
         except ImportError as e:
-            self.error, self._unavailable = f"grpc is not installed ({e})", True
-            log.warning("cannot mount /api/%s on the node: %s; serving on port %d only",
-                        self.route, self.error, self.port)
+            self.registered, self.error, self._unavailable = False, "grpc_missing", True
+            log.warning("cannot mount /api/%s on the node: grpc is not installed (%s); "
+                        "serving on port %d only", self.route, e, self.port)
             return False
         except Exception as e:  # noqa: BLE001 - any INX failure leaves the direct port working
-            self.error = f"{type(e).__name__}: {e}" if str(e) else type(e).__name__
+            self.registered, self.error = False, _error_code(e)
+            detail = f"{type(e).__name__}: {e}" if str(e) else type(e).__name__
             log.log(level, "could not register /api/%s on the node at %s: %s; serving on port "
-                    "%d only", self.route, self.inx_addr, self.error, self.port)
+                    "%d only", self.route, self.inx_addr, detail, self.port)
             return False
         self.registered, self.error = True, None
-        log.info("node at %s now proxies /api/%s to %s:%d", self.inx_addr, self.route,
-                 self.host, self.port)
+        log.log(logging.DEBUG if self._announced else logging.INFO,
+                "node at %s proxies /api/%s to %s:%d", self.inx_addr, self.route, self.host,
+                self.port)
+        self._announced = True
         return True
 
     async def unregister(self) -> None:
@@ -103,16 +119,23 @@ class NodeRoute:
             log.warning("could not unregister /api/%s from the node: %s", self.route, e)
         self.registered = False
 
-    async def _keep_trying(self) -> None:
+    async def _maintain(self) -> None:
         delay, level = 1.0, logging.WARNING
-        while not await self.register(level=level) and not self._unavailable:
-            await asyncio.sleep(delay)
-            delay, level = min(delay * 2, self.retry_max_s), logging.DEBUG
+        while True:
+            if await self.register(level=level):
+                delay, level = 1.0, logging.WARNING
+                await asyncio.sleep(self.refresh_s)
+            elif self._unavailable:
+                return
+            else:
+                await asyncio.sleep(delay)
+                delay, level = min(delay * 2, self.retry_max_s), logging.DEBUG
 
     def start(self) -> None:
-        """Register in the background, retrying until the node accepts the route."""
+        """Register in the background: retried until the node accepts the route, then
+        renewed every `refresh_s` so a restarted node gets it back."""
         if self._task is None:
-            self._task = asyncio.create_task(self._keep_trying(), name="node-route")
+            self._task = asyncio.create_task(self._maintain(), name="node-route")
 
     async def stop(self) -> None:
         if self._task is not None:

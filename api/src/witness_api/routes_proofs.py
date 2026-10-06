@@ -62,8 +62,11 @@ async def did_snapshot(svc: Svc, did: str) -> dict | None:
         "signatures, Merkle audit path to the milestone's inclusion root, the envelope verdict "
         "with a DID document snapshot (when the anchor service answers), and the anchored "
         "checkpoint covering the milestone (when there is one). Verify it offline against "
-        "`GET /config/verifier`. `?format=inx-poi` returns the shape of inx-poi's "
-        "`/api/poi/v1/create` instead, accepted by its `/validate`."),
+        "`GET /config/verifier`. `envelope.verdict` is the verdict this explorer recorded, "
+        "for information only: a verifier recomputes it from the raw block and the issuer's "
+        "DID document, and trusts nothing else the bundle claims either. "
+        "`?format=inx-poi` returns the shape of inx-poi's `/api/poi/v1/create` instead, "
+        "accepted by its `/validate`."),
     responses={200: {"content": {"application/json": {"example": BUNDLE_EXAMPLE}}},
                404: {"description": "Block not in an indexed milestone cone"},
                409: {"description": "Stored block bytes do not hash to the block id"},

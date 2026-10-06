@@ -34,3 +34,23 @@ def test_from_env_rejects_bad_values(env, message):
         env = {"WITNESS_DB": "postgresql://x", **env}
     with pytest.raises(ValueError, match=message):
         Settings.from_env(env)
+
+
+def test_validation_belongs_to_the_indexer_by_default():
+    s = Settings.from_env({"WITNESS_DB": "postgresql://x"})
+    assert s.validate is False
+    assert s.verify_token is None and s.verify_concurrency == 4 and s.verify_cooldown_s == 20
+    assert s.stream_max_subscribers == 200
+
+
+def test_empty_hornet_url_disables_node_calls():
+    assert Settings.from_env({"WITNESS_DB": "x", "WITNESS_HORNET_URL": ""}).hornet_url is None
+    assert Settings.from_env({"WITNESS_DB": "x", "WITNESS_HORNET_URL": "http://n:1"}).hornet_url \
+        == "http://n:1"
+
+
+def test_verify_token_from_env():
+    s = Settings.from_env({"WITNESS_DB": "x", "WITNESS_VERIFY_TOKEN": "v" * 24})
+    assert s.verify_token == "v" * 24
+    with pytest.raises(ValueError, match="WITNESS_VERIFY_TOKEN"):
+        Settings.from_env({"WITNESS_DB": "x", "WITNESS_VERIFY_TOKEN": "short"})

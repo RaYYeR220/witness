@@ -154,13 +154,77 @@ async def test_verify_endpoint_runs_checks(client, store):
     assert v["calls"][1]["request"] == f"GET /api/core/v2/blocks/{to_hex(bid)}"
     assert v["calls"][1]["bytes"] == len(raw)
     assert v["startedAtMs"] <= v["finishedAtMs"]
+    assert v["cached"] is False
 
-    # verifying again re-asks the node; the outcome stays the same
-    with respx.mock() as mock:
+    # asked again within the cooldown: the stored checks, without bothering the node
+    with respx.mock(assert_all_called=False) as mock:
         meta, block = hornet(mock, bid, raw)
         again = (await client.post(f"/messages/{to_hex(bid)}/verify")).json()
-        assert meta.called and block.called
+        assert not meta.called and not block.called
+    assert again["cached"] is True and again["calls"] == []
+    assert again["status"] == "CONTENT_VERIFIED" and again["concluded"] is True
+    assert again["checks"]["solid"]["ok"] is True and again["checks"]["content"]["ok"] is True
+    [stored] = await store.validations(bid)
+    assert again["checks"]["solid"]["checkedAtMs"] == stored["checked_at_ms"]
+
+
+async def test_verify_after_cooldown_asks_the_node_again(store, settings):
+    raw, bid, data = make_block()
+    app = create_app(replace(settings, verify_cooldown_s=0), store=store)
+    async with app.router.lifespan_context(app):
+        transport = httpx.ASGITransport(app=app)
+        async with httpx.AsyncClient(transport=transport, base_url="http://w.test") as c:
+            await c.post("/ingest", json=record("sub-1", bid, data), headers=AUTH)
+            with respx.mock() as mock:
+                meta, block = hornet(mock, bid, raw)
+                first = (await c.post(f"/messages/{to_hex(bid)}/verify")).json()
+                again = (await c.post(f"/messages/{to_hex(bid)}/verify")).json()
+                assert meta.call_count == 2 and block.call_count == 2
+    assert first["cached"] is False and again["cached"] is False
     assert again["status"] == "CONTENT_VERIFIED" and again["checks"]["content"]["ok"] is True
+    assert len(await store.validations(bid)) == 2  # every answer is kept
+
+
+async def test_verify_is_throttled_and_can_require_a_token(store, settings):
+    """At most `verify_concurrency` checks run at once (429 beyond); with
+    WITNESS_VERIFY_TOKEN set, only bearers of it may trigger node calls."""
+    raw1, bid1, data1 = make_block()
+    _, bid2, data2 = make_block({"score": 0.25, "id": MSG["id"]})
+    token = "verify-token-0123456789"
+    app = create_app(replace(settings, verify_concurrency=1, verify_token=token), store=store)
+    held = asyncio.Event()
+    entered = asyncio.Event()
+
+    async def slow_metadata(request):
+        entered.set()
+        await held.wait()
+        return httpx.Response(200, json=metadata(bid1, 371))
+
+    bearer = {"Authorization": f"Bearer {token}"}
+    async with app.router.lifespan_context(app):
+        transport = httpx.ASGITransport(app=app)
+        async with httpx.AsyncClient(transport=transport, base_url="http://w.test") as c:
+            for sub, bid, data in (("s1", bid1, data1), ("s2", bid2, data2)):
+                await c.post("/ingest", json=record(sub, bid, data), headers=AUTH)
+            assert (await c.post(f"/messages/{to_hex(bid1)}/verify")).status_code == 401
+            wrong = {"Authorization": "Bearer nope"}
+            assert (await c.post(f"/messages/{to_hex(bid1)}/verify",
+                                 headers=wrong)).status_code == 401
+            with respx.mock(assert_all_called=False) as mock:
+                path = f"{HORNET}/api/core/v2/blocks/{to_hex(bid1)}"
+                mock.get(f"{path}/metadata").mock(side_effect=slow_metadata)
+                mock.get(path).respond(200, content=raw1,
+                                       headers={"Content-Type": RAW_MEDIA_TYPE})
+                busy = asyncio.create_task(c.post(f"/messages/{to_hex(bid1)}/verify",
+                                                  headers=bearer))
+                await asyncio.wait_for(entered.wait(), 5)
+                r = await c.post(f"/messages/{to_hex(bid2)}/verify", headers=bearer)
+                assert r.status_code == 429
+                assert int(r.headers["retry-after"]) >= 1
+                held.set()
+                assert (await busy).status_code == 200
+            # reads stay open without the token
+            assert (await c.get(f"/messages/{to_hex(bid1)}/lifecycle")).status_code == 200
 
 
 async def test_verify_reports_content_mismatch(client, store):
@@ -233,3 +297,28 @@ async def test_lifecycle_endpoint(client, store):
     assert d["checks"]["solid"]["ok"] is True and d["checks"]["content"]["ok"] is True
 
     assert (await client.get("/messages/0x" + "ef" * 32 + "/lifecycle")).status_code == 404
+
+
+async def test_lifecycle_pages_validations(client, store):
+    """Every metadata answer is kept, so validations are served newest page first."""
+    _, bid, data = make_block()
+    await client.post("/ingest", json=record("sub-1", bid, data), headers=AUTH)
+    for i in range(120):
+        await store.put_validation(bid, 1_000 + i, i >= 100, 371 if i == 119 else None,
+                                   "noTransaction" if i == 119 else None, False)
+    url = f"/messages/{to_hex(bid)}/lifecycle"
+    page = (await client.get(url)).json()
+    assert [v["checkedAtMs"] for v in page["validations"]] == list(range(1_070, 1_120))
+    assert page["validationsCursor"]
+    assert page["checks"]["solid"]["checkedAtMs"] == 1_119  # always the latest answer
+    assert page["checks"]["solid"]["referencedByMilestoneIndex"] == 371
+
+    older = (await client.get(url, params={"cursor": page["validationsCursor"]})).json()
+    assert [v["checkedAtMs"] for v in older["validations"]] == list(range(1_020, 1_070))
+    oldest = (await client.get(url, params={"cursor": older["validationsCursor"],
+                                            "limit": 30})).json()
+    assert [v["checkedAtMs"] for v in oldest["validations"]] == list(range(1_000, 1_020))
+    assert oldest["validationsCursor"] is None
+
+    assert (await client.get(url, params={"cursor": "x"})).status_code == 422
+    assert (await client.get(url, params={"limit": 501})).status_code == 422

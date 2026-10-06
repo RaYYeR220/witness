@@ -30,13 +30,16 @@ def test_encoding_matches_generated_stubs():
 class FakeInx:
     """Just enough of the INX gRPC service to see route (un)registration requests."""
 
-    def __init__(self):
+    def __init__(self, reject: bool = False):
         self.calls: list[tuple[str, bytes]] = []
         self.server = grpc.aio.server()
 
         def handler(name):
             async def fn(request: bytes, context) -> bytes:
                 self.calls.append((name, request))
+                if reject:
+                    await context.abort(grpc.StatusCode.INVALID_ARGUMENT,
+                                        "secret internal detail")
                 return b""  # inx.NoParams
             return grpc.unary_unary_rpc_method_handler(fn)
 
@@ -70,9 +73,32 @@ async def test_registration_failure_is_logged_not_raised(caplog):
                       timeout_s=0.5)
     with caplog.at_level(logging.WARNING, logger="witness_api.node_mount"):
         assert await route.register() is False
-    assert not route.registered and route.error
+    assert not route.registered and route.error == "unreachable"
     assert "witness/v1" in caplog.text
     await route.unregister()  # nothing registered: a no-op
+
+
+async def test_rejected_registration_reports_a_code_only(caplog):
+    async with FakeInx(reject=True) as inx:
+        route = NodeRoute(f"127.0.0.1:{inx.port}", "witness/v1", "h", 7200)
+        with caplog.at_level(logging.WARNING, logger="witness_api.node_mount"):
+            assert await route.register() is False
+    assert route.error == "rejected"
+    assert "secret internal detail" in caplog.text  # the detail goes to the log only
+
+
+async def test_route_is_registered_again_periodically():
+    """The node forgets routes when it restarts; registering again simply overrides."""
+    async with FakeInx() as inx:
+        route = NodeRoute(f"127.0.0.1:{inx.port}", "witness/v1", "h", 7200, refresh_s=0.1)
+        route.start()
+        for _ in range(100):
+            if len(inx.calls) >= 3:
+                break
+            await asyncio.sleep(0.05)
+        await route.stop()
+    names = [name for name, _ in inx.calls]
+    assert names[:3] == ["RegisterAPIRoute"] * 3 and names[-1] == "UnregisterAPIRoute"
 
 
 async def test_registration_skipped_without_grpc(monkeypatch, caplog):
@@ -82,7 +108,7 @@ async def test_registration_skipped_without_grpc(monkeypatch, caplog):
     route = NodeRoute("127.0.0.1:9029", "witness/v1", "h", 1)
     with caplog.at_level(logging.WARNING, logger="witness_api.node_mount"):
         assert await route.register() is False
-    assert "grpc" in caplog.text
+    assert "grpc" in caplog.text and route.error == "grpc_missing"
 
 
 async def test_app_mounts_route_on_the_node(store, settings):
@@ -98,7 +124,7 @@ async def test_app_mounts_route_on_the_node(store, settings):
                         break
                     await asyncio.sleep(0.05)
         assert status == {"enabled": True, "route": "witness/v1", "registered": True,
-                          "error": None, "url": "http://hornet.test/api/witness/v1"}
+                          "error": None}
         assert [name for name, _ in inx.calls] == ["RegisterAPIRoute", "UnregisterAPIRoute"]
         assert inx.calls[0][1] == encode_route_request("witness/v1", "host.docker.internal",
                                                        7311)

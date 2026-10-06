@@ -12,6 +12,7 @@ import asyncio
 import contextlib
 import json
 import logging
+import re
 from collections.abc import AsyncIterator
 from typing import Annotated
 
@@ -28,6 +29,7 @@ log = logging.getLogger(__name__)
 router = APIRouter(tags=["stream"])
 
 PAGE = 200
+_EVENT_ID = re.compile(r"[0-9]{1,18}")
 EVENT_TYPES = (events.MESSAGE, events.MILESTONE, events.ALERT, events.ANCHOR, events.POSTURE,
                events.SUBMISSION, events.LIFECYCLE, events.INCIDENT)
 
@@ -126,11 +128,13 @@ async def tail(store: ExplorerStore, hub: EventHub, after: int, *, types: set[st
         "`lifecycle` and `incident` events. Each event carries its id; reconnect with the "
         "`Last-Event-ID` header (browsers do this automatically) or `?after=<id>` to resume "
         "without gaps or duplicates. Without either, the stream starts at the newest event. "
-        "A comment line is sent every 15 s as a heartbeat."),
+        "A comment line is sent every 15 s as a heartbeat. Open streams per server are "
+        "capped (503 with Retry-After beyond)."),
     responses={200: {"content": {"text/event-stream": {"example": (
         'id: 42\nevent: alert\ndata: {"id":42,"type":"alert","atMs":1791283579000,'
         '"at":"2026-10-06T10:46:19.000Z","payload":{"rule":"FORGED"}}\n\n')}}},
-        400: {"description": "Last-Event-ID is not an event id"}},
+        400: {"description": "Last-Event-ID is not an event id"},
+        503: {"description": "Too many open streams"}},
 )
 async def stream(
     request: Request, svc: Svc,
@@ -142,9 +146,12 @@ async def stream(
     limit: Annotated[int | None, Query(
         ge=1, le=10_000, description="Close the stream after this many events")] = None,
 ) -> EventSourceResponse:
+    if svc.hub.subscribers >= svc.settings.stream_max_subscribers:
+        raise HTTPException(503, "too many open streams; try again shortly",
+                            headers={"Retry-After": "5"})
     start = after
     if last_event_id is not None:
-        if not last_event_id.strip().isdigit():
+        if not _EVENT_ID.fullmatch(last_event_id.strip()):
             raise HTTPException(400, "Last-Event-ID must be an event id")
         start = int(last_event_id.strip())
     wanted = None

@@ -6,7 +6,7 @@ from __future__ import annotations
 import asyncio
 import json
 import re
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from datetime import UTC, date, datetime, time, timedelta
 from typing import TYPE_CHECKING, Annotated, Any
 
@@ -27,7 +27,7 @@ if TYPE_CHECKING:
 BLOCK_ID_PATTERN = r"^0x[0-9a-fA-F]{64}$"
 BLOCK_ID_EXAMPLE = "0x972a878cf06f2cf6b7d4a1443dbb5f12fdda376fa7537a82dad8e7257a477967"
 MAX_BODY = 256 * 1024
-_MS = re.compile(r"\d{1,16}")
+_DIGITS = re.compile(r"[0-9]+")
 
 
 @dataclass
@@ -42,7 +42,8 @@ class Services:
     validator_task: asyncio.Task | None = None
     node: NodeRoute | None = None
     policy: WriterPolicy | None = None
-    background: list[asyncio.Task] = field(default_factory=list)
+    verify_slots: asyncio.Semaphore | None = None
+    stats_cache: tuple[float, dict[str, int]] | None = None
 
     @property
     def validating(self) -> bool:
@@ -65,12 +66,19 @@ def block_bytes(block_id: str) -> bytes:
 
 def parse_when(value: str | None, name: str, *, end: bool = False) -> int | None:
     """ISO 8601 date/datetime or epoch milliseconds -> epoch ms. A datetime without an offset
-    is UTC; a bare date means the start of that day (or its last millisecond when `end`)."""
+    is UTC; a bare date means the start of that day (or its last millisecond when `end`).
+
+    Digits alone are epoch milliseconds only with 11 to 16 of them: a year (`2026`), a compact
+    date or epoch seconds would otherwise quietly mean a moment in 1970. Errors are 400."""
     if value is None:
         return None
     v = value.strip()
-    if _MS.fullmatch(v):
-        return int(v)
+    if _DIGITS.fullmatch(v):
+        if 11 <= len(v) <= 16:
+            return int(v)
+        raise HTTPException(400, f"{name}: {v!r} is not epoch milliseconds (11 to 16 digits, "
+                                 f"e.g. 1791283579000); write dates and years as ISO 8601, "
+                                 f"e.g. 2026-10-06")
     try:
         if len(v) == 10:
             d = date.fromisoformat(v)
@@ -82,7 +90,7 @@ def parse_when(value: str | None, name: str, *, end: bool = False) -> int | None
             if moment.tzinfo is None:
                 moment = moment.replace(tzinfo=UTC)
     except ValueError:
-        raise HTTPException(422, f"{name}: expected ISO 8601 (e.g. 2026-10-06 or "
+        raise HTTPException(400, f"{name}: expected ISO 8601 (e.g. 2026-10-06 or "
                                  f"2026-10-06T10:46:19Z) or epoch milliseconds") from None
     delta = moment - datetime(1970, 1, 1, tzinfo=UTC)
     return delta // timedelta(milliseconds=1)

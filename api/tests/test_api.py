@@ -125,7 +125,12 @@ async def test_search_by_block_id_date_tag(client, store, vectors):
 
     for bad in ({"date_from": "yesterday"}, {"date_to": "2026-13-01"},
                 {"date_from": "2026-10-07", "date_to": "2026-10-06"}):
-        assert (await client.get("/messages", params=bad)).status_code in (400, 422), bad
+        assert (await client.get("/messages", params=bad)).status_code == 400, bad
+    # digits only count as epoch milliseconds with 11-16 digits; a year or epoch seconds
+    # would silently mean 1970
+    for digits in ("2026", "20261006", str(MS371_TS), "1" * 17):
+        r = await client.get("/messages", params={"date_from": digits})
+        assert r.status_code == 400 and "milliseconds" in r.json()["detail"], digits
 
 
 async def test_message_detail(client, store, vectors):
@@ -456,7 +461,12 @@ async def test_stats_and_health(client, store, vectors):
     assert stats["counts"]["messages"] == 10 and stats["counts"]["milestones"] == 4
     assert stats["counts"]["cursor"] == 0
     assert stats["validator"]["running"] is False
-    assert stats["nodeRoute"]["enabled"] is False
+    assert stats["nodeRoute"] == {"enabled": False, "route": None, "registered": False,
+                                  "error": None}
+
+    # counts are cached for a few seconds: polling dashboards do not hammer the database
+    await store.put_message(MessageRow(block_id=b"\x71" * 32, tag="t", ms_index=1, ts=1))
+    assert (await client.get("/stats")).json()["counts"]["messages"] == 10
 
     health = await client.get("/healthz")
     assert health.status_code == 200
@@ -492,6 +502,8 @@ async def test_openapi_lists_all_routes(client):
         op = paths[path][method]
         assert op.get("tags"), (path, method)
         assert op.get("summary"), (path, method)
+    proof_doc = paths["/proofs/{block_id}"]["get"]["description"]
+    assert "envelope.verdict" in proof_doc and "recomputes" in proof_doc
     params = {p["name"] for p in paths["/messages"]["get"]["parameters"]}
     assert {"block_id", "tag", "date_from", "date_to", "cursor", "limit"} <= params
     assert (await client.get("/docs")).status_code == 200

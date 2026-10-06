@@ -23,7 +23,8 @@ class Settings:
     threshold: int = 1
     rebased_network: str | None = None
     trail_id: str | None = None
-    # Upstreams; each is optional and the API says so when one is missing or down.
+    # Upstreams; each is optional and the API says so when one is missing or down. No
+    # hornet_url (WITNESS_HORNET_URL set to "") means no node calls at all.
     hornet_url: str | None = "http://127.0.0.1:14265"
     orion_url: str | None = None
     orion_context: str | None = None
@@ -38,14 +39,22 @@ class Settings:
     cors_origins: list[str] = field(default_factory=list)
     ingest_token: str | None = None
     policy_path: str | None = None
-    # Run the validation worker here (HTTP-ingested blocks are checked at once). Turn off when
-    # the indexer runs with --validate, so a single process works through the backlog.
-    validate: bool = True
+    # The indexer (`--validate`) owns validation and re-verification. Turn this on only when
+    # no indexer validates: the API then runs the worker for HTTP-ingested blocks itself.
+    validate: bool = False
+    # POST /messages/{id}/verify: optional bearer token, checks running at once, and how long
+    # a stored answer from the node is served instead of asking again.
+    verify_token: str | None = None
+    verify_concurrency: int = 4
+    verify_cooldown_s: float = 20.0
     verify_timeout_s: float = 10.0
     upstream_timeout_s: float = 2.0
     drift_epsilon: float = 0.01
     stream_poll_s: float = 1.0
     stream_ping_s: float = 15.0
+    stream_max_subscribers: int = 200
+    stats_cache_s: float = 5.0
+    node_refresh_s: float = 180.0
 
     def __post_init__(self) -> None:
         keys = [k.lower() for k in self.coordinator_keys]
@@ -57,8 +66,12 @@ class Settings:
             raise ValueError("threshold must be at least 1")
         if keys and self.threshold > len(keys):
             raise ValueError(f"threshold {self.threshold} exceeds the {len(keys)} trusted keys")
-        if self.ingest_token is not None and len(self.ingest_token) < 16:
-            raise ValueError("WITNESS_INGEST_TOKEN must be at least 16 characters")
+        for name, token in (("WITNESS_INGEST_TOKEN", self.ingest_token),
+                            ("WITNESS_VERIFY_TOKEN", self.verify_token)):
+            if token is not None and len(token) < 16:
+                raise ValueError(f"{name} must be at least 16 characters")
+        if self.verify_concurrency < 1:
+            raise ValueError("verify_concurrency must be at least 1")
         if not 0 < self.port < 65536:
             raise ValueError("port must be between 1 and 65535")
 
@@ -95,7 +108,9 @@ class Settings:
         if db is None:
             raise ValueError("WITNESS_DB (PostgreSQL DSN) is required")
         keys = items("WITNESS_COORDINATOR_KEYS")
-        hornet = get("WITNESS_HORNET_URL")
+        # Unset: the local node. Set but empty: no node at all.
+        hornet = cls.hornet_url if env.get("WITNESS_HORNET_URL") is None \
+            else get("WITNESS_HORNET_URL")
         return cls(
             db=db,
             schema=get("WITNESS_SCHEMA") or "witness",
@@ -104,7 +119,7 @@ class Settings:
             threshold=int(number("WITNESS_THRESHOLD", max(len(keys), 1), int)),
             rebased_network=get("WITNESS_REBASED_NETWORK"),
             trail_id=get("WITNESS_TRAIL_ID"),
-            hornet_url=hornet if hornet is not None else cls.hornet_url,
+            hornet_url=hornet,
             orion_url=get("WITNESS_ORION_URL"),
             orion_context=get("WITNESS_ORION_CONTEXT"),
             anchor_url=get("WITNESS_ANCHOR_URL"),
@@ -117,7 +132,11 @@ class Settings:
             cors_origins=items("WITNESS_CORS_ORIGINS"),
             ingest_token=get("WITNESS_INGEST_TOKEN"),
             policy_path=get("WITNESS_POLICY"),
-            validate=flag("WITNESS_VALIDATE", True),
+            validate=flag("WITNESS_VALIDATE", False),
+            verify_token=get("WITNESS_VERIFY_TOKEN"),
+            verify_concurrency=int(number("WITNESS_VERIFY_CONCURRENCY", 4, int)),
+            verify_cooldown_s=number("WITNESS_VERIFY_COOLDOWN_S", 20.0),
             verify_timeout_s=number("WITNESS_VERIFY_TIMEOUT_S", 10.0),
+            stream_max_subscribers=int(number("WITNESS_STREAM_MAX_SUBSCRIBERS", 200, int)),
             drift_epsilon=number("WITNESS_DRIFT_EPSILON", 0.01),
         )

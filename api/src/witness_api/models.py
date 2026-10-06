@@ -143,8 +143,11 @@ class Lifecycle(ApiModel):
     block_id: str
     status: str | None
     transitions: list[Transition]
-    validations: list[ValidationRow]
-    content_checks: list[ContentCheckRow]
+    validations: list[ValidationRow] = Field(description="One page of the node's metadata "
+                                             "answers (newest page first, oldest first within)")
+    validations_cursor: str | None = Field(None, description="Pass as `cursor` for the next, "
+                                           "older page of validations")
+    content_checks: list[ContentCheckRow] = Field(description="The newest 50 comparisons")
     checks: Checks
     submission: Submission | None = None
 
@@ -164,6 +167,8 @@ class VerifyResult(ApiModel):
     block_id: str
     status: str | None = Field(description="Lifecycle status after the run")
     concluded: bool = Field(description="True when (c) and (d) reached an outcome")
+    cached: bool = Field(description="True when the node was asked moments ago and the stored "
+                         "answers are returned instead of asking again")
     timed_out: bool
     started_at_ms: int
     started_at: str
@@ -429,8 +434,8 @@ class NodeRouteStatus(ApiModel):
     enabled: bool
     route: str | None = None
     registered: bool = False
-    error: str | None = None
-    url: str | None = None
+    error: Literal["unreachable", "rejected", "grpc_missing"] | None = Field(
+        None, description="Why the last registration failed (details are in the server log)")
 
 
 class ValidatorStatus(ApiModel):

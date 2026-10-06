@@ -353,6 +353,46 @@ async def test_direct_call_cannot_race_worker(env):
         "RECEIVED", "SUBMITTED", "SOLID", "CONFIRMED", "CONTENT_VERIFIED"]
 
 
+class SlowHornet(HornetRest):
+    """Answers like the node, but slowly, and records how many validations overlap."""
+
+    def __init__(self, base_url, overlap):
+        super().__init__(base_url)
+        self.overlap = overlap
+
+    async def block_metadata(self, block_id):
+        self.overlap["now"] += 1
+        self.overlap["max"] = max(self.overlap["max"], self.overlap["now"])
+        try:
+            await asyncio.sleep(0.2)
+            return await super().block_metadata(block_id)
+        finally:
+            self.overlap["now"] -= 1
+
+
+@respx.mock
+async def test_validators_in_two_processes_are_serialised(store):
+    """The indexer's worker and the API's on-demand check share only the database: two
+    validators (no shared in-process lock) validating one block take turns, and the
+    lifecycle gets each status once."""
+    raw, bid, data = make_block()
+    serve(bid, raw, lambda request: httpx.Response(200, json=meta(bid, ms=7)))
+    await handle_record(store, RecordingValidator(), rec("s-1", bid, data), source="mqtt")
+    overlap = {"now": 0, "max": 0}
+    first, second = SlowHornet(BASE, overlap), SlowHornet(BASE, overlap)
+    try:
+        results = await asyncio.gather(Validator(store, first).validate_once(bid, "s-1"),
+                                       Validator(store, second).validate_once(bid, None))
+    finally:
+        await first.close()
+        await second.close()
+    assert results == ["CONTENT_VERIFIED", "CONTENT_VERIFIED"]
+    assert overlap["max"] == 1
+    assert await statuses(store, bid) == [
+        "RECEIVED", "SUBMITTED", "SOLID", "CONFIRMED", "CONTENT_VERIFIED"]
+    assert [c["result"] for c in await store.content_checks(bid)] == ["MATCH"]
+
+
 async def eventually(check, timeout_s=15.0):
     for _ in range(int(timeout_s / 0.05)):
         if await check():

@@ -19,7 +19,7 @@ from witness_indexer.validator import OUTCOMES, Validator
 
 from . import models as m
 from .store import ExplorerStore
-from .views import hx, iso, solid_ok
+from .views import checks, hx, iso, solid_ok
 
 _CALLS: ContextVar[list[dict] | None] = ContextVar("witness_api_node_calls", default=None)
 
@@ -60,11 +60,8 @@ class RecordingHornet:
         started = time.monotonic()
         try:
             result = await fn(block_id)
-        except HornetUnavailable as e:
-            # The node's address is deployment detail; the request path already says what
-            # was asked.
-            entry.update(http_status=e.status,
-                         error=str(e).replace(self.inner.base_url, "").strip())
+        except HornetUnavailable as e:  # its message names the path, never the node
+            entry.update(http_status=e.status, error=str(e))
             raise
         finally:
             entry["duration_ms"] = int((time.monotonic() - started) * 1000)
@@ -104,7 +101,7 @@ def _solid(calls: list[dict]) -> m.SolidCheck:
                         detail=detail, **at)
 
 
-def _content(calls: list[dict], status: str | None, checks: list[dict]) -> m.ContentCheck:
+def _content(calls: list[dict], status: str | None, latest: dict | None) -> m.ContentCheck:
     raw = [c for c in calls if not c["request"].endswith("/metadata")]
     if not raw:
         return m.ContentCheck(detail="not run: the block is not confirmed by a milestone yet")
@@ -115,7 +112,7 @@ def _content(calls: list[dict], status: str | None, checks: list[dict]) -> m.Con
     result = _CONTENT_RESULT.get(status or "")
     if result is None:
         return m.ContentCheck(detail="no outcome", **at)
-    diff = checks[-1]["diff"] if checks and checks[-1]["result"] == result else None
+    diff = latest["diff"] if latest is not None and latest["result"] == result else None
     return m.ContentCheck(ok=result == "MATCH", result=result, diff=diff, **at)
 
 
@@ -135,12 +132,26 @@ async def verify_now(validator: Validator, store: ExplorerStore, block_id: bytes
     finally:
         _CALLS.reset(token)
     finished = _now_ms()
-    content_rows = await store.content_checks(block_id)
+    latest = await store.latest_content_check(block_id)
     return m.VerifyResult(
-        block_id=hx(block_id), status=status, concluded=status in OUTCOMES,
+        block_id=hx(block_id), status=status, concluded=status in OUTCOMES, cached=False,
         timed_out=timed_out, started_at_ms=started, started_at=iso(started),
         finished_at_ms=finished, finished_at=iso(finished),
-        checks=m.Checks(solid=_solid(calls), content=_content(calls, status, content_rows)),
+        checks=m.Checks(solid=_solid(calls), content=_content(calls, status, latest)),
         calls=[m.NodeCall(**{k: v for k, v in c.items() if k != "body"}, at=iso(c["at_ms"]))
                for c in calls],
     )
+
+
+async def stored_result(store: ExplorerStore, block_id: bytes,
+                        validation: dict) -> m.VerifyResult:
+    """The checks as stored after the node's latest answer (`validation`), for a block it
+    was asked about moments ago: nothing is asked again."""
+    history = await store.lifecycle(block_id)
+    status = history[-1]["status"] if history else None
+    at = validation["checked_at_ms"]
+    return m.VerifyResult(
+        block_id=hx(block_id), status=status, concluded=status in OUTCOMES, cached=True,
+        timed_out=False, started_at_ms=at, started_at=iso(at), finished_at_ms=at,
+        finished_at=iso(at),
+        checks=checks(validation, await store.latest_content_check(block_id)), calls=[])

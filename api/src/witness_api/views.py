@@ -81,19 +81,18 @@ def solid_ok(is_solid: bool | None, state: str | None) -> bool | None:
     return bool(is_solid) and state != "conflicting"
 
 
-def checks(validations: list[dict], content: list[dict]) -> m.Checks:
-    """The brief's checks (c) and (d) as they stand after the latest stored answers."""
+def checks(v: dict | None, c: dict | None) -> m.Checks:
+    """The brief's checks (c) and (d) from the latest stored metadata answer `v` and the
+    latest content comparison `c`."""
     solid = m.SolidCheck(detail="not checked yet")
-    if validations:
-        v = validations[-1]
+    if v is not None:
         solid = m.SolidCheck(
             ok=solid_ok(v["is_solid"], v["ledger_inclusion_state"]), is_solid=v["is_solid"],
             referenced_by_milestone_index=v["referenced_by_ms"],
             ledger_inclusion_state=v["ledger_inclusion_state"],
             checked_at_ms=v["checked_at_ms"], checked_at=iso(v["checked_at_ms"]))
     found = m.ContentCheck(detail="not checked yet")
-    if content:
-        c = content[-1]
+    if c is not None:
         found = m.ContentCheck(ok=c["result"] == "MATCH", result=c["result"], diff=c["diff"],
                                checked_at_ms=c["checked_at_ms"],
                                checked_at=iso(c["checked_at_ms"]))

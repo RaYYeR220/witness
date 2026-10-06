@@ -73,3 +73,41 @@ async def test_sse_rejects_bad_resume_point(client):
     assert r.status_code == 400
     assert (await client.get("/stream", params={"types": "bogus"})).status_code == 422
     assert (await client.get("/stream", params={"after": -1})).status_code == 422
+
+
+async def test_sse_subscriber_cap(app, client):
+    hub = app.state.services.hub
+    cap = app.state.services.settings.stream_max_subscribers
+    held = [hub.subscribe() for _ in range(cap)]
+    try:
+        r = await client.get("/stream", params={"limit": 1})
+        assert r.status_code == 503 and "retry-after" in r.headers
+    finally:
+        for ev in held:
+            hub.unsubscribe(ev)
+
+
+async def test_sse_client_disconnect_releases_the_subscription(app, store):
+    """A client that goes away mid-stream leaves nothing subscribed behind."""
+    hub = app.state.services.hub
+    await store.emit("message", {"n": 1})
+    gone = asyncio.Event()
+    during = []
+
+    async def receive():
+        await gone.wait()
+        return {"type": "http.disconnect"}
+
+    async def send(message):
+        if message["type"] == "http.response.body" and b"event: message" in message.get(
+                "body", b""):
+            during.append(hub.subscribers)
+            gone.set()
+
+    scope = {"type": "http", "asgi": {"version": "3.0"}, "http_version": "1.1",
+             "method": "GET", "scheme": "http", "path": "/stream", "raw_path": b"/stream",
+             "query_string": b"after=0", "headers": [(b"host", b"w.test")],
+             "client": ("127.0.0.1", 5000), "server": ("w.test", 80), "root_path": ""}
+    await asyncio.wait_for(app(scope, receive, send), 10)
+    assert during == [1]
+    assert hub.subscribers == 0

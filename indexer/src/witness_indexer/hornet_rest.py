@@ -40,16 +40,18 @@ class HornetRest:
             await self._client.aclose()
 
     async def _get(self, path: str, accept: str) -> httpx.Response | None:
-        url = self.base_url + path
+        # Messages name the path only: they reach alert evidence and API answers, and the
+        # node's address (possibly with credentials) is deployment detail.
         try:
-            resp = await self._client.get(url, headers={"Accept": accept})
+            resp = await self._client.get(self.base_url + path, headers={"Accept": accept})
         except httpx.HTTPError as e:
-            raise HornetUnavailable(f"GET {url}: {type(e).__name__}: {e}") from e
+            detail = str(e).replace(self.base_url, "")
+            raise HornetUnavailable(f"GET {path}: {type(e).__name__}: {detail}") from e
         if resp.status_code == 404:
             return None
         if resp.status_code != 200:
             raise HornetUnavailable(
-                f"GET {url}: HTTP {resp.status_code} {resp.text[:200]}", resp.status_code)
+                f"GET {path}: HTTP {resp.status_code} {resp.text[:200]}", resp.status_code)
         return resp
 
     async def _get_json(self, path: str) -> dict | None:

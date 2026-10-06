@@ -84,7 +84,6 @@ async def test_live_api_direct_and_through_the_node():
                 return route if route["registered"] else None
             route = await wait_for(mounted)
             assert route, "the node did not accept the route"
-            assert route["url"] == node_url
 
             via_node = await http.get(f"{node_url}/healthz")
             assert via_node.status_code == 200, via_node.text

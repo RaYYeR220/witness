@@ -105,14 +105,18 @@ def create_app(settings: Settings, *, store: ExplorerStore | None = None,
             if settings.hornet_url:
                 hornet = RecordingHornet(HornetRest(settings.hornet_url))
                 svc.hornet = hornet
+                # validate_once also locks the block in the database, so on-demand checks
+                # here and the indexer's worker never run on one block at the same time.
                 svc.validator = Validator(st, hornet, ValidatorConfig())
+                svc.verify_slots = asyncio.Semaphore(settings.verify_concurrency)
                 if settings.validate:
                     svc.validator_task = asyncio.create_task(svc.validator.run(),
                                                              name="validator")
             svc.hub.start()
             if settings.inx_addr:
                 svc.node = NodeRoute(settings.inx_addr, settings.node_route,
-                                     settings.route_host, settings.port)
+                                     settings.route_host, settings.port,
+                                     refresh_s=settings.node_refresh_s)
                 svc.node.start()
             app.state.services = svc
             yield
