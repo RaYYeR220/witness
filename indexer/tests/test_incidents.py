@@ -19,7 +19,7 @@ from witness_indexer.incidents import (
     MqttAlertPublisher,
     component_key,
 )
-from witness_indexer.orion import OrionUnavailable
+from witness_indexer.orion import IE, OrionUnavailable
 from witness_indexer.rules import SEVERITY
 from witness_indexer.store import Alert, MessageRow, Store, Submission
 
@@ -93,13 +93,19 @@ class FakePublisher:
 
 
 class FakeOrion:
-    def __init__(self, hosts: dict[str, str]) -> None:
+    def __init__(self, hosts: dict, ies: tuple[str, ...] = (IE_X, IE_Y, IE_Z)) -> None:
         self.hosts = hosts
+        self.ies = ies
         self.down = False
         self.calls = 0
 
-    async def service_component_hosts(self) -> dict[str, str]:
+    async def ie_entities(self, *, max_bytes: int | None = None) -> list[IE]:
         self.calls += 1
+        if self.down:
+            raise OrionUnavailable("Orion unreachable: refused")
+        return [IE(URN + i, i, i.split(":")[0], None) for i in self.ies]
+
+    async def service_component_hosts(self, *, max_bytes: int | None = None) -> dict:
         if self.down:
             raise OrionUnavailable("Orion unreachable: refused")
         return dict(self.hosts)
@@ -296,6 +302,53 @@ async def test_a_witnessed_attack_on_an_ie_opens_an_incident(store, engine):
     # only time closes it
     assert actions(await engine.periodic(now_ms=(T0 + 30 * 16) * 1000 + 1_800_001)) == [
         "closed"]
+
+
+async def test_attacks_on_ies_orion_does_not_know_stay_alerts(store, engine):
+    for n in range(5):
+        made_up = score(0.1, ms=10 + n, ie=f"Made:{n:012x}", verdict=V.FORGED)
+        assert await feed(store, engine, made_up, alerts=("FORGED",)) == []
+    await engine.periodic(now_ms=(T0 + 600) * 1000)
+    assert await store.incidents() == []
+    assert len(await store.alerts({"rule": "FORGED"})) == 5  # still in /alerts
+
+
+async def test_without_orion_attack_alerts_only_join(store, pub):
+    orion = FakeOrion({})
+    orion.down = True
+    eng = IncidentEngine(store, orion, IncidentConfig(), pub)
+    first = score(0.1, ms=10, ie=IE_Z, verdict=V.FORGED)
+    assert await feed(store, eng, first, alerts=("FORGED",)) == []
+    assert (await store.service_status())["incident-orion"]["status"] == "unreachable"
+    await feed(store, eng, score(0.9, ms=11, ie=IE_Z))
+    assert actions(await feed(store, eng, score(0.4, ms=12, ie=IE_Z))) == ["opened"]
+    again = score(0.99, ms=13, ie=IE_Z, verdict=V.FORGED)
+    assert actions(await feed(store, eng, again, alerts=("FORGED",))) == ["attached", "updated"]
+    [inc] = await store.incidents()
+    assert inc["severity"] == "critical"
+
+
+async def test_hostile_orion_component_map(store, pub):
+    long_sc = "urn:ngsi-ld:Service:0a1b:Component:" + "w" * 500
+    hosts = {long_sc: URN + IE_X, "\x00bad\nid\u202e": IE_Y, "": IE_X, "  ": IE_Y,
+             "x": "", "y": None, 7: IE_X, "z" * 100_000: "\x1b" + "q" * 5000}
+    eng = IncidentEngine(store, FakeOrion(hosts), IncidentConfig(), pub)
+    await feed(store, eng, score(0.9, ms=10))
+    assert actions(await feed(store, eng, score(0.4, ms=11))) == ["opened"]
+    # the component id is cut like the LLO's own report, so the two still line up
+    failed = llo("Service component failed", ms=12, sc=long_sc)
+    assert actions(await feed(store, eng, failed)) == ["attached"]
+    for k, v in eng._hosts.items():
+        assert _printable(k) and _printable(v) and len(k) <= 120 and len(v) <= 120
+    assert len(eng._hosts) == 3
+    # an Orion answering more entities than allowed is not taken at all
+    capped = IncidentEngine(store, FakeOrion({SC: IE_X}),
+                            IncidentConfig(orion_max_entries=2), pub)
+    lone = llo("Service component failed", ms=13, verdict=V.FORGED)
+    assert await feed(store, capped, lone, alerts=("FORGED",)) == []
+    assert capped._known_ies is None
+    st = (await store.service_status())["incident-orion"]
+    assert st["status"] == "unreachable" and "more than 2" in st["detail"]
 
 
 async def test_attack_alerts_find_the_ie_through_the_component(store, engine):

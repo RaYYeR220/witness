@@ -139,10 +139,9 @@ async def test_amain_indexes_and_shuts_down_cleanly(monkeypatch):
         # the rules engine judged the stored messages and ran its periodic pass
         assert [a["rule"] for a in await store.alerts()] == ["FORGED"]
         assert stats["shadow"] == "no-baseline"
-        # ... and the incident engine made the forgery against the IE an incident
-        [inc] = await store.incidents()
-        assert (inc["ie_id"], inc["severity"], inc["status"]) == (
-            "D:aabbccddeeff", "critical", "open")
+        # ... and the incident engine ran; with no Orion to vouch for the IE the forgery
+        # names, it stays an alert
+        assert await store.incidents() == []
         assert stats["alerts-mqtt"] == "disabled"  # no broker configured
     finally:
         stop.set()

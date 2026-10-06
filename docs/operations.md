@@ -138,24 +138,32 @@ every stored message and every periodic pass. It groups trust events per IE into
 served by the API at `GET /incidents` and `GET /incidents/{id}`.
 
 - **Opening an incident.** Any of these opens one:
-  - a trust score drop of `--incident-drop` (0.2) below the IE's previous proven score;
+  - a trust score drop of `--incident-drop` (0.2) below the IE's previous score;
   - a self-orchestrator `errorCode` other than 0 or empty;
   - an LLO "Service component failed";
   - a `self-security` message;
-  - a critical or high alert on a trusted block;
+  - a critical or high alert on a proven or relayed block;
   - a FORGED, REPLAY, UNAUTHORIZED_WRITER or REVOKED_KEY alert on a message that names an
-    IE, directly or through its service component;
+    IE Orion lists, directly or through a service component Orion places on it. A made-up
+    IE, or any IE while Orion has never answered, leaves the alert alert-only: it can join
+    an incident already open on that IE but never opens one;
   - an integrity alert (DB_TAMPER, MISSING_IN_DB, ANCHOR_MISMATCH, CONTENT_MISMATCH,
     NOT_FOUND, ORPHANED). These go into one `ledger` incident unless they name an IE.
 - **Joining an incident.** An event joins an open incident when it shares the incident's IE,
   service component or issuer and happened within `--incident-window-s` (600 s) of the
   incident's latest event. LLO reports reach their IE through the `infrastructureElement`
-  of Orion's ServiceComponent entity. That entity is read with `--orion`, cached for 60 s,
-  and never read inside a milestone transaction. Without Orion, the component id is the key.
+  of Orion's ServiceComponent entity. Orion's IE list and components are read with
+  `--orion` (at most 2 MiB per listing), cached for 60 s, and never read inside a milestone
+  transaction. Without Orion, the component id is the key.
+- **Trust.** Evidence is *proven* (PRODUCER_SIGNED), *relayed* (RELAY_ATTESTED, or unsigned
+  with a submission from the Messages API) or *untrusted* (anything else, including blocks
+  with an UNSIGNED or SHADOW alert). Only proven events set the recovery target, add
+  correlation keys, remediate or close. Relayed events may open an incident or join one as a
+  trigger, but keep it alive at most one window past its last proven activity. Untrusted
+  content only joins as `alert` evidence.
 - **Closing an incident.** An incident closes as `closed:recovered` when a proven trust
   score is back at the level the first drop fell from. It closes as `closed:quiet` after
-  `--incident-quiet-s` (1800 s) without events. Content that is not proven or relay-routed,
-  or that is SHADOW, never closes, reshapes or remediates an incident.
+  `--incident-quiet-s` (1800 s) without events.
 - **Alerts.** Each change is an `incident` event on the SSE stream. With a broker, it is
   also sent as a compact JSON message on `witness/alerts/{critical|high|medium|low}`
   (QoS 1) once its milestone commits.
@@ -178,6 +186,7 @@ Health shows up in `Store.stats()` (and so in the API's stats):
 | `policy` | `file`, `allow-any`, or `none` (library default: every signed writer is unauthorized) |
 | `rules`, `orion`, `anchor`, `shadow`, `ledger` | reported by the rules engine (see `indexer/src/witness_indexer/rules.py`) |
 | `incident-engine` | `ok`; `error` for 10 minutes after a correlation step failed (the detail says which step; indexing goes on); `disabled` with `--no-incidents` |
+| `incident-orion` | `ok`; `unreachable` when the incident engine could not refresh Orion's IEs and components (refused, slow, larger than 2 MiB or 50 000 entities); it keeps the last answer, and without one attack alerts only join open incidents |
 | `alerts-mqtt` | `ok`; `unreachable` while the alert broker refuses or times out (alerts wait, nothing is lost); `error` if the events log cannot be read; `disabled` without a broker |
 
 Messages nested more than 64 levels deep keep their raw bytes only (no JSON copy);

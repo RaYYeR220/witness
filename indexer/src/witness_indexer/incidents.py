@@ -15,9 +15,11 @@ Triggers (a message or alert that may open an incident):
 - a message on one of `security_tags` naming an IE (e.g. `self-security`);
 - a critical or high alert on a proven or relayed block (CHAIN_FORK, ...);
 - a witnessed attack (`ATTACK_RULES`: FORGED, REPLAY, UNAUTHORIZED_WRITER, REVOKED_KEY at
-  critical/high) on a message that names an IE, directly or through its service component:
-  a forgery attempt shows up as an incident on the IE it targets. Without an IE it stays an
-  alert (and evidence for an incident already open on its component);
+  critical/high) on a message that names an IE Orion knows, directly or through a service
+  component Orion places on it: a forgery attempt shows up as an incident on the IE it
+  targets. Naming an IE costs an attacker nothing, so an IE Orion does not list (or any IE
+  while Orion has never answered) leaves the alert alert-only: it may join an incident
+  already open on that IE, never open one;
 - an alert about the explorer's own records (`INTEGRITY_RULES`: DB_TAMPER, MISSING_IN_DB,
   ANCHOR_MISMATCH, ...), grouped into a `ledger` incident unless it names an IE.
 
@@ -25,8 +27,10 @@ Correlation: an incident has keys (`ie:<IE id>`, `sc:<service component>`, `iss:
 `ledger`). An event joins the open incident it shares a key with when it happened within
 `window_ms` of that incident's latest event; otherwise a trigger opens a new incident. An LLO
 report joins the incident of the IE its component runs on: the component -> IE relationship
-comes from Orion's ServiceComponent entities (fetched only outside a database transaction,
-2 s budget, cached), else the component id alone is the key. The LLO's k8s resource name
+comes from Orion's ServiceComponent entities, else the component id alone is the key. Orion's
+IE list and that relationship are fetched only outside a database transaction (2 s and
+`orion_max_bytes` budget, cached `orion_ttl_s`; a failed refresh keeps the last answer and is
+reported as `incident-orion`). The LLO's k8s resource name
 (`urn-ngsi-ld-service-<id>-component-<name>`) and the Orion entity id are lined up.
 
 Trust: every block is judged at one of three levels.
@@ -135,6 +139,7 @@ OPEN = "open"
 CLOSED_RECOVERED = "closed:recovered"
 CLOSED_QUIET = "closed:quiet"
 ENGINE_STATUS = "incident-engine"
+ORION_STATUS = "incident-orion"
 MQTT_STATUS = "alerts-mqtt"
 ALERT_CURSOR = "incidents.alert_cursor"
 PUBLISH_CURSOR = "incidents.mqtt_cursor"
@@ -161,6 +166,8 @@ class IncidentConfig:
     security_tags: frozenset[str] = frozenset({"self-security"})
     orion_ttl_s: float = 60.0
     orion_timeout_s: float = 2.0
+    orion_max_bytes: int = 2 * 1024 * 1024  # per listing; larger skips the refresh
+    orion_max_entries: int = 50_000
     alert_batch: int = 500
     publish_batch: int = 200
     publish_timeout_s: float = 5.0
@@ -306,7 +313,8 @@ class IncidentEngine:
         self.publisher = publisher
         self._now = now_ms or (lambda: int(time.time() * 1000))
         self._hosts: dict[str, str] = {}  # component_key -> IE id
-        self._hosts_at = -math.inf
+        self._known_ies: frozenset[str] | None = None  # None: Orion never answered
+        self._orion_at = -math.inf
         self._cursor: int | None = None  # last incident event handed to the publisher
         self._saved_cursor: int | None = None
         self._flush_lock = asyncio.Lock()
@@ -324,7 +332,7 @@ class IncidentEngine:
         changes: list[dict] = []
         try:
             if not self.store.in_transaction():
-                await self._refresh_hosts()
+                await self._refresh_orion()
             async with self.store.transaction(), self.store.savepoint():
                 await self._init_cursor()
                 changes = await self._message(row)
@@ -339,7 +347,7 @@ class IncidentEngine:
         delivery of pending alerts. Returns the incident changes."""
         changes: list[dict] = []
         if not self.store.in_transaction():
-            await self._refresh_hosts()
+            await self._refresh_orion()
         try:
             async with self.store.savepoint():
                 await self._init_cursor()
@@ -539,6 +547,11 @@ class IncidentEngine:
     def _host(self, sc: str | None) -> str | None:
         return None if sc is None else self._hosts.get(component_key(sc))
 
+    def _resolvable(self, ie: str) -> bool:
+        """An IE Orion lists (as an InfrastructureElement or as a component's host)."""
+        known = self._known_ies
+        return known is not None and ie in known
+
     def _keys(self, ie: str | None, sc: str | None, iss: str | None = None) -> set[str]:
         keys = set()
         if ie:
@@ -579,13 +592,16 @@ class IncidentEngine:
             ie, sc = self._subject(msg and msg["tag"], msg and msg["kind"],
                                    alert_ie or (msg and msg["ie_id"]), body)
             keys = self._keys(ie, sc, msg and msg["iss"])
-            ie = ie or self._host(sc)
             if not keys:
                 return
             opens = level != UNTRUSTED
-            if level == UNTRUSTED and rule in ATTACK_RULES and ie:
-                # an attack on this IE's record
-                keys, opens, witnessed = {f"ie:{ie}"}, True, True
+            host = self._host(sc)
+            target = host if ie is None else ie
+            if (level == UNTRUSTED and rule in ATTACK_RULES and target
+                    and (host is not None or self._resolvable(target))):
+                # an attack on the record of an IE Orion knows
+                keys, opens, witnessed = {f"ie:{target}"}, True, True
+            ie = ie or host
         label = RULE_TITLES.get(rule, _label(rule, 40))
         where = f"on {ie}" if ie else (f"in block {_hex(bid)[:12]}..." if bid else "")
         obs = _Obs(bid, keys, _msg_time(msg) or _int(a["ts"]) or self._now(), "alert",
@@ -784,20 +800,36 @@ class IncidentEngine:
         for c in step.changes:
             await self.store.emit(events.INCIDENT, c)
 
-    async def _refresh_hosts(self) -> None:
-        """Reload the component -> IE map from Orion when it is older than `orion_ttl_s`.
-        Best effort: a failure keeps the previous map."""
-        fetch = getattr(self.orion, "service_component_hosts", None)
-        if fetch is None or time.monotonic() - self._hosts_at < self.cfg.orion_ttl_s:
+    async def _refresh_orion(self) -> None:
+        """Reload Orion's IE ids and component -> IE map when older than `orion_ttl_s`. Best
+        effort, never inside a transaction: a failure keeps the previous answer and is
+        reported as `incident-orion: unreachable`. Ids are sanitised and cut like message
+        ids, so they line up with what messages name."""
+        if self.orion is None or time.monotonic() - self._orion_at < self.cfg.orion_ttl_s:
             return
-        self._hosts_at = time.monotonic()
+        self._orion_at = time.monotonic()
+        cap, budget = self.cfg.orion_max_entries, self.cfg.orion_max_bytes
         try:
-            hosts = await asyncio.wait_for(fetch(), self.cfg.orion_timeout_s)
+            ies = await asyncio.wait_for(self.orion.ie_entities(max_bytes=budget),
+                                         self.cfg.orion_timeout_s)
+            hosts = await asyncio.wait_for(
+                self.orion.service_component_hosts(max_bytes=budget), self.cfg.orion_timeout_s)
+            if len(ies) > cap or len(hosts) > cap:
+                raise ValueError(f"more than {cap} entities")
         except Exception as exc:  # noqa: BLE001 - Orion only refines correlation
-            log.warning("service component map not refreshed: %s: %s", type(exc).__name__, exc)
+            log.warning("Orion IEs and components not refreshed: %s: %s",
+                        type(exc).__name__, exc)
+            with contextlib.suppress(Exception):
+                await self._set_status(ORION_STATUS, "unreachable",
+                                       f"{type(exc).__name__}: {exc}; keeping the last answer")
             return
-        self._hosts = {component_key(k): _ident(ie_id_of(v)) for k, v in hosts.items()
-                       if isinstance(k, str) and isinstance(v, str) and v}
+        self._hosts = {component_key(_ident(k)): _ident(ie_id_of(v))
+                       for k, v in hosts.items()
+                       if isinstance(k, str) and k.strip() and isinstance(v, str) and v.strip()}
+        known = {_ident(i.ie_id) for i in ies if isinstance(getattr(i, "ie_id", None), str)}
+        self._known_ies = frozenset(known | set(self._hosts.values()))
+        with contextlib.suppress(Exception):
+            await self._set_status(ORION_STATUS, "ok")
 
     def _event_view(self, r: dict) -> dict:
         bid = _hex(r["block_id"])
