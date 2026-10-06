@@ -17,8 +17,10 @@ import { describe, expect, it } from "vitest";
 import {
   IDENTITY_FILE,
   makeFixture,
+  domainController,
   makeVerifierConfig,
   OUT_FILE,
+  REBASED_NETWORKS,
   readBlock,
   VECTORS_DIR,
   VERIFIER_FILE,
@@ -161,5 +163,34 @@ describe("pinned verifier config", () => {
     expect(cfg.trailId).toBeNull();
     expect(() => makeVerifierConfig({ protocol: { ...protocol, milestonePublicKeyCount: 3 }, identity, trailId: null })).toThrow();
     expect(() => makeVerifierConfig({ protocol, identity, trailId: "0x1234" })).toThrow();
+  });
+
+  it("pins where step 5 reads the anchor on IOTA Rebased", () => {
+    // the public testnet fullnode, and the package the trail object's Move type names
+    expect(pinned.rebasedRpc).toBe(REBASED_NETWORKS.testnet.rpc);
+    expect(pinned.rebasedRpc).toBe("https://api.testnet.iota.cafe");
+    expect(pinned.auditTrailPackage).toBe("0x51368931f28620c7f65b4ae2c5167b42390e69729357a6347be378755b46e7df");
+    const recorded = JSON.parse(readFileSync(join(VECTORS_DIR, "rebased_record.json"), "utf8"));
+    expect(recorded.trailObject.result.data.type.startsWith(`${pinned.auditTrailPackage}::main::AuditTrail<`)).toBe(true);
+    // the writer is the wallet that controls the domain DID: the one that added the recorded record
+    expect(pinned.anchorWriter).toBe(domainController(identity));
+    expect(recorded.record.result.data.content.fields.value.fields.value.fields.added_by).toBe(pinned.anchorWriter);
+  });
+
+  it("takes the Rebased pins from the environment first, and keeps committed Tangle pins without a protocol config", () => {
+    const tangle = { network: "n", trustedCoordinatorKeys: coordinator.publicKeys, threshold: 1 };
+    const env = {
+      WITNESS_REBASED_RPC: "https://rpc.example",
+      IOTA_AUDIT_TRAIL_ORIGINAL_PKG_ID: "0x" + "AB".repeat(32),
+      ANCHOR_WRITER_ADDRESS: "0x" + "cd".repeat(32),
+    };
+    const cfg = makeVerifierConfig({ tangle, identity, trailId: null, env });
+    expect(cfg).toMatchObject({ network: "n", threshold: 1, rebasedRpc: "https://rpc.example" });
+    expect(cfg.auditTrailPackage).toBe("0x" + "ab".repeat(32));
+    expect(cfg.anchorWriter).toBe("0x" + "cd".repeat(32));
+    expect(() => makeVerifierConfig({ tangle, identity, trailId: null, env: { WITNESS_REBASED_RPC: "http://rpc.example" } })).toThrow(/https/);
+    // an unknown Rebased network pins nothing to read: step 5 stays "not checked"
+    const none = makeVerifierConfig({ tangle, identity: { network: "devnet" }, trailId: null });
+    expect([none.rebasedRpc, none.auditTrailPackage, none.anchorWriter]).toEqual([null, null, null]);
   });
 });
