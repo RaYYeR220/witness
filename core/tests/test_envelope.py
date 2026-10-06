@@ -1,7 +1,6 @@
 import copy
 import json
 import math
-import os
 from pathlib import Path
 
 import pytest
@@ -364,14 +363,14 @@ def _build_vectors():
     }
 
 
-def test_write_envelope_vectors():
+def test_write_envelope_vectors(regen):
     vectors = _build_vectors()
     for c in vectors["cases"]:
         env = c["envelope"]
         info = KeyInfo(env["kid"], bytes.fromhex(c["public_key_hex"]), None, None)
         got = envelope.verify(env, c["block_tag"], lambda k, i=info: i if k == i.kid else None)
         assert got.verdict == c["expected_verdict"], c["name"]
-    if not VECTORS.exists() or os.environ.get("WITNESS_REGEN_VECTORS") == "1":
+    if regen("envelopes"):
         VECTORS.parent.mkdir(parents=True, exist_ok=True)
-        VECTORS.write_text(json.dumps(vectors, indent=2) + "\n", encoding="utf-8")
+        VECTORS.write_text(json.dumps(vectors, indent=2) + "\n", encoding="utf-8", newline="\n")
     assert json.loads(VECTORS.read_text(encoding="utf-8")) == vectors

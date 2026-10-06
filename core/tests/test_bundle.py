@@ -1218,7 +1218,7 @@ def _verify_case(case: dict, registries: dict[str, dict[str, dict]]) -> Ladder:
     return bundle.verify(case["bundle"], cfg, fetcher, resolver)
 
 
-def test_write_bundle_vectors(vectors):
+def test_write_bundle_vectors(vectors, regen):
     data = {
         "description": (
             "witness-proof/v1 bundles. For each case run "
@@ -1231,8 +1231,8 @@ def test_write_bundle_vectors(vectors):
         "resolvers": _registries(vectors),
         "cases": _cases(vectors),
     }
-    if not VECTORS.exists() or os.environ.get("WITNESS_REGEN_VECTORS") == "1":
-        VECTORS.write_text(json.dumps(data, indent=2) + "\n", encoding="utf-8")
+    if regen("bundles"):
+        VECTORS.write_text(json.dumps(data, indent=2) + "\n", encoding="utf-8", newline="\n")
     stored = json.loads(VECTORS.read_text(encoding="utf-8"))
     assert stored == json.loads(json.dumps(data))
     for case in stored["cases"]:

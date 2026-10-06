@@ -3,7 +3,6 @@ import copy
 import hashlib
 import hmac
 import json
-import os
 from pathlib import Path
 
 import pytest
@@ -244,10 +243,12 @@ def _generate() -> dict:
     return data
 
 
-def test_sealed_vectors():
-    if not VECTORS.exists() or os.environ.get("WITNESS_REGEN_VECTORS") == "1":
+def test_sealed_vectors(regen):
+    if regen("sealed"):
         VECTORS.write_text(
-            json.dumps(_generate(), indent=2, ensure_ascii=False) + "\n", encoding="utf-8"
+            json.dumps(_generate(), indent=2, ensure_ascii=False) + "\n",
+            encoding="utf-8",
+            newline="\n",
         )
     data = json.loads(VECTORS.read_text(encoding="utf-8"))
     for name, expected in _deterministic().items():
