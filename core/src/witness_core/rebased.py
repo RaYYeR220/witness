@@ -102,7 +102,8 @@ def fetch_record(
 ) -> dict | None:
     """The checkpoint record `index` of the trail, or None when the trail has no such record.
 
-    Returns `{"checkpoint", "checkpointHash"}` where the checkpoint is parsed from the
+    Returns `{"checkpoint", "checkpointHash", "addedBy"}` (the record's writer, for the
+    pinned-writer check in step 5) where the checkpoint is parsed from the
     on-chain record data and the hash is the record metadata's, accepted only if it equals
     the hash recomputed from that data. Anything else that is wrong raises `RebasedError`.
     """
@@ -141,7 +142,7 @@ def fetch_record(
         raise RebasedError("record metadata does not describe a witness checkpoint")
     if meta.get("checkpointHash") != digest:
         raise RebasedError("record metadata hash differs from the hash of its data")
-    return {"checkpoint": cp, "checkpointHash": digest}
+    return {"checkpoint": cp, "checkpointHash": digest, "addedBy": fields.get("added_by")}
 
 
 def make_fetcher(

@@ -193,3 +193,48 @@ def test_fetcher_needs_pins(anchored, rec, package):
     cfg = bundle.VerifierConfig(network="n", trusted_coordinator_keys=set(), threshold=1)
     with pytest.raises(rebased.RebasedError):
         rebased.make_fetcher(cfg)({"rebased": {"record": 1}})
+
+
+WRITER = "0xd40892daf5c81e3d67ffe9806575970b973ecf6625eb8a88562afae0d8c940c8"
+
+
+def _writer_ladder(anchored, rec, package, record, writer):
+    cfg = _cfg(anchored, package, anchor_writer=writer)
+    fetcher = rebased.make_fetcher(cfg, post=fake_post(rec["trailObject"], record))
+    did = next(iter(anchored["registry"]))
+    return bundle.verify(anchored["bundle"], cfg, fetcher, lambda _d: anchored["registry"][did])
+
+
+def test_pinned_writer_must_match_record_writer(anchored, rec, package):
+    a = anchored["bundle"]["anchor"]
+    record = _record_for(rec, a["checkpoint"], a["rebased"]["record"])
+    assert _fields(record)["added_by"] == WRITER
+    assert _writer_ladder(anchored, rec, package, record, WRITER).overall == "VALID"
+    other = _writer_ladder(anchored, rec, package, record, "0x" + "ee" * 32)
+    assert other.steps[4].ok is False
+    assert "writer" in other.steps[4].detail
+    assert other.overall == "INVALID"
+
+
+def test_bundle_naming_another_trail_fails_step_5(anchored, rec, package):
+    """The trail comes from the pins; a bundle pointing at an attacker's trail is rejected."""
+    a = anchored["bundle"]["anchor"]
+    forged = copy.deepcopy(anchored["bundle"])
+    forged["anchor"]["rebased"]["trail"] = "0x" + "ab" * 32
+    cfg = _cfg(anchored, package)
+    calls: list = []
+    record = _record_for(rec, a["checkpoint"], a["rebased"]["record"])
+    fetcher = rebased.make_fetcher(cfg, post=fake_post(rec["trailObject"], record, calls=calls))
+    did = next(iter(anchored["registry"]))
+    ladder = bundle.verify(forged, cfg, fetcher, lambda _d: anchored["registry"][did])
+    assert ladder.steps[4].ok is False and "pinned trail" in ladder.steps[4].detail
+    assert calls == []  # the attacker's trail id is never even queried
+
+
+def test_fetcher_queries_the_pinned_trail_only(anchored, rec, package):
+    a = anchored["bundle"]["anchor"]
+    calls: list = []
+    cfg = _cfg(anchored, package)
+    record = _record_for(rec, a["checkpoint"], a["rebased"]["record"])
+    rebased.make_fetcher(cfg, post=fake_post(rec["trailObject"], record, calls=calls))(a)
+    assert calls[0][1]["params"][0] == cfg.trail_id

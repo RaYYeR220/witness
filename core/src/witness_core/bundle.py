@@ -52,6 +52,8 @@ class VerifierConfig:
     # Where and what to read the anchor record from (see `rebased.make_fetcher`).
     rebased_rpc: str | None = None
     audit_trail_package: str | None = None
+    # Address that wrote the anchor's trail records; when pinned, other writers fail step 5.
+    anchor_writer: str | None = None
 
 
 @dataclass(frozen=True)
@@ -526,6 +528,10 @@ def _step_anchor(
         return None, f"anchor record unavailable ({type(exc).__name__})"
     if record is None:
         return None, "anchor record unavailable"
+    if cfg.anchor_writer is not None and (
+        not isinstance(record, dict) or record.get("addedBy") != cfg.anchor_writer
+    ):
+        return False, "anchor record was not written by the pinned anchor writer"
     return _record_matches(record, checkpoint.hash(cp))
 
 
