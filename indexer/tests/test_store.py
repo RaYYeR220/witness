@@ -2,7 +2,14 @@ import asyncio
 
 import psycopg
 import pytest
-from witness_indexer.store import Alert, MessageFilter, MessageRow, Store, Submission
+from witness_indexer.store import (
+    MIGRATIONS_DIR,
+    Alert,
+    MessageFilter,
+    MessageRow,
+    Store,
+    Submission,
+)
 
 
 def bid(n: int) -> bytes:
@@ -22,7 +29,9 @@ def row(n: int, **kw) -> MessageRow:
 async def test_migrate_idempotent(store: Store):
     await store.migrate()
     await store.migrate()
-    assert await store.applied_versions() == [1, 2, 4]
+    shipped = sorted(int(f.name[:4]) for f in MIGRATIONS_DIR.glob("[0-9][0-9][0-9][0-9]_*.sql"))
+    assert shipped[:2] == [1, 2]
+    assert await store.applied_versions() == shipped
 
 
 async def test_service_status_in_stats(store: Store):
