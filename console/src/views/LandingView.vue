@@ -1,24 +1,30 @@
 <script setup lang="ts">
-import { REPO_URL } from "@/links";
+import { ref } from "vue";
+
+import LandingFooter from "@/components/LandingFooter.vue";
+import SiteNav from "@/components/SiteNav.vue";
+import FlipByte from "@/landing/FlipByte.vue";
+import SkyStage from "@/landing/SkyStage.vue";
+
+const reduced = typeof matchMedia === "function" && matchMedia("(prefers-reduced-motion: reduce)").matches;
+const stage = ref<InstanceType<typeof SkyStage> | null>(null);
+
+function toFlip() {
+  document.getElementById("flip")?.scrollIntoView({ behavior: reduced ? "auto" : "smooth", block: "start" });
+}
+function toHow() {
+  if (reduced) document.getElementById("how")?.scrollIntoView({ block: "start" });
+  else stage.value?.scrollToP(0.12);
+}
 </script>
 
 <template>
-  <main class="landing">
-    <h1>Witness</h1>
-    <p>Don&rsquo;t trust the dashboard. Verify the Tangle.</p>
-    <p><RouterLink to="/live">Console</RouterLink> &middot; <a :href="REPO_URL" rel="noopener">Source</a></p>
+  <a class="skip-link" href="#flip">Skip to the byte you can flip</a>
+  <SiteNav @how="toHow" />
+  <main>
+    <SkyStage ref="stage" :still="reduced" @verify="toFlip" />
+    <span id="how" class="sr-only">How it works</span>
+    <FlipByte />
   </main>
+  <LandingFooter />
 </template>
-
-<style scoped>
-.landing {
-  max-width: var(--content);
-  margin: 0 auto;
-  padding: 120px var(--gut);
-}
-h1 {
-  margin: 0;
-  font: 400 var(--fs-h1) / 1 var(--serif);
-  color: var(--fog-50);
-}
-</style>
