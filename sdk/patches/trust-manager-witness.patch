@@ -1,0 +1,69 @@
+diff --git a/src/trustmanager/main.py b/src/trustmanager/main.py
+index c4d05bc..cd25ed3 100644
+--- a/src/trustmanager/main.py
++++ b/src/trustmanager/main.py
+@@ -1,4 +1,7 @@
+ import json
++import os
++import subprocess
++import sys
+ import time
+ import requests
+ from datetime import datetime
+@@ -414,6 +417,9 @@ class TrustManager:
+         :param `id` (str): Id of the relevant IE
+         :param `score` (float): New score of the IE 
+         """
++        if self.__witness_enabled():
++            self.__update_iota_score_signed(iota_api_url, iota_node_url, id, score)
++            return
+         try:
+             # Post update to Iota Node
+             response = requests.post(url='http://' + iota_api_url + '/upload?node=' + iota_node_url, headers= {"content-type":"application/json"}, data=json.dumps({"tag":"trust.score","message":{"score":score, "id":id}}))
+@@ -421,4 +427,44 @@ class TrustManager:
+             response.raise_for_status()
+         except requests.exceptions.RequestException as error:
+             print(f"[TrustManager] Error updating entity {error}")
+-    
+\ No newline at end of file
++    
++
++    # WITNESS: producer-signed uploads
++    def __witness_enabled(self):
++        return bool(os.environ.get("WITNESS_KEY_PATH") or os.environ.get("WITNESS_COMPONENT"))
++
++    def __update_iota_score_signed(self, iota_api_url, iota_node_url, id, score):
++        """
++        Upload the score as an envelope signed with this component's own key, with salted
++        commitments to the rel/sec/rep sub-scores. The signing runs in the witness_sdk
++        interpreter (WITNESS_PYTHON); the salts it returns stay in disclosures.jsonl.
++        """
++        stored = self.storage.read_item(id) or {}
++        commitments = {}
++        for short, name in (("rel", "reliability"), ("sec", "security"), ("rep", "reputation")):
++            if name in stored:
++                commitments[short] = stored[name]
++        request = {
++            "relay_url": "http://" + iota_api_url,
++            "node": iota_node_url,
++            "tag": "trust.score",
++            "body": {"score": score, "id": id},
++            "commitments": commitments,
++        }
++        try:
++            proc = subprocess.run(
++                [os.environ.get("WITNESS_PYTHON", sys.executable), "-m", "witness_sdk"],
++                input=json.dumps(request), capture_output=True, text=True, timeout=60,
++            )
++            reply = json.loads(proc.stdout.strip().splitlines()[-1]) if proc.stdout.strip() else {}
++            if proc.returncode != 0:
++                raise RuntimeError("signed upload failed: " + (proc.stderr.strip() or json.dumps(reply)))
++            salts = reply.get("salts") or {}
++            if salts:
++                path = os.environ.get("WITNESS_DISCLOSURES_PATH", "disclosures.jsonl")
++                block_id = (reply.get("witness") or {}).get("blockId")
++                with open(path, "a") as f:
++                    f.write(json.dumps({"id": id, "blockId": block_id, "values": commitments, "salts": salts}) + "\n")
++            print(reply.get("return_payload", reply))
++        except (OSError, ValueError, RuntimeError, subprocess.SubprocessError) as error:
++            print(f"[TrustManager] Error updating entity {error}")
