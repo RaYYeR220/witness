@@ -17,6 +17,7 @@ from witness_relay.forward import (
     MqttForwarder,
     PermanentForwardError,
     build_forwarders,
+    make_item,
     submission_topic,
 )
 
@@ -214,7 +215,68 @@ async def test_unknown_node_not_forwarded(make_cfg, hornet, relay, recorder):
     assert recorder.records == []
 
 
+async def test_poison_request_does_not_delay_forwarding(make_cfg, hornet, relay, eventually):
+    ingested: list[dict] = []
+    hornet.router.post(EXPLORER + "/ingest").mock(
+        side_effect=lambda r: ingested.append(json.loads(r.content)) or httpx.Response(202)
+    )
+    poison = (
+        b'{"tag": "t", "message": {"x": 1e400}}',  # parses to inf
+        b'{"tag": "t", "message": "\\ud800"}',  # lone surrogate
+        b'{"tag": "\\ud800", "message": {}}',
+    )
+    async with relay(make_cfg(), forwarders=[HttpForwarder(EXPLORER, "t")]) as client:
+        for body in poison:
+            resp = await client.post("/upload", params=UPLOAD, content=body)
+            assert resp.status_code == 400, body
+        t0 = time.monotonic()
+        ok = await client.post("/upload", params=UPLOAD, json={"tag": "t", "message": {"ok": 1}})
+        assert ok.status_code == 200
+        await eventually(lambda: ingested, timeout=1.5)
+        assert time.monotonic() - t0 < 1.5
+    assert [r["message"] for r in ingested] == [{"ok": 1}]
+    assert hornet.route.call_count == 1
+
+
 # --- queue behaviour (no database needed) ----------------------------------------------
+
+
+async def test_unencodable_record_forwarded_without_message():
+    sink = Flaky(failures=0)
+    queue = ForwardQueue([sink], backoff_s=(5.0, 5.0))  # any retry would blow the deadline
+    await queue.start()
+    queue.submit({"subId": "a", "tag": "t", "message": float("inf")})
+    queue.submit({"subId": "b", "tag": "t", "message": "\ud800"})
+    queue.submit({"subId": "c", "tag": "t", "message": {"ok": True}})
+    deadline = time.monotonic() + 1.0
+    while len(sink.delivered) < 3 and time.monotonic() < deadline:
+        await asyncio.sleep(0.01)
+    await queue.stop(drain_s=0.1)
+    a, b, c = sink.delivered
+    for rec in (a, b):
+        assert rec["message"] is None and rec["messageUnencodable"] is True
+    assert c["message"] == {"ok": True} and "messageUnencodable" not in c
+    assert queue.stats()["flaky"]["retries"] == 0
+
+
+async def test_deterministic_sink_errors_are_not_retried():
+    class BadTopic:
+        name = "bad-topic"
+        calls = 0
+
+        async def send(self, item):
+            BadTopic.calls += 1
+            raise ValueError("invalid topic")
+
+        async def aclose(self):
+            pass
+
+    queue = ForwardQueue([BadTopic()], backoff_s=(0.01, 0.02))
+    await queue.start()
+    queue.submit({"tag": "t"})
+    await asyncio.sleep(0.1)
+    await queue.stop(drain_s=0.1)
+    assert BadTopic.calls == 1
 
 
 class Flaky:
@@ -224,11 +286,11 @@ class Flaky:
         self.failures = failures
         self.delivered: list[dict] = []
 
-    async def send(self, record):
+    async def send(self, item):
         if self.failures:
             self.failures -= 1
             raise ConnectionError("try again")
-        self.delivered.append(record)
+        self.delivered.append(json.loads(item.payload))
 
     async def aclose(self):
         pass
@@ -255,9 +317,9 @@ async def test_queue_is_bounded_and_drops_oldest():
         name = "slow"
         delivered: ClassVar[list[dict]] = []
 
-        async def send(self, record):
+        async def send(self, item):
             await gate.wait()
-            self.delivered.append(record)
+            self.delivered.append(json.loads(item.payload))
 
         async def aclose(self):
             pass
@@ -300,14 +362,14 @@ async def test_queue_drops_permanent_failures():
 
 async def test_mqtt_forwarder_reconnects(fake_mqtt):
     fwd = MqttForwarder("mqtt://user:pw@broker.test:1999", client_factory=fake_mqtt)
-    await fwd.send({"tag": "a/b+c#", "x": 1})
+    await fwd.send(make_item({"tag": "a/b+c#", "x": 1}))
     first = fake_mqtt.instances[0]
     assert first.params["port"] == 1999
     assert first.params["username"] == "user" and first.params["password"] == "pw"
     first.fail = True
     with pytest.raises(ConnectionError):
-        await fwd.send({"tag": "t"})
-    await fwd.send({"tag": "t"})
+        await fwd.send(make_item({"tag": "t"}))
+    await fwd.send(make_item({"tag": "t"}))
     assert len(fake_mqtt.instances) == 2
     assert fake_mqtt.instances[1].published[0][0] == "aerios/iota/submissions/t"
     await fwd.aclose()
@@ -325,14 +387,14 @@ async def test_http_forwarder_classifies_errors():
         fwd = HttpForwarder(EXPLORER, "t")
         route.mock(return_value=httpx.Response(400))
         with pytest.raises(PermanentForwardError):
-            await fwd.send({"tag": "t"})
+            await fwd.send(make_item({"tag": "t"}))
         route.mock(return_value=httpx.Response(503))
         with pytest.raises(Exception) as exc:
-            await fwd.send({"tag": "t"})
+            await fwd.send(make_item({"tag": "t"}))
         assert not isinstance(exc.value, PermanentForwardError)
         route.mock(return_value=httpx.Response(429))
         with pytest.raises(Exception) as exc:
-            await fwd.send({"tag": "t"})
+            await fwd.send(make_item({"tag": "t"}))
         assert not isinstance(exc.value, PermanentForwardError)
         await fwd.aclose()
 

@@ -1,8 +1,11 @@
 """PostgreSQL state of the relay: upload receipts and per-issuer sequence numbers.
 
 Lives in its own schema (default `relay`). `issuer_seq.seq` is the highest sequence
-number allocated (relay) or observed (producers); `last_block_id` / `last_block_seq`
-point at the issuer's newest block on the Tangle and feed the next envelope's `prev`.
+number claimed for an issuer: allocated by the relay for its own envelopes, or reserved
+for a producer envelope *before* it is sent, so a replayed or concurrent duplicate seq
+loses atomically. A claim is released (compare-and-set) when nothing reached the node.
+`last_block_id` / `last_block_seq` point at the issuer's newest block on the Tangle and
+feed the next relay envelope's `prev`; they only ever move to a strictly newer seq.
 """
 
 from __future__ import annotations
@@ -27,7 +30,7 @@ CREATE TABLE IF NOT EXISTS {s}.receipts (
     block_id       text PRIMARY KEY,
     sub_id         uuid NOT NULL UNIQUE,
     tag            text NOT NULL,
-    iss            text NOT NULL,
+    iss            text,
     kid            text,
     seq            bigint,
     verdict        text NOT NULL,
@@ -51,7 +54,7 @@ class Receipt:
     block_id: str
     sub_id: str
     tag: str
-    iss: str
+    iss: str | None  # None for unsigned pass-through messages
     kid: str | None
     seq: int | None
     verdict: str
@@ -112,34 +115,71 @@ class ReceiptStore:
             seq, last = await cur.fetchone()
         return seq, last
 
-    async def record(self, receipt: Receipt, *, observed: bool) -> None:
-        """Persist a receipt and move the issuer's chain head to its block.
+    async def reserve(self, iss: str, seq: int) -> int | None:
+        """Claim a producer's `seq` before sending; None if it is not newer (a replay).
 
-        `observed` is for producer envelopes: their seq was chosen by the producer, so
-        the counter only moves forward to it.
+        Returns the previous value, which `release` restores if nothing was sent.
         """
         async with self._pool.connection() as conn, conn.transaction():
-            if receipt.seq is not None:
+            # The placeholder row (-1, below any valid seq) gives FOR UPDATE something to
+            # lock even for a first-time issuer, so concurrent claims serialise.
+            await conn.execute(
+                self._q(
+                    "INSERT INTO {s}.issuer_seq (iss, seq, updated_at_ms) VALUES (%s, -1, %s) "
+                    "ON CONFLICT (iss) DO NOTHING"
+                ),
+                (iss, _now_ms()),
+            )
+            cur = await conn.execute(
+                self._q("SELECT seq FROM {s}.issuer_seq WHERE iss = %s FOR UPDATE"), (iss,)
+            )
+            (current,) = await cur.fetchone()
+            if current >= seq:
+                return None
+            await conn.execute(
+                self._q("UPDATE {s}.issuer_seq SET seq = %s, updated_at_ms = %s WHERE iss = %s"),
+                (seq, _now_ms(), iss),
+            )
+        return current
+
+    async def release(self, iss: str, seq: int, previous: int) -> bool:
+        """Undo a claim of `seq` (compare-and-set: only if nothing newer was claimed since)."""
+        async with self._pool.connection() as conn:
+            cur = await conn.execute(
+                self._q(
+                    "UPDATE {s}.issuer_seq SET seq = %s, updated_at_ms = %s "
+                    "WHERE iss = %s AND seq = %s"
+                ),
+                (previous, _now_ms(), iss, seq),
+            )
+            return cur.rowcount == 1
+
+    def _advance_query(self) -> sql.Composed:
+        return self._q(
+            "UPDATE {s}.issuer_seq SET last_block_id = %(bid)s, last_block_seq = %(seq)s, "
+            "updated_at_ms = %(now)s "
+            "WHERE iss = %(iss)s AND (last_block_seq IS NULL OR last_block_seq < %(seq)s)"
+        )
+
+    async def advance(self, iss: str, seq: int, block_id: str) -> None:
+        """Move the issuer's chain head to `block_id`, only if `seq` is strictly newer."""
+        async with self._pool.connection() as conn:
+            await conn.execute(
+                self._advance_query(),
+                {"iss": iss, "seq": seq, "bid": block_id, "now": _now_ms()},
+            )
+
+    async def record(self, receipt: Receipt) -> None:
+        """Persist a receipt and, for a signed message, advance the issuer's chain head."""
+        async with self._pool.connection() as conn, conn.transaction():
+            if receipt.iss is not None and receipt.seq is not None:
                 await conn.execute(
-                    self._q(
-                        "INSERT INTO {s}.issuer_seq AS t "
-                        "(iss, seq, last_block_id, last_block_seq, updated_at_ms) "
-                        "VALUES (%(iss)s, %(seq)s, %(bid)s, %(seq)s, %(now)s) "
-                        "ON CONFLICT (iss) DO UPDATE SET "
-                        "seq = CASE WHEN %(observed)s THEN GREATEST(t.seq, EXCLUDED.seq) "
-                        "      ELSE t.seq END, "
-                        "last_block_id = CASE WHEN t.last_block_seq IS NULL "
-                        "      OR EXCLUDED.last_block_seq >= t.last_block_seq "
-                        "      THEN EXCLUDED.last_block_id ELSE t.last_block_id END, "
-                        "last_block_seq = GREATEST(t.last_block_seq, EXCLUDED.last_block_seq), "
-                        "updated_at_ms = EXCLUDED.updated_at_ms"
-                    ),
+                    self._advance_query(),
                     {
                         "iss": receipt.iss,
                         "seq": receipt.seq,
                         "bid": receipt.block_id,
                         "now": _now_ms(),
-                        "observed": observed,
                     },
                 )
             await conn.execute(

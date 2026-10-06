@@ -22,6 +22,8 @@ class RelayConfig:
     policy_path: str  # writer policy JSON (witness_core.policy format)
     db_url: str  # PostgreSQL DSN; receipts and per-issuer sequence live in `db_schema`
     encrypt_tags: list[str] = field(default_factory=list)
+    # Legacy messages on these tags are posted unsigned, byte for byte as the original API.
+    passthrough_tags: list[str] = field(default_factory=list)
     recipients: list[Recipient] = field(default_factory=list)
     search_key_path: str | None = None  # blind-index key, base64url text
     keycloak_jwks_url: str | None = None
@@ -51,6 +53,9 @@ class RelayConfig:
                     return value
             return None
 
+        def tags(name: str) -> list[str]:
+            return [t.strip() for t in env.get(name, "").split(",") if t.strip()]
+
         def req(name: str) -> str:
             value = opt(name)
             if value is None:
@@ -72,9 +77,8 @@ class RelayConfig:
             policy_path=req("RELAY_POLICY_PATH"),
             db_url=req("RELAY_DB_URL"),
             db_schema=opt("RELAY_DB_SCHEMA") or "relay",
-            encrypt_tags=[
-                t.strip() for t in env.get("RELAY_ENCRYPT_TAGS", "").split(",") if t.strip()
-            ],
+            encrypt_tags=tags("RELAY_ENCRYPT_TAGS"),
+            passthrough_tags=tags("RELAY_PASSTHROUGH_TAGS"),
             recipients=load_recipients(recipients_path) if recipients_path else [],
             search_key_path=opt("RELAY_SEARCH_KEY_PATH"),
             keycloak_jwks_url=opt("RELAY_KEYCLOAK_JWKS_URL"),

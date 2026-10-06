@@ -167,8 +167,8 @@ class RecordingForwarder:
         self.name = name
         self.records: list[dict] = []
 
-    async def send(self, record: dict) -> None:
-        self.records.append(record)
+    async def send(self, item) -> None:
+        self.records.append(json.loads(item.payload))
 
     async def aclose(self) -> None:
         pass

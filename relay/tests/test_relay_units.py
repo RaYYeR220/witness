@@ -2,13 +2,16 @@
 
 import base64
 import json
+from urllib.parse import quote
 
 import httpx
 import pytest
 import respx
 from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
+from witness_core import envelope, policy, verdicts
 from witness_relay.config import RelayConfig
 from witness_relay.keys import KeyResolver, did_key, did_key_public
+from witness_relay.policy_gate import PolicyGate
 
 
 def _b64u(raw):
@@ -64,7 +67,7 @@ async def test_resolver_http_document():
         ],
     }
     with respx.mock() as router:
-        route = router.get(f"http://anchor.test/resolve/{did}").mock(
+        route = router.get(f"http://anchor.test/resolve/{quote(did, safe='')}").mock(
             return_value=httpx.Response(
                 200,
                 json={
@@ -121,3 +124,76 @@ def test_config_from_env(tmp_path):
 
     with pytest.raises(ValueError):
         RelayConfig.from_env({k: v for k, v in env.items() if k != "RELAY_DID"})
+
+
+def test_config_passthrough_tags():
+    env = {
+        "RELAY_ALLOWED_NODES": "{}",
+        "RELAY_DID": "did:key:z6Mk",
+        "RELAY_KID": "did:key:z6Mk#z6Mk",
+        "RELAY_KEY_PATH": "k.pem",
+        "RELAY_POLICY_PATH": "p.json",
+        "RELAY_DB_URL": "postgresql://x",
+        "RELAY_PASSTHROUGH_TAGS": "trust.score, LLO-K8s",
+    }
+    assert RelayConfig.from_env(env).passthrough_tags == ["trust.score", "LLO-K8s"]
+    assert RelayConfig.from_env({**env, "RELAY_PASSTHROUGH_TAGS": ""}).passthrough_tags == []
+
+
+async def test_resolver_rejects_bad_did_syntax_without_lookup():
+    with respx.mock(assert_all_called=False) as router:
+        route = router.get(url__startswith="http://anchor.test/").mock(
+            return_value=httpx.Response(404)
+        )
+        async with httpx.AsyncClient() as http:
+            resolver = KeyResolver(resolver_url="http://anchor.test", http=http)
+            for kid in (
+                "did:iota:../../admin#sig-1",
+                "did:web:evil.example#k",
+                "did:iota:a b#k",
+                "did:iota:#k",
+                "not-a-did",
+            ):
+                assert await resolver.resolve(kid) is None
+    assert route.call_count == 0
+
+
+async def test_resolver_cache_is_bounded():
+    with respx.mock() as router:
+        route = router.get(url__startswith="http://anchor.test/resolve/").mock(
+            return_value=httpx.Response(404)
+        )
+        async with httpx.AsyncClient() as http:
+            resolver = KeyResolver(resolver_url="http://anchor.test", http=http, cache_size=2)
+            for n in (1, 2, 3, 1):
+                await resolver.resolve(f"did:iota:testnet:0x{n}#sig-1")
+    # did 1 was evicted by did 3, so it is fetched twice.
+    assert route.call_count == 4
+
+
+async def test_gate_resolves_only_well_formed_envelopes():
+    class SpyResolver:
+        def __init__(self):
+            self.asked = []
+
+        async def resolve(self, kid):
+            self.asked.append(kid)
+
+    key = Ed25519PrivateKey.generate()
+    did = "did:iota:testnet:0xabc"
+    good = envelope.seal(
+        "t", {"a": 1}, iss=did, kid=did + "#sig-1", sign_key=key, seq=1, att_mode="producer"
+    )
+    spy = SpyResolver()
+    gate = PolicyGate(policy.load({"version": 1}), spy, "did:key:zRelay")
+
+    malformed = {k: v for k, v in good.items() if k != "nonce"}
+    assert (await gate.check_envelope("t", malformed)).verdict == verdicts.MALFORMED
+    wrong_tag = await gate.check_envelope("other", good)
+    assert wrong_tag.verdict == verdicts.FORGED
+    foreign_kid = {**good, "kid": "did:iota:testnet:0xdef#sig-1"}
+    assert (await gate.check_envelope("t", foreign_kid)).verdict == verdicts.FORGED
+    assert spy.asked == []
+
+    assert (await gate.check_envelope("t", good)).verdict == verdicts.FORGED  # unknown key
+    assert spy.asked == [did + "#sig-1"]

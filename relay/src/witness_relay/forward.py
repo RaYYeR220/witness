@@ -2,9 +2,9 @@
 
 Each record is published to MQTT (`aerios/iota/submissions/{tag}`, QoS 1) and, when an
 explorer URL is configured, POSTed to `{explorer_url}/ingest`. Forwarding never sits on
-the upload path: `ForwardQueue.submit` only appends to a bounded in-memory queue per
-sink, and a background worker per sink delivers in order with exponential backoff.
-When a queue is full the oldest record is dropped and counted.
+the upload path: `ForwardQueue.submit` encodes the record once and only appends the bytes
+to a bounded in-memory queue per sink; a background worker per sink delivers in order
+with exponential backoff. When a queue is full the oldest record is dropped and counted.
 """
 
 from __future__ import annotations
@@ -14,6 +14,7 @@ import json
 import logging
 import uuid
 from collections import deque
+from dataclasses import dataclass
 from typing import Any, Protocol
 from urllib.parse import unquote, urlsplit
 
@@ -26,10 +27,19 @@ log = logging.getLogger(__name__)
 TOPIC_PREFIX = "aerios/iota/submissions/"
 
 
+@dataclass(frozen=True)
+class ForwardItem:
+    """One encoded submission record, ready for any sink."""
+
+    tag: str
+    sub_id: str | None
+    payload: bytes  # UTF-8 JSON of the record; identical for every sink
+
+
 class Forwarder(Protocol):
     name: str
 
-    async def send(self, record: dict) -> None:
+    async def send(self, item: ForwardItem) -> None:
         """Deliver one record or raise. PermanentForwardError means: do not retry."""
 
     async def aclose(self) -> None: ...
@@ -39,10 +49,32 @@ class PermanentForwardError(Exception):
     """The sink refused the record itself; retrying would not help."""
 
 
+# Deterministic failures about the record (or its topic), not about the transport.
+_PERMANENT = (PermanentForwardError, ValueError, TypeError)
+
+
 def encode_record(record: dict) -> bytes:
     return json.dumps(record, separators=(",", ":"), ensure_ascii=False, allow_nan=False).encode(
         "utf-8"
     )
+
+
+def make_item(record: dict) -> ForwardItem | None:
+    """Encode `record`; a message that cannot be encoded is replaced, never retried."""
+    try:
+        payload = encode_record(record)
+    except (ValueError, TypeError):  # NaN/Infinity, lone surrogates, non-JSON types
+        log.warning(
+            "submission %s: message is not encodable; forwarding without it", record.get("subId")
+        )
+        record = {**record, "message": None, "messageUnencodable": True}
+        try:
+            payload = encode_record(record)
+        except (ValueError, TypeError):
+            log.exception("submission %s cannot be forwarded at all", record.get("subId"))
+            return None
+    tag = record.get("tag")
+    return ForwardItem(tag if isinstance(tag, str) else "", record.get("subId"), payload)
 
 
 def submission_topic(tag: str) -> str:
@@ -77,7 +109,7 @@ class MqttForwarder:
         self._timeout = timeout_s
         self._client: Any = None
 
-    async def send(self, record: dict) -> None:
+    async def send(self, item: ForwardItem) -> None:
         if self._client is None:
             client = self._factory(**self._params)
             await asyncio.wait_for(client.__aenter__(), self._timeout)
@@ -85,9 +117,7 @@ class MqttForwarder:
         try:
             await asyncio.wait_for(
                 self._client.publish(
-                    submission_topic(record.get("tag", "")),
-                    payload=encode_record(record),
-                    qos=self._qos,
+                    submission_topic(item.tag), payload=item.payload, qos=self._qos
                 ),
                 self._timeout,
             )
@@ -126,10 +156,8 @@ class HttpForwarder:
         self._own = client is None
         self._client = client or httpx.AsyncClient(timeout=timeout_s)
 
-    async def send(self, record: dict) -> None:
-        resp = await self._client.post(
-            self._url, content=encode_record(record), headers=self._headers
-        )
+    async def send(self, item: ForwardItem) -> None:
+        resp = await self._client.post(self._url, content=item.payload, headers=self._headers)
         if resp.is_success:
             return
         if 400 <= resp.status_code < 500 and resp.status_code not in (408, 429):
@@ -162,8 +190,8 @@ class _Lane:
         max_attempts: int,
     ):
         self.sink = sink
-        self.queue: deque[dict] = deque(maxlen=maxsize)
-        self.inflight: dict | None = None
+        self.queue: deque[ForwardItem] = deque(maxlen=maxsize)
+        self.inflight: ForwardItem | None = None
         self.wake = asyncio.Event()
         self.timeout = timeout_s
         self.backoff = backoff_s
@@ -171,11 +199,11 @@ class _Lane:
         self.stats = {"queued": 0, "sent": 0, "retries": 0, "dropped": 0}
         self.task: asyncio.Task | None = None
 
-    def put(self, record: dict) -> None:
+    def put(self, item: ForwardItem) -> None:
         if len(self.queue) == self.queue.maxlen:
             self.stats["dropped"] += 1
             log.warning("forward queue for %s full; dropping oldest record", self.sink.name)
-        self.queue.append(record)
+        self.queue.append(item)
         self.wake.set()
 
     @property
@@ -191,13 +219,13 @@ class _Lane:
             await self._deliver(self.inflight)
             self.inflight = None
 
-    async def _deliver(self, record: dict) -> None:
+    async def _deliver(self, item: ForwardItem) -> None:
         delay = self.backoff[0]
         for attempt in range(1, self.max_attempts + 1):
             try:
-                await asyncio.wait_for(self.sink.send(record), self.timeout)
-            except PermanentForwardError as exc:
-                log.error("%s refused record %s: %s", self.sink.name, record.get("subId"), exc)
+                await asyncio.wait_for(self.sink.send(item), self.timeout)
+            except _PERMANENT as exc:
+                log.error("%s refused record %s: %r", self.sink.name, item.sub_id, exc)
                 break
             except Exception as exc:  # noqa: BLE001 - any sink failure means "retry later"
                 if attempt == self.max_attempts:
@@ -235,10 +263,16 @@ class ForwardQueue:
             lane.task = asyncio.create_task(lane.run(), name=f"forward-{lane.sink.name}")
 
     def submit(self, record: dict) -> None:
-        """Queue `record` for every sink. Never blocks and never raises."""
+        """Encode `record` once and queue it for every sink. Never blocks and never raises."""
+        if not self._lanes:
+            return
+        item = make_item(record)
         for lane in self._lanes:
             lane.stats["queued"] += 1
-            lane.put(record)
+            if item is None:
+                lane.stats["dropped"] += 1
+            else:
+                lane.put(item)
 
     async def stop(self, drain_s: float = 2.0) -> None:
         """Give pending records `drain_s` to go out, then stop workers and close sinks."""

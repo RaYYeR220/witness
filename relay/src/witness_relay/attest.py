@@ -7,6 +7,7 @@ the tag and, when the message names one, the infrastructure element (`id`).
 
 from __future__ import annotations
 
+import json
 from dataclasses import dataclass
 from typing import Any
 
@@ -39,6 +40,11 @@ def legacy_body(message: Any) -> dict:
 
 def block_size(tag: str, data: bytes) -> int:
     return BLOCK_OVERHEAD + len(tag.encode("utf-8")) + len(data)
+
+
+def legacy_data(message: Any) -> bytes:
+    """Bytes the original iota-messages-api posts: `json.dumps` with Python's defaults."""
+    return json.dumps(message).encode("utf-8")
 
 
 def envelope_data(env: dict) -> bytes:

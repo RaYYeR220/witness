@@ -7,7 +7,11 @@ way Flask's `jsonify` does), plus:
 - `node` must be one of the configured nodes (the original builds a URL from it);
 - messages are signed: producer envelopes are verified and passed through, anything
   else is wrapped in a relay-attested envelope; the writer policy is enforced;
+- a producer's `seq` is claimed atomically before sending, so replays are refused;
 - configured tags are encrypted;
+- tags listed in `RELAY_PASSTHROUGH_TAGS` keep the original behaviour for legacy
+  messages: the data is `json.dumps(message)` exactly as the original API sends it, with
+  no envelope (verdict `UNSIGNED_LEGACY`), still receipted and forwarded;
 - receipts and per-issuer sequence numbers are kept in PostgreSQL;
 - every submission attempt, failed ones included, is forwarded to the explorer.
 """
@@ -17,10 +21,11 @@ from __future__ import annotations
 import asyncio
 import json
 import logging
+import math
 import time
 import uuid
 from contextlib import asynccontextmanager
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from typing import Any
 
 import httpx
@@ -29,12 +34,12 @@ from fastapi import FastAPI, Query, Request
 from fastapi.responses import JSONResponse, PlainTextResponse, Response
 from witness_core import envelope, verdicts
 
-from .attest import Attestor, block_size, envelope_data, load_signing_key
+from .attest import Attestor, block_size, envelope_data, legacy_data, load_signing_key
 from .auth import AuthError, AuthUnavailable, CallerAuth
 from .config import RelayConfig, load_search_key
 from .forward import Forwarder, ForwardQueue, build_forwarders
 from .keys import KeyResolver
-from .policy_gate import Decision, PolicyGate, load_policy
+from .policy_gate import Decision, PolicyGate, load_policy, tags_without_relay
 from .receipts import Receipt, ReceiptStore
 
 log = logging.getLogger("witness_relay")
@@ -42,6 +47,7 @@ log = logging.getLogger("witness_relay")
 HORNET_NOT_FOUND = "Hornet node not found, check that the Hornet node exists.\n"
 # Upload bodies larger than this many blocks cannot fit and are not even buffered.
 MAX_REQUEST_FACTOR = 8
+TAG_MAX_BYTES = 64  # Stardust tagged-data limit
 
 
 def _now_ms() -> int:
@@ -56,6 +62,13 @@ def legacy_json(obj: Any, status: int) -> Response:
 
 def _reject_constant(name: str) -> Any:
     raise ValueError(f"{name} is not valid JSON")
+
+
+def _finite_float(text: str) -> float:
+    value = float(text)
+    if not math.isfinite(value):  # e.g. 1e400
+        raise ValueError(f"{text} is not a finite number")
+    return value
 
 
 @dataclass
@@ -179,7 +192,23 @@ async def _handle(
         data = envelope_data(message)
         if block_size(tag, data) > relay.cfg.max_block_bytes:
             return _too_large(relay.cfg)
-        return await _send(relay, node, base_url, sub, decision, data, observed=True)
+        try:
+            previous = await relay.store.reserve(decision.iss, decision.seq)
+        except Exception:
+            log.exception("cannot reserve seq %s for %s", decision.seq, decision.iss)
+            return JSONResponse({"error": "receipt store unavailable"}, status_code=503)
+        if previous is None:
+            sub.verdict = verdicts.REPLAY
+            return refuse(
+                replace(
+                    decision,
+                    allowed=False,
+                    verdict=verdicts.REPLAY,
+                    reason=f"seq {decision.seq} is not newer than the last from {decision.iss}",
+                )
+            )
+        claim = (decision.iss, decision.seq, previous)
+        return await _send(relay, node, base_url, sub, decision, data, claim=claim)
 
     try:
         caller = await relay.auth.caller(request.headers.get("authorization"))
@@ -193,6 +222,12 @@ async def _handle(
     sub.verdict = decision.verdict
     if not decision.allowed:
         return refuse(decision)
+
+    if decision.mode == "passthrough":
+        data = legacy_data(message)
+        if block_size(tag, data) > relay.cfg.max_block_bytes:
+            return _too_large(relay.cfg)
+        return await _send(relay, node, base_url, sub, decision, data)
 
     try:
         content = relay.attestor.protect(tag, message)
@@ -213,9 +248,38 @@ async def _handle(
             return JSONResponse({"error": "receipt store unavailable"}, status_code=503)
         env = relay.attestor.seal(tag, content, caller=caller, seq=seq, prev=prev)
         sub.iss, sub.seq = env["iss"], seq
+        # Still under the chain lock, so a release cannot race the next allocation.
+        claim = (relay.cfg.relay_did, seq, seq - 1)
         return await _send(
-            relay, node, base_url, sub, decision, envelope_data(env), observed=False, kid=env["kid"]
+            relay, node, base_url, sub, decision, envelope_data(env), kid=env["kid"], claim=claim
         )
+
+
+async def _release(relay: Relay, claim: tuple[str, int, int] | None) -> None:
+    """Give back a claimed seq when the block definitely never reached the Tangle."""
+    if claim is None:
+        return
+    iss, seq, previous = claim
+    try:
+        await relay.store.release(iss, seq, previous)
+    except Exception:
+        log.exception("could not release seq %s of %s", seq, iss)
+
+
+async def _persist(relay: Relay, receipt: Receipt) -> None:
+    """Store the receipt; if that fails, still move the issuer's chain head (once more)."""
+    try:
+        await relay.store.record(receipt)
+        return
+    except Exception:
+        # The block is on the Tangle already; the client still gets its id.
+        log.exception("could not persist receipt for %s", receipt.block_id)
+    if receipt.iss is None or receipt.seq is None:
+        return
+    try:
+        await relay.store.advance(receipt.iss, receipt.seq, receipt.block_id)
+    except Exception:
+        log.exception("could not advance the chain head of %s", receipt.iss)
 
 
 async def _send(
@@ -226,13 +290,15 @@ async def _send(
     decision: Decision,
     data: bytes,
     *,
-    observed: bool,
     kid: str | None = None,
+    claim: tuple[str, int, int] | None = None,
 ) -> Response:
     try:
         resp = await relay.submit(base_url, sub.tag, data)
     except HornetUnreachable as exc:
         sub.data = data if exc.sent else None
+        if not exc.sent:
+            await _release(relay, claim)
         return PlainTextResponse(HORNET_NOT_FOUND, status_code=400, media_type="text/html")
     sub.data = data
     sub.hornet_status = resp.status_code
@@ -240,6 +306,8 @@ async def _send(
         log.warning(
             "HORNET refused block for %r: %s %s", sub.tag, resp.status_code, resp.text[:200]
         )
+        if resp.status_code < 500:  # rejected outright: nothing was stored
+            await _release(relay, claim)
         return legacy_json(
             {
                 "status_code": resp.status_code,
@@ -249,25 +317,23 @@ async def _send(
             502,
         )
     sub.block_id = _block_id(resp)
-    if sub.block_id is not None and sub.iss is not None:
-        receipt = Receipt(
-            block_id=sub.block_id,
-            sub_id=sub.sub_id,
-            tag=sub.tag,
-            iss=sub.iss,
-            kid=kid or decision.kid,
-            seq=sub.seq,
-            verdict=sub.verdict,
-            att_sub=decision.caller,
-            node=node,
-            hornet_status=resp.status_code,
-            received_at_ms=sub.received_at_ms,
+    if sub.block_id is not None:
+        await _persist(
+            relay,
+            Receipt(
+                block_id=sub.block_id,
+                sub_id=sub.sub_id,
+                tag=sub.tag,
+                iss=sub.iss,
+                kid=kid or decision.kid,
+                seq=sub.seq,
+                verdict=sub.verdict,
+                att_sub=decision.caller,
+                node=node,
+                hornet_status=resp.status_code,
+                received_at_ms=sub.received_at_ms,
+            ),
         )
-        try:
-            await relay.store.record(receipt, observed=observed)
-        except Exception:
-            # The block is on the Tangle already; the client still gets its id.
-            log.exception("could not persist receipt for %s", sub.block_id)
     return legacy_json(
         {"status_code": resp.status_code, "return_payload": resp.text, "witness": sub.witness()},
         200,
@@ -290,7 +356,17 @@ def create_app(cfg: RelayConfig, *, forwarders: list[Forwarder] | None = None) -
         recipients=tuple(cfg.recipients),
         search_key=load_search_key(cfg.search_key_path) if cfg.search_key_path else None,
     )
+    overlap = set(cfg.encrypt_tags) & set(cfg.passthrough_tags)
+    if overlap:
+        raise ValueError(f"tags cannot be both encrypted and passed through: {sorted(overlap)}")
     writer_policy = load_policy(cfg.policy_path)
+    for tag in tags_without_relay(writer_policy, cfg.relay_did):
+        if tag not in cfg.passthrough_tags:
+            log.warning(
+                "writer policy for %s does not allow the relay DID; relay-attested messages "
+                "there will be flagged UNAUTHORIZED_WRITER by the explorer",
+                tag,
+            )
     sinks = build_forwarders(cfg) if forwarders is None else list(forwarders)
 
     @asynccontextmanager
@@ -304,7 +380,13 @@ def create_app(cfg: RelayConfig, *, forwarders: list[Forwarder] | None = None) -
         app.state.relay = Relay(
             cfg=cfg,
             attestor=attestor,
-            gate=PolicyGate(writer_policy, resolver, cfg.relay_did),
+            gate=PolicyGate(
+                writer_policy,
+                resolver,
+                cfg.relay_did,
+                encrypt_tags=cfg.encrypt_tags,
+                passthrough_tags=cfg.passthrough_tags,
+            ),
             auth=CallerAuth(
                 cfg.keycloak_jwks_url, http, audience=cfg.jwt_audience, issuer=cfg.jwt_issuer
             ),
@@ -342,18 +424,21 @@ def create_app(cfg: RelayConfig, *, forwarders: list[Forwarder] | None = None) -
         if raw is None:
             return _too_large(relay.cfg)
         try:
-            req = json.loads(raw, parse_constant=_reject_constant)
-        except ValueError:
-            return JSONResponse({"error": "body must be JSON"}, status_code=400)
+            req = json.loads(raw, parse_constant=_reject_constant, parse_float=_finite_float)
+            # Lone surrogates parse but can be neither signed, sent nor forwarded.
+            json.dumps(req, ensure_ascii=False).encode("utf-8")
+        except ValueError:  # includes UnicodeEncodeError
+            return JSONResponse(
+                {"error": "body must be JSON with finite numbers and valid Unicode"},
+                status_code=400,
+            )
         if not (isinstance(req, dict) and isinstance(req.get("tag"), str) and "message" in req):
             return JSONResponse(
                 {"error": 'body must be {"tag": str, "message": any}'}, status_code=400
             )
         tag, message = req["tag"], req["message"]
-        try:
-            tag.encode("utf-8")
-        except UnicodeEncodeError:
-            return JSONResponse({"error": "tag is not valid UTF-8"}, status_code=400)
+        if len(tag.encode("utf-8")) > TAG_MAX_BYTES:
+            return JSONResponse({"error": f"tag exceeds {TAG_MAX_BYTES} bytes"}, status_code=400)
 
         sub = Submission(str(uuid.uuid4()), received_at, tag, message)
         try:

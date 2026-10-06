@@ -10,14 +10,19 @@ from __future__ import annotations
 import base64
 import json
 import logging
+import re
 import time
+from collections import OrderedDict
 from typing import Any
+from urllib.parse import quote
 
 import httpx
 from witness_core.envelope import KeyInfo
 
 log = logging.getLogger(__name__)
 
+# Only DID methods we can resolve, with a conservative method-specific-id alphabet.
+DID_RE = re.compile(r"did:(iota|key):[A-Za-z0-9:._%-]+")
 _B58 = "123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz"
 _ED25519_PUB = b"\xed\x01"  # multicodec ed25519-pub, varint encoded
 
@@ -97,12 +102,14 @@ class KeyResolver:
         resolver_url: str | None = None,
         http: httpx.AsyncClient | None = None,
         cache_ttl_s: float = 60.0,
+        cache_size: int = 1024,
     ):
         self._static = dict(static or {})
         self._url = resolver_url.rstrip("/") if resolver_url else None
         self._http = http
         self._ttl = cache_ttl_s
-        self._cache: dict[str, tuple[float, dict | None]] = {}
+        self._cache_size = cache_size
+        self._cache: OrderedDict[str, tuple[float, dict | None]] = OrderedDict()
 
     @classmethod
     def from_files(
@@ -121,6 +128,8 @@ class KeyResolver:
         if kid in self._static:
             return self._static[kid]
         did, _, fragment = kid.partition("#")
+        if not DID_RE.fullmatch(did):
+            return None
         if did.startswith("did:key:"):
             pub = did_key_public(did)
             if pub is None or fragment not in ("", did[len("did:key:") :]):
@@ -134,15 +143,21 @@ class KeyResolver:
         hit = self._cache.get(did)
         now = time.monotonic()
         if hit is not None and now - hit[0] < self._ttl:
+            self._cache.move_to_end(did)
             return hit[1]
+        url = f"{self._url}/resolve/{quote(did, safe='')}"
         try:
-            resp = await self._http.get(f"{self._url}/resolve/{did}", timeout=5.0)
+            resp = await self._http.get(url, timeout=5.0)
             result = resp.json() if resp.status_code == 200 else None
         except (httpx.HTTPError, ValueError) as exc:
             log.warning("DID resolution failed for %s: %s", did, exc)
             return None  # not cached: retry on the next message
-        self._cache[did] = (now, result if isinstance(result, dict) else None)
-        return self._cache[did][1]
+        value = result if isinstance(result, dict) else None
+        self._cache[did] = (now, value)
+        self._cache.move_to_end(did)
+        while len(self._cache) > self._cache_size:
+            self._cache.popitem(last=False)
+        return value
 
     @staticmethod
     def _from_document(kid: str, resolution: dict | None) -> KeyInfo | None:
