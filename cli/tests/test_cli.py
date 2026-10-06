@@ -108,6 +108,14 @@ def test_verify_bad_files_are_clean_errors(tmp_path, files):
     assert runner.invoke(app, ["verify", str(tmp_path / "missing.json"),
                                "--config", str(f["config"])]).exit_code == 4
     assert runner.invoke(app, ["verify", str(f["bundle"]), "--config", str(junk)]).exit_code == 3
+    # Past the shared nesting cap (2501 levels parse with json.loads on every platform).
+    deep = tmp_path / "deep.json"
+    deep.write_text('{"v":1,"x":' + "[" * 2500 + "]" * 2500 + "}", encoding="utf-8")
+    r = runner.invoke(app, ["verify", str(deep), "--config", str(f["config"])])
+    assert r.exit_code == 4 and "nested deeper than 2500 levels" in r.output
+    r = runner.invoke(app, ["verify", "-", "--config", str(f["config"])],
+                      input='{"v":1,"x":' + "[" * 2500 + "]" * 2500 + "}")
+    assert r.exit_code != 0 and "nested deeper than 2500 levels" in r.output
 
 
 def test_verify_json_is_machine_readable(files):

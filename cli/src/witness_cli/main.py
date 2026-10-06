@@ -23,7 +23,7 @@ from rich.console import Console
 from rich.table import Table
 from rich.text import Text
 from witness_core import bundle as wbundle
-from witness_core import rebased
+from witness_core import nesting, rebased
 from witness_core.ids import from_hex
 
 EXIT_VALID, EXIT_INVALID, EXIT_PARTIAL, EXIT_CONFIG, EXIT_ERROR = 0, 1, 2, 3, 4
@@ -86,9 +86,11 @@ def emit_json(doc: Any) -> None:
 
 def read_json_file(path: Path, what: str, code: int = EXIT_ERROR) -> Any:
     try:
-        return json.loads(path.read_text(encoding="utf-8"))
+        return nesting.loads(path.read_text(encoding="utf-8"))
     except OSError as exc:
         fail(f"cannot read {what} {path}: {exc.strerror or type(exc).__name__}", code)
+    except nesting.JsonTooDeep as exc:
+        fail(f"{what} {path} is {exc}", code)
     except ValueError:
         fail(f"{what} {path} is not valid JSON", code)
 
@@ -245,7 +247,9 @@ def verify(
         doc = call("GET", api, f"/proofs/{quote(bundle, safe='')}")
     elif bundle == "-":
         try:
-            doc = json.loads(sys.stdin.read())
+            doc = nesting.loads(sys.stdin.read())
+        except nesting.JsonTooDeep as exc:
+            fail(f"stdin is {exc}")
         except ValueError:
             fail("stdin is not valid JSON")
     else:
