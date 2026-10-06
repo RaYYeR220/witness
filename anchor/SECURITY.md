@@ -86,3 +86,8 @@ milestones with the on-chain record, never with the mirror.
 
 **Honest limit:** anchoring bounds the forgery window to the anchor interval. Milestones newer than
 the last anchored window are not protected yet.
+
+Only one loop may run per state file: it takes `${ANCHOR_STATE_PATH}.lock` with an exclusive
+create and refuses to start while a live process on the same host holds it (a lock left by a dead
+process is taken over). State writes are flushed (file, then directory where the OS allows it)
+before the next step relies on them.

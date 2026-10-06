@@ -5,6 +5,7 @@ import { ConfigError, loadConfig } from "./config.js";
 import { DidService, type PublicIdentity } from "./did.js";
 import { readJsonIfExists } from "./fsutil.js";
 import { HornetClient, HornetWindowVerifier } from "./hornet.js";
+import { LockError, acquireLock } from "./lock.js";
 import { log } from "./log.js";
 import { AnchorLoop } from "./loop.js";
 import { MirrorSigner, RelayClient } from "./mirror.js";
@@ -36,7 +37,11 @@ async function main(): Promise<void> {
   const identities = () => readJsonIfExists<IdentitiesFile>(cfg.identitiesFile);
 
   let loop: AnchorLoop | null = null;
+  let release = () => {};
   if (wallet) {
+    // One writer per state file and wallet: a second loop would race the first one's appends.
+    release = acquireLock(`${cp.statePath}.lock`);
+    process.on("exit", () => release());
     const hornet = new HornetClient(cp.hornetUrl!, cp.httpTimeoutMs);
     const ids = identities();
     const domain = cp.domain ?? ids?.domain ?? null;
@@ -85,14 +90,17 @@ async function main(): Promise<void> {
   const stop = (signal: string) => {
     log.info("shutting down", { signal });
     setTimeout(() => process.exit(0), 5000).unref();
-    void (loop?.stop() ?? Promise.resolve()).finally(() => server.close(() => process.exit(0)));
+    void (loop?.stop() ?? Promise.resolve()).finally(() => {
+      release();
+      server.close(() => process.exit(0));
+    });
   };
   process.on("SIGINT", () => stop("SIGINT"));
   process.on("SIGTERM", () => stop("SIGTERM"));
 }
 
 main().catch((err: unknown) => {
-  if (err instanceof ConfigError) process.stderr.write(`${err.message}\n`);
+  if (err instanceof ConfigError || err instanceof LockError) process.stderr.write(`${err.message}\n`);
   else log.error("anchor failed to start", { error: err });
   process.exit(1);
 });
