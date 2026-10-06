@@ -419,6 +419,8 @@ class MilestoneIds(ApiModel):
     to: int
     ids: list[str]
     complete: bool = Field(description="False when milestones in the range are not indexed")
+    msg_count: int = Field(description="Tagged-data messages referenced by the milestones of the "
+                                       "range, as indexed (what a checkpoint's msgCount commits to)")
 
 
 class VerifierConfigOut(ApiModel):

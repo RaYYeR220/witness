@@ -121,7 +121,8 @@ async def verifier_config(svc: Svc) -> m.VerifierConfigOut:
     description=(
         "Ids of the indexed milestones `from`..`to` (inclusive), in index order: what the "
         "anchor service commits to in a checkpoint's `msRoot`. `complete` is false when "
-        "some milestone of the range is not indexed."),
+        "some milestone of the range is not indexed. `msgCount` counts the tagged-data "
+        "messages those milestones reference, as indexed (a checkpoint's `msgCount`)."),
     responses={422: {"description": "Bad range (to < from, or more than 10 000)"}},
 )
 async def milestone_ids(
@@ -134,5 +135,6 @@ async def milestone_ids(
     if to - frm + 1 > MAX_MILESTONE_RANGE:
         raise HTTPException(422, f"at most {MAX_MILESTONE_RANGE} milestones per request")
     ids = await svc.store.milestone_ids(frm, to)
+    count = await svc.store.message_count(frm, to)
     return m.MilestoneIds(from_=frm, to=to, ids=["0x" + bytes(i).hex() for i in ids],
-                          complete=len(ids) == to - frm + 1)
+                          complete=len(ids) == to - frm + 1, msg_count=count)

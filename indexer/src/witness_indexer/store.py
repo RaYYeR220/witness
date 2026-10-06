@@ -642,6 +642,12 @@ class Store:
             "SELECT id FROM milestones WHERE idx BETWEEN %s AND %s ORDER BY idx", (frm, to))
         return [r["id"] for r in rows]
 
+    async def message_count(self, frm: int, to: int) -> int:
+        """Tagged-data messages referenced by milestones `frm`..`to`, as indexed."""
+        row = await self._one(
+            "SELECT count(*) AS n FROM messages WHERE ms_index BETWEEN %s AND %s", (frm, to))
+        return int(row["n"]) if row else 0
+
     async def seq_used(self, iss: str, seq: int, exclude_block_id: bytes) -> bytes | None:
         """Another block in which the issuer provably used `seq` (signed verdicts only)."""
         row = await self._one(

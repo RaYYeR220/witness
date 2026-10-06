@@ -443,13 +443,20 @@ async def test_config_verifier(client, vectors):
 
 
 async def test_milestones_range(client, store, vectors):
-    await seed_chain(store, vectors)
+    tagged = await seed_chain(store, vectors)
     expected = [m["milestoneId"] for m in vectors("milestones")]
     r = await client.get("/milestones", params={"from": 370, "to": 373})
     assert r.status_code == 200
-    assert r.json() == {"from": 370, "to": 373, "ids": expected, "complete": True}
+    assert r.json() == {"from": 370, "to": 373, "ids": expected, "complete": True,
+                        "msgCount": len(tagged)}
+    assert len(tagged) > 0
     partial = (await client.get("/milestones", params={"from": 369, "to": 373})).json()
     assert partial["ids"] == expected and partial["complete"] is False
+    one = (await client.get("/milestones", params={"from": 371, "to": 371})).json()
+    assert one["msgCount"] == sum(1 for idx in tagged.values() if idx == 371)
+    # Submissions not yet confirmed by a milestone are not counted.
+    assert (await client.get("/milestones", params={"from": 374, "to": 380})).json()[
+        "msgCount"] == 0
     assert (await client.get("/milestones", params={"from": 373, "to": 370})).status_code == 422
     assert (await client.get("/milestones",
                              params={"from": 1, "to": 1_000_000})).status_code == 422
