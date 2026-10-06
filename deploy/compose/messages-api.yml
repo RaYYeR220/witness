@@ -1,0 +1,17 @@
+# Legacy aeriOS messages relay (Flask) on iota-net. Host port is configurable because
+# 5555 is also adb's port: with an Android emulator running, set RELAY_PORT=5556.
+name: witness-relay
+services:
+  iota-messages-api:
+    image: eclipseaerios/iota-messages-api:1.0.2
+    container_name: iota-messages-api
+    restart: unless-stopped
+    ports:
+      - "${RELAY_PORT:-5555}:5555"
+    networks:
+      - iota-net
+
+networks:
+  iota-net:
+    name: iota-net
+    external: true

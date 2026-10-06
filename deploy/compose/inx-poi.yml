@@ -1,0 +1,20 @@
+name: witness-poi
+# Proof-of-inclusion INX extension; registers /api/poi/v1 on the HORNET REST API.
+services:
+  inx-poi:
+    image: iotaledger/inx-poi:1.0
+    container_name: inx-poi
+    restart: unless-stopped
+    ports:
+      - "9687:9687"
+    command:
+      - "--inx.address=iota-hornet:9029"
+      - "--restAPI.bindAddress=0.0.0.0:9687"
+      - "--restAPI.advertiseAddress=inx-poi:9687"
+    networks:
+      - iota-net
+
+networks:
+  iota-net:
+    name: iota-net
+    external: true

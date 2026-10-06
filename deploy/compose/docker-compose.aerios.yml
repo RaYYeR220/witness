@@ -1,0 +1,71 @@
+name: witness-aerios
+# aeriOS side of the local stack: Orion-LD, Mongo, Trust Manager, plus the
+# Postgres and Mosquitto that Witness itself uses. All services join iota-net so
+# Trust Manager can reach the messages relay and HORNET.
+services:
+  mongo-db:
+    image: mongo:4.4
+    container_name: mongo-db
+    restart: unless-stopped
+    ports:
+      - "27017:27017"
+    networks: [iota-net]
+
+  orion-ld:
+    image: fiware/orion-ld:latest
+    container_name: orion-ld
+    restart: unless-stopped
+    depends_on: [mongo-db]
+    ports:
+      - "1026:1026"
+    command: -dbhost mongo-db -logLevel INFO -forwarding
+    networks: [iota-net]
+
+  init-orion:
+    image: curlimages/curl:latest
+    container_name: init-orion
+    depends_on: [orion-ld]
+    networks: [iota-net]
+    restart: "no"
+    volumes:
+      - ./seed-orion.sh:/seed-orion.sh:ro
+    entrypoint: ["sh", "/seed-orion.sh"]
+
+  trustmanager:
+    image: eclipseaerios/trust-manager:latest
+    container_name: trustmanager
+    restart: unless-stopped
+    depends_on:
+      - orion-ld
+      - init-orion
+    ports:
+      - "3100:3000"
+    volumes:
+      - ./manager.ini:/manager/configs/manager.ini:ro
+    networks: [iota-net]
+
+  postgres:
+    image: postgres:16-alpine
+    container_name: witness-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_PASSWORD: witness
+    ports:
+      - "5432:5432"
+    networks: [iota-net]
+
+  mosquitto:
+    image: eclipse-mosquitto:2
+    container_name: witness-mosquitto
+    restart: unless-stopped
+    ports:
+      - "1883:1883"
+      - "9001:9001"
+    volumes:
+      - ./mosquitto.conf:/mosquitto/config/mosquitto.conf:ro
+    networks: [iota-net]
+
+networks:
+  iota-net:
+    name: iota-net
+    external: true
