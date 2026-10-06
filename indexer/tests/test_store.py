@@ -31,8 +31,8 @@ async def test_reprocess_milestone_idempotent(store: Store):
     assert await store.put_milestone(*args) is False
     assert await store.put_block(bid(1), 7, 0, b"raw", 5) is True
     assert await store.put_block(bid(1), 7, 0, b"raw", 5) is False
-    assert await store.put_message(row(70, ms_index=7, wf_index=0)) is True
-    assert await store.put_message(row(70, ms_index=7, wf_index=0)) is False
+    assert await store.put_message(row(70, ms_index=7, wf_index=0)) == "inserted"
+    assert await store.put_message(row(70, ms_index=7, wf_index=0)) is None
     al = Alert("r1", "high", bid(70), "ie-a", {"x": 1}, 5)
     assert await store.put_alert(al) is True
     assert await store.put_alert(al) is False
@@ -40,7 +40,7 @@ async def test_reprocess_milestone_idempotent(store: Store):
     assert (st["milestones"], st["blocks"], st["messages"], st["alerts"]) == (1, 1, 1, 1)
     # callers emit only for new rows
     for r in (row(70), row(71)):
-        if await store.put_message(r):
+        if await store.put_message(r) == "inserted":
             await store.emit("message", {})
     assert len(await store.events_after(0, 100)) == 1
 
@@ -144,22 +144,15 @@ async def test_cursor_and_milestones(store: Store):
 
 
 async def test_issuer_state_and_ie(store: Store):
-    await store.put_message(row(1, seq=1, json={"nonce": "a"}))
-    await store.put_message(row(2, seq=2, json={"nonce": "b"}))
+    await store.put_message(row(1, seq=1, nonce="a", verdict="PRODUCER_SIGNED"))
+    await store.put_message(row(2, seq=2, nonce="b", verdict="RELAY_ATTESTED"))
     seq, nonces = await store.issuer_state("did:a")
     assert seq == 2 and nonces == {"a", "b"}
     assert await store.issuer_state("none") == (None, set())
-    await store.put_ie_score("ie-a", 1, 1, 0.5, bid(1), "OK")
-    await store.put_ie_score("ie-a", 1, 1, 0.5, bid(1), "OK")
+    assert await store.put_ie_score("ie-a", 1, 1, 0.5, bid(1), "OK") is True
+    assert await store.put_ie_score("ie-a", 1, 1, 0.5, bid(1), "OK") is False
     assert [r["ie_id"] for r in await store.ie_list()] == ["ie-a"]
     assert len(await store.ie_lineage("ie-a")) == 2
-
-
-async def test_anchor(store: Store):
-    await store.put_anchor({"ms_index": 3, "root": b"r", "ref": "tx", "ts": 1, "extra": 1})
-    await store.put_anchor({"ms_index": 3, "root": b"r", "ref": "tx", "ts": 1})
-    a = await store.anchors()
-    assert len(a) == 1 and a[0]["meta"] == {"extra": 1}
 
 
 async def test_submission_dedupe(store: Store):
@@ -252,3 +245,128 @@ async def test_incidents(store: Store):
     one = await store.incident(iid)
     assert one["title"] == "t" and one["events"] == [{"block_id": bid(1), "role": "trigger"}]
     assert await store.incident(999) is None
+
+
+async def test_issuer_state_ignores_forged_and_excludes(store: Store):
+    await store.put_message(row(1, seq=1, nonce="a", verdict="PRODUCER_SIGNED"))
+    await store.put_message(row(2, seq=999999, nonce="evil", verdict="FORGED"))
+    await store.put_message(row(3, seq=2, nonce="c", verdict="RELAY_ATTESTED"))
+    assert await store.issuer_state("did:a") == (2, {"a", "c"})
+    assert await store.issuer_state("did:a", exclude_block_id=bid(3)) == (1, {"a"})
+
+
+async def test_confirmation_path(store: Store):
+    first = row(1, ms_index=None, wf_index=None, ts=0, verdict=None, nonce=None, iat=None,
+                received_at_ms=5000)
+    assert await store.put_message(first) == "inserted"
+    assert (await store.get_message(bid(1)))["confirmed_at_ms"] is None
+    done = row(1, ms_index=8, wf_index=3, ts=1700, verdict="PRODUCER_SIGNED", nonce="n1", iat=42)
+    assert await store.put_message(done) == "confirmed"
+    assert await store.put_message(done) is None
+    m = await store.get_message(bid(1))
+    assert (m["ms_index"], m["wf_index"], m["ts"], m["verdict"], m["nonce"], m["iat"]) == (
+        8, 3, 1700, "PRODUCER_SIGNED", "n1", 42)
+    assert m["confirmed_at_ms"] == 1_700_000 and m["received_at_ms"] == 5000
+
+
+async def test_date_filter_covers_indexer_only_rows(store: Store):
+    # indexer-only row: ts is in seconds -> 10_000 ms; relay row received at 5_000 ms
+    await store.put_message(row(1, ts=10, ms_index=1, wf_index=0, received_at_ms=None))
+    await store.put_message(row(2, ts=0, ms_index=None, wf_index=None, received_at_ms=5000))
+
+    async def ids(**kw):
+        items, _ = await store.query_messages(MessageFilter(**kw), None, 10)
+        return sorted(i["block_id"] for i in items)
+
+    assert await ids(date_from_ms=8000) == [bid(1)]
+    assert await ids(date_to_ms=8000) == [bid(2)]
+    assert await ids(date_from_ms=0, date_to_ms=20000) == [bid(1), bid(2)]
+
+
+async def test_alert_dedupe_key(store: Store):
+    def mk(key):
+        return Alert("STALE", "low", None, "ie-a", {}, 1, dedupe_key=key)
+
+    assert await store.put_alert(mk("w1")) is True
+    assert await store.put_alert(mk("w1")) is False
+    assert await store.put_alert(mk("w2")) is True
+
+
+async def test_anchors(store: Store):
+    kw = {"ms_root": b"r", "checkpoint": {"a": 1}, "checkpoint_hash": b"h",
+          "network": "iota-test", "created_at_ms": 1}
+    assert await store.put_anchor(seq=1, from_ms=10, to_ms=19, **kw) is True
+    assert await store.put_anchor(seq=1, from_ms=10, to_ms=19, **kw) is False
+    await store.put_anchor(seq=2, from_ms=20, to_ms=29, **kw)
+    assert (await store.anchor_covering(15))["seq"] == 1
+    assert (await store.anchor_covering(20))["seq"] == 2
+    assert await store.anchor_covering(30) is None
+    assert await store.set_anchor_status(2, "anchored", tx="0xabc", record=7) is True
+    assert await store.set_anchor_status(99, "failed") is False
+    a = (await store.anchors(10))[0]
+    assert (a["seq"], a["status"], a["tx"], a["record"]) == (2, "anchored", "0xabc", 7)
+    with pytest.raises(psycopg.errors.CheckViolation):
+        await store.set_anchor_status(1, "bogus")
+
+
+async def test_lifecycle_requires_an_id(store: Store):
+    with pytest.raises(ValueError):
+        await store.set_lifecycle(block_id=None, sub_id=None, status="SOLID", at_ms=1)
+    with pytest.raises(psycopg.errors.CheckViolation):
+        async with store._conn() as c:
+            await c.execute(
+                "INSERT INTO lifecycle (status, at_ms) VALUES ('SOLID', 1)")
+
+
+async def test_transaction_rolls_back_everything(store: Store):
+    class Boom(Exception):
+        pass
+
+    with pytest.raises(Boom):
+        async with store.transaction():
+            await store.put_message(row(1))
+            await store.emit("message", {})
+            await store.set_cursor(77)
+            await store.set_lifecycle(block_id=bid(1), sub_id=None, status="SOLID", at_ms=1)
+            raise Boom
+    st = await store.stats()
+    assert (st["messages"], st["events"], st["lifecycle"], st["cursor"]) == (0, 0, 0, 0)
+    async with store.transaction():
+        await store.put_message(row(1))
+        await store.emit("message", {})
+        await store.set_cursor(77)
+    st = await store.stats()
+    assert (st["messages"], st["events"], st["cursor"]) == (1, 1, 77)
+
+
+async def test_emit_ids_follow_commit_order(store: Store):
+    a_in, release = asyncio.Event(), asyncio.Event()
+
+    async def slow():
+        async with store.transaction():
+            await store.emit("a", {})
+            a_in.set()
+            await release.wait()
+
+    ta = asyncio.create_task(slow())
+    await a_in.wait()
+    tb = asyncio.create_task(store.emit("b", {}))
+    await asyncio.sleep(0.3)
+    # B must wait for A: nothing is visible yet and B has not been allocated an id
+    assert not tb.done()
+    assert await store.events_after(0, 10) == []
+    release.set()
+    await ta
+    await tb
+    evs = await store.events_after(0, 10)
+    assert [e["type"] for e in evs] == ["a", "b"]
+    assert evs[0]["id"] < evs[1]["id"]
+
+
+async def test_incident_events_ordered_by_time(store: Store):
+    await store.put_message(row(1, ts=300))
+    await store.put_message(row(2, ts=100))
+    iid = await store.put_incident(opened_at_ms=1, severity="high", title="t")
+    await store.attach_incident_event(iid, bid(1), "late")
+    await store.attach_incident_event(iid, bid(2), "early")
+    assert [e["role"] for e in (await store.incident(iid))["events"]] == ["early", "late"]

@@ -10,6 +10,8 @@ import base64
 import json
 import time
 from collections.abc import AsyncIterator
+from contextlib import asynccontextmanager
+from contextvars import ContextVar
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Literal
@@ -22,6 +24,7 @@ from psycopg_pool import AsyncConnectionPool
 
 from .events import NOTIFY_CHANNEL
 
+EMIT_LOCK = 7_700_001
 MIGRATIONS_DIR = Path(__file__).parent / "migrations"
 
 LIFECYCLE_STATUSES = frozenset({
@@ -31,7 +34,7 @@ LIFECYCLE_STATUSES = frozenset({
 
 MESSAGE_COLS = (
     "block_id, tag, kind, data, json, ie_id, canon_hash, iss, kid, seq, iat, verdict, "
-    "encrypted, ms_index, wf_index, ts, prev, corr, status, received_at_ms, confirmed_at_ms"
+    "encrypted, ms_index, wf_index, ts, prev, corr, nonce, status, received_at_ms, confirmed_at_ms"
 )
 
 COUNTED_TABLES = (
@@ -53,7 +56,7 @@ class MessageRow:
     tag: str | None = None
     kind: str | None = None
     data: bytes | None = None
-    json: dict = field(default_factory=dict)
+    json: dict | None = field(default_factory=dict)
     ie_id: str | None = None
     canon_hash: bytes | None = None
     iss: str | None = None
@@ -67,6 +70,7 @@ class MessageRow:
     wf_index: int | None = None
     prev: bytes | None = None
     corr: str | None = None
+    nonce: str | None = None
     status: str | None = None
     received_at_ms: int | None = None
     confirmed_at_ms: int | None = None
@@ -95,6 +99,7 @@ class Alert:
     ie_id: str | None
     evidence: dict
     ts: int
+    dedupe_key: str | None = None
 
 
 @dataclass
@@ -141,6 +146,8 @@ class Store:
         self._pool = pool
         self.dsn = dsn
         self.schema = schema
+        self._tx: ContextVar[psycopg.AsyncConnection | None] = ContextVar(
+            f"witness_tx_{id(self)}", default=None)
 
     @classmethod
     async def open(cls, dsn: str, *, schema: str = "witness") -> Store:
@@ -170,8 +177,30 @@ class Store:
 
     # -- plumbing ---------------------------------------------------------------------------
 
+    @asynccontextmanager
+    async def _conn(self) -> AsyncIterator[psycopg.AsyncConnection]:
+        pinned = self._tx.get()
+        if pinned is not None:
+            yield pinned
+        else:
+            async with self._pool.connection() as c:
+                yield c
+
+    @asynccontextmanager
+    async def transaction(self) -> AsyncIterator[None]:
+        """Run every store call made in this task inside one database transaction."""
+        if self._tx.get() is not None:
+            yield  # nested: join the outer transaction
+            return
+        async with self._pool.connection() as c, c.transaction():
+            token = self._tx.set(c)
+            try:
+                yield
+            finally:
+                self._tx.reset(token)
+
     async def _fetch(self, query: str, params: tuple | list = ()) -> list[dict]:
-        async with self._pool.connection() as c:
+        async with self._conn() as c:
             cur = await c.execute(query, params)
             return await cur.fetchall()
 
@@ -179,9 +208,14 @@ class Store:
         rows = await self._fetch(query, params)
         return rows[0] if rows else None
 
+    async def _insert_like(self, query: str, params: tuple | list) -> bool:
+        async with self._conn() as c:
+            cur = await c.execute(query, params)
+            return cur.rowcount > 0
+
     async def _insert(self, query: str, params: tuple | list) -> bool:
         """Run an INSERT ... ON CONFLICT DO NOTHING; True when a row was inserted."""
-        async with self._pool.connection() as c:
+        async with self._conn() as c:
             cur = await c.execute(query, params)
             return cur.rowcount == 1
 
@@ -235,41 +269,49 @@ class Store:
             "VALUES (%s,%s,%s,%s,%s) ON CONFLICT DO NOTHING",
             (id, ms_index, wf_index, raw, payload_type))
 
-    async def put_message(self, m: MessageRow) -> bool:
-        """Insert a message. A row first seen unconfirmed is later completed by a re-put that
-        carries its milestone index; that completion is not reported as a new insert."""
+    async def put_message(self, m: MessageRow) -> Literal["inserted", "confirmed"] | None:
+        """Insert a message. Returns "inserted" for a new row, "confirmed" when an unconfirmed
+        row was completed by a re-put carrying its milestone position, None for a duplicate."""
         query = """
             INSERT INTO messages (block_id, tag, kind, data, json, ie_id, canon_hash, iss, kid,
-                seq, iat, verdict, encrypted, ms_index, wf_index, ts, prev, corr, status,
-                received_at_ms, confirmed_at_ms)
+                seq, iat, verdict, encrypted, ms_index, wf_index, ts, prev, corr, nonce,
+                status, received_at_ms, confirmed_at_ms)
             VALUES (%(block_id)s, %(tag)s, %(kind)s, %(data)s, %(json)s, %(ie_id)s,
                 %(canon_hash)s, %(iss)s, %(kid)s, %(seq)s, %(iat)s, %(verdict)s, %(encrypted)s,
                 %(ms_index)s, COALESCE(%(wf_index)s, (SELECT wf_index FROM blocks
                     WHERE id = %(block_id)s)),
-                %(ts)s, %(prev)s, %(corr)s,
+                %(ts)s, %(prev)s, %(corr)s, %(nonce)s,
                 COALESCE(%(status)s, (SELECT status FROM lifecycle WHERE block_id = %(block_id)s
                     ORDER BY at_ms DESC, id DESC LIMIT 1)),
                 COALESCE(%(received_at_ms)s, (SELECT received_at_ms FROM submissions
                     WHERE block_id = %(block_id)s)),
-                COALESCE(%(confirmed_at_ms)s, (SELECT min(at_ms) FROM lifecycle
-                    WHERE block_id = %(block_id)s AND status = 'CONFIRMED')))
+                COALESCE(%(confirmed_at_ms)s,
+                    CASE WHEN %(ms_index)s::bigint IS NOT NULL THEN %(ts)s::bigint * 1000 END,
+                    (SELECT min(at_ms) FROM lifecycle
+                     WHERE block_id = %(block_id)s AND status = 'CONFIRMED')))
             ON CONFLICT (block_id) DO UPDATE SET
                 ms_index = excluded.ms_index,
                 wf_index = excluded.wf_index,
-                confirmed_at_ms = COALESCE(messages.confirmed_at_ms, excluded.confirmed_at_ms)
+                ts = excluded.ts,
+                verdict = excluded.verdict,
+                iat = excluded.iat,
+                nonce = excluded.nonce,
+                confirmed_at_ms = excluded.ts * 1000
             WHERE messages.ms_index IS NULL AND excluded.ms_index IS NOT NULL
             RETURNING (xmax = 0) AS inserted
         """
         params = {
             "block_id": m.block_id, "tag": m.tag, "kind": m.kind, "data": m.data,
-            "json": Jsonb(m.json), "ie_id": m.ie_id, "canon_hash": m.canon_hash, "iss": m.iss,
+            "json": _jb(m.json), "ie_id": m.ie_id, "canon_hash": m.canon_hash, "iss": m.iss,
             "kid": m.kid, "seq": m.seq, "iat": m.iat, "verdict": m.verdict,
             "encrypted": m.encrypted, "ms_index": m.ms_index, "wf_index": m.wf_index,
-            "ts": m.ts, "prev": m.prev, "corr": m.corr, "status": m.status,
+            "ts": m.ts, "prev": m.prev, "corr": m.corr, "nonce": m.nonce, "status": m.status,
             "received_at_ms": m.received_at_ms, "confirmed_at_ms": m.confirmed_at_ms,
         }
         rows = await self._fetch(query, params)  # type: ignore[arg-type]
-        return bool(rows and rows[0]["inserted"])
+        if not rows:
+            return None
+        return "inserted" if rows[0]["inserted"] else "confirmed"
 
     async def put_blind(self, token: str, block_id: bytes) -> None:
         await self._insert(
@@ -284,19 +326,34 @@ class Store:
             (ie_id, ms_index, ts, score, block_id, verdict))
 
     async def put_alert(self, a: Alert) -> bool:
-        """Dedupe key is (rule, block_id, ie_id)."""
+        """Dedupe key is (rule, block_id, ie_id, dedupe_key)."""
         return await self._insert(
-            "INSERT INTO alerts (rule, severity, block_id, ie_id, evidence, ts) "
-            "VALUES (%s,%s,%s,%s,%s,%s) ON CONFLICT DO NOTHING",
-            (a.rule, a.severity, a.block_id, a.ie_id, Jsonb(a.evidence), a.ts))
+            "INSERT INTO alerts (rule, severity, block_id, ie_id, evidence, ts, dedupe_key) "
+            "VALUES (%s,%s,%s,%s,%s,%s,%s) ON CONFLICT DO NOTHING",
+            (a.rule, a.severity, a.block_id, a.ie_id, Jsonb(a.evidence), a.ts, a.dedupe_key))
 
-    async def put_anchor(self, a: dict) -> bool:
-        known = {"ms_index", "root", "ref", "ts"}
-        meta = {k: v for k, v in a.items() if k not in known}
+    async def put_anchor(self, *, seq: int, from_ms: int, to_ms: int, ms_root: bytes | None,
+                         checkpoint: dict | None, checkpoint_hash: bytes | None,
+                         network: str | None, created_at_ms: int, tx: str | None = None,
+                         record: int | None = None, status: str = "pending") -> bool:
+        """Insert an anchor batch keyed by seq; False if that seq already exists."""
         return await self._insert(
-            "INSERT INTO anchors (ms_index, root, ref, ts, meta) VALUES (%s,%s,%s,%s,%s) "
-            "ON CONFLICT DO NOTHING",
-            (a["ms_index"], a.get("root"), a.get("ref"), a.get("ts"), Jsonb(meta)))
+            "INSERT INTO anchors (seq, from_ms, to_ms, ms_root, checkpoint, checkpoint_hash, "
+            "network, tx, record, status, created_at_ms) "
+            "VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s) ON CONFLICT DO NOTHING",
+            (seq, from_ms, to_ms, ms_root, _jb(checkpoint), checkpoint_hash, network, tx,
+             record, status, created_at_ms))
+
+    async def set_anchor_status(self, seq: int, status: str, tx: str | None = None,
+                                record: int | None = None) -> bool:
+        return await self._insert_like(
+            "UPDATE anchors SET status = %s, tx = COALESCE(%s, tx), "
+            "record = COALESCE(%s, record) WHERE seq = %s", (status, tx, record, seq))
+
+    async def anchor_covering(self, ms_index: int) -> dict | None:
+        return await self._one(
+            "SELECT * FROM anchors WHERE from_ms <= %s AND to_ms >= %s "
+            "ORDER BY seq DESC LIMIT 1", (ms_index, ms_index))
 
     # -- submissions, validation, lifecycle -------------------------------------------------
 
@@ -331,7 +388,7 @@ class Store:
             raise ValueError(f"unknown lifecycle status {status!r}")
         if block_id is None and sub_id is None:
             raise ValueError("block_id or sub_id is required")
-        async with self._pool.connection() as c, c.transaction():
+        async with self._conn() as c, c.transaction():
             if block_id is None:
                 cur = await c.execute(
                     "SELECT block_id FROM submissions WHERE sub_id = %s", (sub_id,))
@@ -358,7 +415,10 @@ class Store:
     # -- events -----------------------------------------------------------------------------
 
     async def emit(self, type: str, payload: dict) -> int:
-        async with self._pool.connection() as c, c.transaction():
+        async with self._conn() as c, c.transaction():
+            # Serialise emitters so id allocation order equals commit order; a reader that
+            # polls events_after() can then never skip an id that commits late.
+            await c.execute("SELECT pg_advisory_xact_lock(%s)", (EMIT_LOCK,))
             cur = await c.execute(
                 "INSERT INTO events (type, payload, ts) VALUES (%s,%s,%s) RETURNING id",
                 (type, Jsonb(payload), _now_ms()))
@@ -413,9 +473,9 @@ class Store:
         if f.t_to is not None:
             add("ts <= %s", f.t_to)
         if f.date_from_ms is not None:
-            add("COALESCE(received_at_ms, ts) >= %s", f.date_from_ms)
+            add("COALESCE(received_at_ms, confirmed_at_ms, ts * 1000) >= %s", f.date_from_ms)
         if f.date_to_ms is not None:
-            add("COALESCE(received_at_ms, ts) <= %s", f.date_to_ms)
+            add("COALESCE(received_at_ms, confirmed_at_ms, ts * 1000) <= %s", f.date_to_ms)
         if f.q:
             add("tsv @@ plainto_tsquery('simple', %s)", f.q)
         if f.jsonpath_eq is not None:
@@ -488,12 +548,21 @@ class Store:
             "SELECT id FROM milestones WHERE idx BETWEEN %s AND %s ORDER BY idx", (frm, to))
         return [r["id"] for r in rows]
 
-    async def issuer_state(self, iss: str) -> tuple[int | None, set[str]]:
-        """Highest sequence number seen for an issuer plus its most recent nonces."""
-        top = await self._one("SELECT max(seq) AS seq FROM messages WHERE iss = %s", (iss,))
+    async def issuer_state(self, iss: str, exclude_block_id: bytes | None = None
+                           ) -> tuple[int | None, set[str]]:
+        """Highest sequence number and recent nonces seen for an issuer.
+
+        Only messages whose verdict proves the issuer (producer-signed or relay-attested)
+        count, so a forged message cannot move the state. `exclude_block_id` lets a
+        reprocessed message be judged without seeing itself.
+        """
+        args = (iss, exclude_block_id, exclude_block_id)
+        cond = ("iss = %s AND verdict IN ('PRODUCER_SIGNED', 'RELAY_ATTESTED') "
+                "AND (%s::bytea IS NULL OR block_id <> %s::bytea)")
+        top = await self._one(f"SELECT max(seq) AS seq FROM messages WHERE {cond}", args)
         rows = await self._fetch(
-            "SELECT json->>'nonce' AS nonce FROM messages WHERE iss = %s "
-            "AND json ? 'nonce' ORDER BY ts DESC, block_id LIMIT 500", (iss,))
+            f"SELECT nonce FROM messages WHERE {cond} AND nonce IS NOT NULL "
+            f"ORDER BY ts DESC, block_id LIMIT 500", args)
         return (top["seq"] if top else None), {r["nonce"] for r in rows}
 
     # -- flows ------------------------------------------------------------------------------
@@ -527,12 +596,12 @@ class Store:
             where.append("ts >= %s")
             params.append(f["since"])
         return await self._fetch(
-            f"SELECT id, rule, severity, block_id, ie_id, evidence, ts FROM alerts "
+            f"SELECT id, rule, severity, block_id, ie_id, evidence, ts, dedupe_key FROM alerts "
             f"WHERE {' AND '.join(where)} ORDER BY ts DESC, id DESC LIMIT %s",
             [*params, limit])
 
-    async def anchors(self) -> list[dict]:
-        return await self._fetch("SELECT * FROM anchors ORDER BY ms_index DESC")
+    async def anchors(self, limit: int = 100) -> list[dict]:
+        return await self._fetch("SELECT * FROM anchors ORDER BY seq DESC LIMIT %s", (limit,))
 
     async def stats(self) -> dict:
         parts = " UNION ALL ".join(
@@ -554,8 +623,9 @@ class Store:
 
     async def attach_incident_event(self, incident_id: int, block_id: bytes, role: str) -> None:
         await self._insert(
-            "INSERT INTO incident_events (incident_id, block_id, role) VALUES (%s,%s,%s) "
-            "ON CONFLICT DO NOTHING", (incident_id, block_id, role))
+            "INSERT INTO incident_events (incident_id, block_id, role, attached_at_ms) "
+            "VALUES (%s,%s,%s,%s) ON CONFLICT DO NOTHING",
+            (incident_id, block_id, role, _now_ms()))
 
     async def incidents(self, f: dict | None = None, limit: int = 200) -> list[dict]:
         f = f or {}
@@ -576,6 +646,7 @@ class Store:
         if inc is None:
             return None
         inc["events"] = await self._fetch(
-            "SELECT block_id, role FROM incident_events WHERE incident_id = %s "
-            "ORDER BY block_id", (id,))
+            "SELECT e.block_id, e.role FROM incident_events e "
+            "LEFT JOIN messages m ON m.block_id = e.block_id WHERE e.incident_id = %s "
+            "ORDER BY m.ts NULLS LAST, e.attached_at_ms, e.block_id", (id,))
         return inc

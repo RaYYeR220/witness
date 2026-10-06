@@ -24,7 +24,7 @@ CREATE TABLE messages (
     tag             text,
     kind            text,
     data            bytea,
-    json            jsonb NOT NULL DEFAULT '{}',
+    json            jsonb,
     ie_id           text,
     canon_hash      bytea,
     iss             text,
@@ -38,6 +38,7 @@ CREATE TABLE messages (
     ts              bigint NOT NULL DEFAULT 0,
     prev            bytea,
     corr            text,
+    nonce           text,
     status          text,
     received_at_ms  bigint,
     confirmed_at_ms bigint,
@@ -48,6 +49,7 @@ CREATE INDEX messages_tsv_gin  ON messages USING gin (tsv);
 CREATE INDEX messages_tag      ON messages (tag);
 CREATE INDEX messages_ie       ON messages (ie_id);
 CREATE INDEX messages_iss_seq  ON messages (iss, seq);
+CREATE INDEX messages_iss_nonce ON messages (iss, nonce);
 CREATE INDEX messages_corr     ON messages (corr);
 CREATE INDEX messages_canon    ON messages (canon_hash);
 CREATE INDEX messages_ms       ON messages (ms_index DESC, wf_index DESC);
@@ -77,18 +79,28 @@ CREATE TABLE alerts (
     block_id bytea,
     ie_id    text,
     evidence jsonb  NOT NULL DEFAULT '{}',
-    ts       bigint NOT NULL
+    ts       bigint NOT NULL,
+    dedupe_key text
 );
 CREATE UNIQUE INDEX alerts_dedupe
-    ON alerts (rule, coalesce(block_id, ''::bytea), coalesce(ie_id, ''));
+    ON alerts (rule, coalesce(block_id, ''::bytea), coalesce(ie_id, ''),
+               coalesce(dedupe_key, ''));
 
 CREATE TABLE anchors (
-    ms_index bigint PRIMARY KEY,
-    root     bytea,
-    ref      text,
-    ts       bigint,
-    meta     jsonb NOT NULL DEFAULT '{}'
+    seq             bigint PRIMARY KEY,
+    from_ms         integer NOT NULL,
+    to_ms           integer NOT NULL,
+    ms_root         bytea,
+    checkpoint      jsonb,
+    checkpoint_hash bytea,
+    network         text,
+    tx              text,
+    record          bigint,
+    status          text NOT NULL DEFAULT 'pending'
+        CHECK (status IN ('pending', 'anchored', 'failed', 'mismatch')),
+    created_at_ms   bigint NOT NULL
 );
+CREATE INDEX anchors_range ON anchors (from_ms, to_ms);
 
 CREATE TABLE events (
     id      bigserial PRIMARY KEY,
@@ -122,7 +134,7 @@ CREATE TABLE validations (
     block_id              bytea  NOT NULL,
     checked_at_ms         bigint NOT NULL,
     is_solid              boolean NOT NULL,
-    referenced_by_ms      integer,
+    referenced_by_ms      bigint,
     ledger_inclusion_state text,
     should_reattach       boolean
 );
@@ -144,7 +156,8 @@ CREATE TABLE lifecycle (
     status   text   NOT NULL CHECK (status IN ('RECEIVED', 'SUBMITTED', 'SOLID', 'CONFIRMED',
         'CONTENT_VERIFIED', 'CONTENT_MISMATCH', 'NOT_FOUND', 'ORPHANED', 'SHADOW')),
     at_ms    bigint NOT NULL,
-    detail   jsonb
+    detail   jsonb,
+    CHECK (block_id IS NOT NULL OR sub_id IS NOT NULL)
 );
 CREATE INDEX lifecycle_block ON lifecycle (block_id, at_ms);
 CREATE INDEX lifecycle_sub   ON lifecycle (sub_id);
@@ -163,5 +176,6 @@ CREATE TABLE incident_events (
     incident_id bigint NOT NULL REFERENCES incidents (id) ON DELETE CASCADE,
     block_id    bytea  NOT NULL,
     role        text   NOT NULL,
+    attached_at_ms bigint NOT NULL DEFAULT 0,
     PRIMARY KEY (incident_id, block_id)
 );
