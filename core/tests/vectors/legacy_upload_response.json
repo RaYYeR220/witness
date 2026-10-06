@@ -1,0 +1,13 @@
+{
+  "request": {
+    "tag": "trust.score",
+    "message": {
+      "score": 0.5,
+      "id": "MyDomain:aabbccddeeff"
+    }
+  },
+  "status": 200,
+  "contentType": "application/json",
+  "bodyUtf8": "{\n  \"return_payload\": \"{\\\"blockId\\\":\\\"0x972a878cf06f2cf6b7d4a1443dbb5f12fdda376fa7537a82dad8e7257a477967\\\"}\\n\",\n  \"status_code\": 201\n}\n",
+  "bodyHex": "7b0a20202272657475726e5f7061796c6f6164223a20227b5c22626c6f636b49645c223a5c223078393732613837386366303666326366366237643461313434336462623566313266646461333736666137353337613832646164386537323537613437373936375c227d5c6e222c0a2020227374617475735f636f6465223a203230310a7d0a"
+}

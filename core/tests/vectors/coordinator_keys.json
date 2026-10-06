@@ -1,0 +1,15 @@
+{
+  "_source": {
+    "note": "Test-only data, already public in the eclipse-aerios/iota-tangle repository.",
+    "public": "docker/config_private_tangle.json: protocol.publicKeyRanges[].key",
+    "private": "docker/main/hornet-main.yaml: inx-coordinator COO_PRV_KEYS (same value in docker/main/startup.yaml); 64 bytes = seed || public key"
+  },
+  "publicKeys": [
+    "0xed3c3f1a319ff4e909cf2771d79fece0ac9bd9fd2ee49ea6c0885c9cb3b1248c",
+    "0xf6752f5f46a53364e2ee9c4d662d762a81efd51010282a75cd6bd03f28ef349c"
+  ],
+  "privateKeys": [
+    "0x651941eddb3e68cb1f6ef4ef5b04625dcf5c70de1fdc4b1c9eadb2c219c074e0ed3c3f1a319ff4e909cf2771d79fece0ac9bd9fd2ee49ea6c0885c9cb3b1248c",
+    "0x0e324c6ff069f31890d496e9004636fd73d8e8b5bea08ec58a4178ca85462325f6752f5f46a53364e2ee9c4d662d762a81efd51010282a75cd6bd03f28ef349c"
+  ]
+}
