@@ -68,7 +68,9 @@ def _text(v: Any) -> bool:
 
 
 def _number(v: Any) -> bool:
-    return isinstance(v, (int, float)) and not isinstance(v, bool) and math.isfinite(v)
+    if isinstance(v, float):
+        return math.isfinite(v)  # ints may be huge; isfinite would overflow on them
+    return isinstance(v, int) and not isinstance(v, bool)
 
 
 def _uint(v: Any) -> bool:
@@ -106,7 +108,11 @@ def _witness_anchor(m: dict) -> tuple[bool, str | None]:
     cp = m.get("checkpoint")
     if checkpoint.shape_error(cp) is not None or not _h32(m.get("checkpointHash")):
         return False, None
-    if "0x" + checkpoint.hash(cp).hex() != m["checkpointHash"]:
+    try:
+        digest = checkpoint.hash(cp)
+    except ValueError:  # JCS refuses lone surrogates and similar
+        return False, None
+    if "0x" + digest.hex() != m["checkpointHash"]:
         return False, None
     rebased = m.get("rebased")
     ok = (
@@ -145,6 +151,14 @@ def _opt_str(v: Any) -> str | None:
 
 
 def classify(tag: str, data: bytes) -> Classified:
+    try:
+        return _classify(tag, data)
+    except Exception:  # noqa: BLE001 - classification must never take the indexer down
+        kind = KINDS.get(tag, UNKNOWN) if isinstance(tag, str) else UNKNOWN
+        return Classified(kind, None, None, None, False)
+
+
+def _classify(tag: str, data: bytes) -> Classified:
     obj = _parse(data)
     if obj is _NOT_JSON:
         return Classified(UNKNOWN, None, None, None, False)

@@ -16,6 +16,7 @@ Ladder: 1 block_hash, 2 inclusion, 3 milestone_signatures, 4 envelope,
 from __future__ import annotations
 
 import json
+import re
 from collections.abc import Callable
 from dataclasses import dataclass
 from typing import Any, Literal
@@ -35,6 +36,7 @@ STEP_NAMES: tuple[StepName, ...] = (
 )
 VERSION = 1
 _MAX_INT = 2**53 - 1
+_CANON_HEX = re.compile(r"0x(?:[0-9a-f]{2})*")
 _KEY_SLOTS = {"Ed25519": "ed", "X25519": "x"}
 
 
@@ -206,12 +208,16 @@ def _obj(v: Any, what: str) -> dict:
 
 
 def _hex(v: Any, what: str, size: int | None = None) -> bytes:
+    """Decode strict lowercase 0x-hex; anything a canonical builder would not emit fails."""
     if not isinstance(v, str):
         raise _Fail(f"{what} is missing or not a hex string")
-    try:
-        raw = from_hex(v)
-    except ValueError:
-        raise _Fail(f"{what} is not valid hex") from None
+    if not _CANON_HEX.fullmatch(v):
+        try:
+            from_hex(v)
+        except ValueError:
+            raise _Fail(f"{what} is not valid hex") from None
+        raise _Fail(f"{what}: non-canonical hex (expected lowercase with 0x prefix)")
+    raw = bytes.fromhex(v[2:])
     if size is not None and len(raw) != size:
         raise _Fail(f"{what} must be {size} bytes")
     return raw
@@ -291,6 +297,9 @@ def _step_signatures(b: dict, cfg: VerifierConfig) -> tuple[bool | None, str]:
     threshold = cfg.threshold
     if not isinstance(threshold, int) or isinstance(threshold, bool) or threshold < 1:
         return False, "verifier threshold must be at least 1"
+    if b.get("network") != cfg.network:
+        # Coordinator keys are pinned for one network; a foreign label is a foreign milestone.
+        return False, f"bundle network {b.get('network')!r} is not the pinned {cfg.network!r}"
     essence_bytes, essence = _essence(b)
     ms = _obj(b.get("milestone"), "milestone")
     mid = codec.milestone_id(essence_bytes)
@@ -302,14 +311,10 @@ def _step_signatures(b: dict, cfg: VerifierConfig) -> tuple[bool | None, str]:
     if not isinstance(sigs, list):
         raise _Fail("milestone.signatures is missing or not a list")
     valid: set[bytes] = set()
-    for entry in sigs:
-        if not isinstance(entry, dict):
-            continue
-        try:
-            pk = _hex(entry.get("pk"), "pk", codec.PUBKEY_LEN)
-            sig = _hex(entry.get("sig"), "sig", codec.SIG_LEN)
-        except _Fail:
-            continue
+    for i, entry in enumerate(sigs):
+        entry = _obj(entry, f"milestone.signatures[{i}]")
+        pk = _hex(entry.get("pk"), f"milestone.signatures[{i}].pk", codec.PUBKEY_LEN)
+        sig = _hex(entry.get("sig"), f"milestone.signatures[{i}].sig", codec.SIG_LEN)
         if pk not in cfg.trusted_coordinator_keys or pk in valid:
             continue
         try:
@@ -430,8 +435,6 @@ def _step_anchor(
 ) -> tuple[bool | None, str]:
     if b.get("anchor") is None:
         return None, "bundle carries no anchor"
-    if fetch is None:
-        return None, "anchor not checked: no record fetcher"
     anchor = _obj(b["anchor"], "anchor")
     cp = anchor.get("checkpoint")
     problem = checkpoint.shape_error(cp)
@@ -449,12 +452,16 @@ def _step_anchor(
     if not (in_range and merkle.verify(mid, path, from_hex(cp["msRoot"]))):
         return False, "milestone not in anchored checkpoint"
     rebased = _obj(anchor.get("rebased"), "anchor.rebased")
-    if cfg.trail_id is None:
+    if not _uint(rebased.get("record")):
+        return False, "anchor.rebased.record must be an unsigned integer"
+    if cfg.trail_id is None or cfg.rebased_network is None:
         return None, "anchor not checked: verifier pins no Rebased trail"
     if rebased.get("trail") != cfg.trail_id:
         return False, "anchor trail is not the pinned trail"
-    if cfg.rebased_network is not None and rebased.get("network") != cfg.rebased_network:
+    if rebased.get("network") != cfg.rebased_network:
         return False, "anchor is not on the pinned Rebased network"
+    if fetch is None:
+        return None, "anchor not checked: no record fetcher"
     try:
         record = fetch(anchor)
     except Exception as exc:  # noqa: BLE001 - an unreachable chain is not a verdict
@@ -495,10 +502,19 @@ def verify(
 ) -> Ladder:
     """Run the five-step ladder. Never raises on bad input.
 
-    `fetch_anchor_record` reads the on-chain checkpoint record for step 5;
-    `resolve_did` returns the issuer's DID document from the trusted registry
-    (`{"doc", "version", "keys"}`) for step 4. Without them those steps stay
-    unevaluated (None): the bundle's own snapshot never authenticates a signer.
+    `fetch_anchor_record(anchor)` returns the on-chain checkpoint record for
+    step 5 (`{"checkpointHash"}` and/or `{"checkpoint"}`, None if unreachable).
+    It must read record `anchor["rebased"]["record"]` from the verifier's pinned
+    trail on the pinned Rebased network (`cfg.trail_id`, `cfg.rebased_network`)
+    and ignore the bundle's `tx` and `network`. It is only called once the
+    checkpoint, membership path and pins have been checked locally.
+
+    `resolve_did(did)` returns the issuer's DID document from the trusted
+    registry (`{"doc", "version", "keys"}`) for step 4.
+
+    Without them steps 4 and 5 can be at best unevaluated (None): the bundle's
+    own snapshot never authenticates a signer, and an anchor is never confirmed
+    without the on-chain record. Local contradictions are red either way.
     """
     if not isinstance(b, dict) or not _uint(b.get("v")) or b.get("v") != VERSION:
         reason = "not a witness-proof/v1 bundle"

@@ -241,6 +241,14 @@ def _drop_sig(b: dict) -> dict:
     return out
 
 
+def _set(b: dict, path: tuple, value: Any) -> dict:
+    target = b
+    for key in path[:-1]:
+        target = target[key]
+    target[path[-1]] = value
+    return b
+
+
 def _fetch(record: Any):
     return lambda anchor: copy.deepcopy(record)
 
@@ -402,19 +410,67 @@ def test_essence_tamper_breaks_signatures_and_root(vectors):
     assert ladder.overall == "INVALID"
 
 
-def test_root_comes_from_essence_not_bundle(vectors):
-    """A bundle-supplied root (and a path to it) must not satisfy step 2."""
-    b = _real_bundle(vectors)
-    bid = from_hex(b["block"]["id"])
+def _with_fake_root(b: dict) -> dict:
+    """Point the inclusion path at a root of our choosing and claim that root in the bundle."""
+    out = copy.deepcopy(b)
+    bid = from_hex(out["block"]["id"])
     fake_cone = [bid, b"\x99" * 32]
-    fake_root = merkle.root(fake_cone)
-    b["inclusion"]["path"] = [
+    fake_root = to_hex(merkle.root(fake_cone))
+    out["inclusion"]["path"] = [
         {"side": s.side, "hash": to_hex(s.hash)} for s in merkle.audit_path(fake_cone, 0)
     ]
-    b["inclusion"]["root"] = to_hex(fake_root)
-    b["inclusion"]["inclusionMerkleRoot"] = to_hex(fake_root)
-    b["milestone"]["inclusionMerkleRoot"] = to_hex(fake_root)
+    out["inclusion"]["root"] = fake_root
+    out["inclusion"]["inclusionMerkleRoot"] = fake_root
+    out["milestone"]["inclusionMerkleRoot"] = fake_root
+    return out
+
+
+def test_root_comes_from_essence_not_bundle(vectors):
+    """A bundle-supplied root (and a path to it) must not satisfy step 2."""
+    b = _with_fake_root(_real_bundle(vectors))
     assert _step(bundle.verify(b, _cfg(vectors)), "inclusion").ok is False
+
+
+def test_bundle_network_must_be_pinned(vectors):
+    """Coordinator keys are pinned per network, so a foreign network label fails step 3."""
+    ladder = bundle.verify(_real_bundle(vectors), _cfg(vectors, network="another_tangle"))
+    assert _ok(ladder) == "TTFNN INVALID"
+    assert "network" in _step(ladder, "milestone_signatures").detail
+    b = _real_bundle(vectors)
+    b["network"] = "another_tangle"
+    assert _ok(bundle.verify(b, _cfg(vectors))) == "TTFNN INVALID"
+
+
+@pytest.mark.parametrize(
+    "where,mutate,expect",
+    [
+        ("raw upper", lambda b: _set(b, ("block", "raw"), b["block"]["raw"].upper()), "F"),
+        ("raw no 0x", lambda b: _set(b, ("block", "raw"), b["block"]["raw"][2:]), "F"),
+        ("id upper", lambda b: _set(b, ("block", "id"), "0x" + b["block"]["id"][2:].upper()),
+         "FF"),
+        ("path no 0x", lambda b: _set(b, ("inclusion", "path", 0, "hash"),
+                                      b["inclusion"]["path"][0]["hash"][2:]), ".F"),
+        ("sig upper", lambda b: _set(b, ("milestone", "signatures", 1, "sig"),
+                                     b["milestone"]["signatures"][1]["sig"].upper()), "..F"),
+        ("pk no 0x", lambda b: _set(b, ("milestone", "signatures", 0, "pk"),
+                                    b["milestone"]["signatures"][0]["pk"][2:]), "..F"),
+        ("essence 0X", lambda b: _set(b, ("milestone", "essence"),
+                                      "0X" + b["milestone"]["essence"][2:]), ".FF.F"),
+        ("msPath upper", lambda b: _set(b, ("anchor", "msPath", 0, "hash"),
+                                        b["anchor"]["msPath"][0]["hash"].upper()), "....F"),
+    ],
+)
+def test_non_canonical_hex_is_rejected(vectors, syn, where, mutate, expect):
+    """Verifier inputs are strict lowercase 0x-hex; the step that reads the field fails."""
+    b = mutate(copy.deepcopy(syn.bundle))
+    ladder = bundle.verify(b, _cfg(vectors), _fetch(syn.record), _registry())
+    for i, step in enumerate(ladder.steps):
+        if i < len(expect) and expect[i] == "F":
+            assert step.ok is False, (where, step)
+            assert "non-canonical hex" in step.detail, (where, step)
+        elif step.name != "envelope":  # step 4 is None when raw cannot be read
+            assert step.ok is True, (where, step)
+    assert ladder.overall == "INVALID"
 
 
 def test_raw_that_does_not_parse(vectors):
@@ -633,15 +689,40 @@ def test_anchor_unavailable(vectors, syn):
 
 
 def test_anchor_not_evaluated_without_fetcher_or_anchor(vectors, syn):
-    assert _step(bundle.verify(syn.bundle, _cfg(vectors)), "anchor").ok is None
+    step = _step(bundle.verify(syn.bundle, _cfg(vectors)), "anchor")
+    assert (step.ok, step.detail) == (None, "anchor not checked: no record fetcher")
     b = copy.deepcopy(syn.bundle)
     b["anchor"] = None
     assert _step(bundle.verify(b, _cfg(vectors), _fetch(syn.record)), "anchor").ok is None
 
 
+def test_anchor_offline_failures_need_no_fetcher(vectors):
+    """Only "matches the chain" needs the record; local contradictions are red without it."""
+    real = [from_hex(m["milestoneId"]) for m in vectors("milestones")]
+    outside = _synthetic(vectors, _envelope(), window_override=[*real, blake2b256(b"other 374")])
+    ladder = bundle.verify(outside.bundle, _cfg(vectors), resolve_did=_registry())
+    assert _ok(ladder) == "TTTTF INVALID"
+    assert _step(ladder, "anchor").detail == "milestone not in anchored checkpoint"
+    good = _synthetic(vectors, _envelope())
+    wrong_trail = _cfg(vectors, trail_id="0x" + "00" * 32)
+    assert _step(bundle.verify(good.bundle, wrong_trail), "anchor").ok is False
+    bad_cp = copy.deepcopy(good.bundle)
+    bad_cp["anchor"]["checkpoint"]["kind"] = "other"
+    assert _step(bundle.verify(bad_cp, _cfg(vectors)), "anchor").ok is False
+    bad_record = copy.deepcopy(good.bundle)
+    bad_record["anchor"]["rebased"]["record"] = "3"
+    assert _step(bundle.verify(bad_record, _cfg(vectors)), "anchor").ok is False
+
+
 def test_anchor_requires_pinned_trail(vectors, syn):
-    unpinned = _cfg(vectors, trail_id=None, rebased_network=None)
-    assert _step(bundle.verify(syn.bundle, unpinned, _fetch(syn.record)), "anchor").ok is None
+    for unpinned in (
+        _cfg(vectors, trail_id=None, rebased_network=None),
+        _cfg(vectors, trail_id=None),
+        _cfg(vectors, rebased_network=None),
+    ):
+        step = _step(bundle.verify(syn.bundle, unpinned, _fetch(syn.record)), "anchor")
+        assert step.ok is None, unpinned
+        assert step.detail == "anchor not checked: verifier pins no Rebased trail"
     other_trail = _cfg(vectors, trail_id="0x" + "00" * 32)
     assert _step(bundle.verify(syn.bundle, other_trail, _fetch(syn.record)), "anchor").ok is False
     other_net = _cfg(vectors, rebased_network="mainnet")
@@ -775,8 +856,16 @@ def _registries(vectors) -> dict[str, dict[str, dict]]:
     return {
         "registry": {DID: _snapshot()},
         "registry_key_revoked": {DID: _snapshot(revoked_at_ms=ms_time_ms - 1)},
+        "registry_key_revoked_at_inclusion": {DID: _snapshot(revoked_at_ms=ms_time_ms)},
+        "registry_key_revoked_after_inclusion": {DID: _snapshot(revoked_at_ms=ms_time_ms + 1000)},
         "registry_wrong_issuer": {DID: wrong_issuer},
     }
+
+
+def _dup_sig(b: dict) -> dict:
+    out = copy.deepcopy(b)
+    out["milestone"]["signatures"] = [out["milestone"]["signatures"][0]] * 2
+    return out
 
 
 def _cases(vectors) -> list[dict]:
@@ -796,6 +885,29 @@ def _cases(vectors) -> list[dict]:
     outside = _synthetic(vectors, env, window_override=[*real, blake2b256(b"other 374")])
     mismatch = {"checkpoint": {**good.checkpoint, "msRoot": to_hex(b"\x42" * 32)}}
     untrusted = _cfg(vectors, trusted_coordinator_keys=ATTACKER_PUBS)
+    malformed_env = _envelope()
+    malformed_env["seq"] = "1"
+    malformed = _synthetic(vectors, malformed_env)
+    retagged = _synthetic(
+        vectors,
+        envelope.seal(
+            "LLO-K8s", {"event": "x"}, iss=DID, kid=KID, sign_key=SIGNER, seq=1,
+            att_mode="producer", now_ms=NOW_MS, nonce=bytes(range(16)),
+        ),
+    )
+    upper_raw = _set(copy.deepcopy(b), ("block", "raw"), b["block"]["raw"].upper())
+    upper_id = _set(copy.deepcopy(b), ("block", "id"), "0x" + b["block"]["id"][2:].upper())
+    bare_path = _set(
+        copy.deepcopy(b), ("inclusion", "path", 0, "hash"), b["inclusion"]["path"][0]["hash"][2:]
+    )
+    upper_sig = _set(
+        copy.deepcopy(b),
+        ("milestone", "signatures", 1, "sig"),
+        b["milestone"]["signatures"][1]["sig"].upper(),
+    )
+    upper_ms_path = _set(
+        copy.deepcopy(b), ("anchor", "msPath", 0, "hash"), b["anchor"]["msPath"][0]["hash"].upper()
+    )
     reg = "registry"
     return [
         _case("valid_anchored", b, cfg, rec, reg, "TTTTT VALID"),
@@ -845,6 +957,28 @@ def _cases(vectors) -> list[dict]:
             reg,
             "TTTTF INVALID",
         ),
+        _case("milestone_not_in_window_no_fetcher", outside.bundle, cfg, None, reg,
+              "TTTTF INVALID"),
+        _case("duplicate_signature_counted_once", _dup_sig(b), cfg, rec, reg, "TTFTT INVALID"),
+        _case("key_revoked_at_inclusion", b, cfg, rec, "registry_key_revoked_at_inclusion",
+              "TTTTT VALID"),
+        _case("key_revoked_after_inclusion", b, cfg, rec, "registry_key_revoked_after_inclusion",
+              "TTTTT VALID"),
+        _case("trail_unpinned", b, _cfg(vectors, trail_id=None), rec, reg, "TTTTN PARTIAL"),
+        _case("rebased_network_unpinned", b, _cfg(vectors, rebased_network=None), rec, reg,
+              "TTTTN PARTIAL"),
+        _case("bundle_root_ignored", _with_fake_root(b), cfg, rec, reg, "TFTTT INVALID"),
+        _case("envelope_malformed_no_resolver", malformed.bundle, cfg,
+              {"record": malformed.record}, None, "TTTFT INVALID"),
+        _case("envelope_retagged_no_resolver", retagged.bundle, cfg,
+              {"record": retagged.record}, None, "TTTFT INVALID"),
+        _case("bundle_network_not_pinned", _real_bundle(vectors),
+              _cfg(vectors, network="another_tangle"), None, None, "TTFNN INVALID"),
+        _case("noncanonical_hex_raw", upper_raw, cfg, rec, reg, "FTTNT INVALID"),
+        _case("noncanonical_hex_block_id", upper_id, cfg, rec, reg, "FFTTT INVALID"),
+        _case("noncanonical_hex_inclusion_path", bare_path, cfg, rec, reg, "TFTTT INVALID"),
+        _case("noncanonical_hex_signature", upper_sig, cfg, rec, reg, "TTFTT INVALID"),
+        _case("noncanonical_hex_ms_path", upper_ms_path, cfg, rec, reg, "TTTTF INVALID"),
     ]
 
 

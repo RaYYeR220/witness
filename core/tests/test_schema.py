@@ -1,7 +1,12 @@
+import copy
 import json
+import os
+from typing import Any
 
 import pytest
 from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
+from hypothesis import given, settings
+from hypothesis import strategies as st
 from witness_core import canon, checkpoint, envelope, schema
 from witness_core.ids import from_hex, to_hex
 
@@ -244,3 +249,86 @@ def test_classify_real_vector_blocks(vectors):
             assert (c.kind, c.ie_id, c.schema_ok) == expected[b["blockId"]]
         if b["tag"] == "trust.score":
             assert c.schema_ok and c.ie_id is not None
+
+
+# ---------------------------------------------------------------- hostile input
+
+
+def test_huge_integer_score_does_not_crash():
+    body = {"score": 10**400, "id": "MyDomain:fa163e5e25ef"}
+    c = schema.classify("trust.score", _j(body))
+    assert (c.kind, c.schema_ok, c.ie_id) == ("trust.score", False, "MyDomain:fa163e5e25ef")
+    assert schema.classify("trust.score", _j({**body, "score": -(10**400)})).schema_ok is False
+
+
+def test_uncanonicalizable_anchor_checkpoint_does_not_crash():
+    body = _anchor_body()
+    body["checkpoint"]["network"] = "\ud800"  # lone surrogate: JCS refuses it
+    c = schema.classify("witness.anchor", _j(body))
+    assert (c.kind, c.schema_ok) == ("witness.anchor", False)
+
+
+_SURROGATES = st.characters(codec=None, min_codepoint=0xD800, max_codepoint=0xDFFF)
+_ANY_TEXT = st.text(st.characters(codec=None) | _SURROGATES, max_size=8)
+_ANY = st.recursive(
+    st.none()
+    | st.booleans()
+    | st.integers()
+    | st.integers(min_value=10**300, max_value=10**400)
+    | st.integers(min_value=-(10**400), max_value=-(10**300))
+    | st.floats()
+    | _ANY_TEXT,
+    lambda inner: st.lists(inner, max_size=3) | st.dictionaries(_ANY_TEXT, inner, max_size=3),
+    max_leaves=10,
+)
+
+
+def _templates() -> list[tuple[str, Any]]:
+    out = [(tag, body) for tag, body, _, _ in SAMPLES]
+    out.append(("witness.anchor", _anchor_body()))
+    return out
+
+
+def _paths(obj: Any, prefix: tuple = ()) -> list[tuple]:
+    out = [prefix] if prefix else []
+    if isinstance(obj, dict):
+        for k, v in obj.items():
+            out += _paths(v, (*prefix, k))
+    elif isinstance(obj, list):
+        for i, v in enumerate(obj):
+            out += _paths(v, (*prefix, i))
+    return out
+
+
+# Values that broke classify before: ints beyond float range, lone surrogates.
+_HOSTILE = (
+    st.integers(min_value=10**300, max_value=10**400)
+    | st.integers(min_value=-(10**400), max_value=-(10**300))
+    | st.text(_SURROGATES, min_size=1, max_size=3)
+)
+_EXAMPLES = int(os.environ.get("HYP_EXAMPLES", "60"))
+
+
+@settings(max_examples=_EXAMPLES * 4, deadline=None)
+@given(st.data())
+def test_classify_never_raises(data):
+    """One field of a well-formed message replaced by a hostile value."""
+    tag, body = data.draw(st.sampled_from(_templates()))
+    body = copy.deepcopy(body)
+    path = data.draw(st.sampled_from(_paths(body)))
+    target = body
+    for key in path[:-1]:
+        target = target[key]
+    target[path[-1]] = data.draw(_HOSTILE | _ANY)
+    obj: Any = body
+    if data.draw(st.booleans()):
+        obj = {"w": 1, "sig": "x", "nonce": data.draw(_ANY), "corr": data.draw(_ANY), "body": body}
+    c = schema.classify(tag, json.dumps(obj).encode())
+    assert isinstance(c, schema.Classified)
+    assert isinstance(c.schema_ok, bool)
+
+
+@settings(max_examples=_EXAMPLES, deadline=None)
+@given(st.sampled_from(sorted(schema.KINDS)) | _ANY_TEXT, st.binary(max_size=64))
+def test_classify_never_raises_on_raw_bytes(tag, data):
+    assert isinstance(schema.classify(tag, data), schema.Classified)
