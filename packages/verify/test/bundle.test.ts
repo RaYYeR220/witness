@@ -31,10 +31,10 @@ const run = (c: any, extra: Partial<VerifyOptions> = {}) => verifyBundle(...wire
 const marks = (l: Ladder) => l.steps.map((s) => (s.ok === null ? "N" : s.ok ? "T" : "F")).join("") + " " + l.overall;
 
 describe("bundles.json parity", () => {
-  it("has the 32 named cases", () => {
+  it("has the 34 named cases", () => {
     const names = bundles.cases.map((c: any) => c.name);
-    expect(names).toHaveLength(32);
-    expect(new Set(names).size).toBe(32);
+    expect(names).toHaveLength(34);
+    expect(new Set(names).size).toBe(34);
   });
 
   it.each(bundles.cases.map((c: any) => [c.name, c] as const))("%s", async (_name, c: any) => {
@@ -112,6 +112,11 @@ const PYTHON_DETAILS: Record<string, Partial<Record<(typeof STEP_NAMES)[number],
   noncanonical_hex_ms_path: {
     anchor: "anchor.msPath[0].hash: non-canonical hex (expected lowercase with 0x prefix)",
   },
+  small_order_coordinator_key_not_counted: {
+    milestone_signatures:
+      "milestone 374 0xa6bc3be7eaa3cca15b859dd8c812b370f47e964f3df400a7d2962a04ebcd5f55: 1 valid signature(s) by pinned keys, threshold 2",
+  },
+  small_order_signer_key: { envelope: "FORGED: weak public key" },
 };
 
 describe("ladder details match the Python reference", () => {

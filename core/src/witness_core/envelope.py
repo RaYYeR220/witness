@@ -15,13 +15,9 @@ from collections.abc import Callable
 from dataclasses import dataclass
 from typing import Any, Literal
 
-from cryptography.exceptions import InvalidSignature
-from cryptography.hazmat.primitives.asymmetric.ed25519 import (
-    Ed25519PrivateKey,
-    Ed25519PublicKey,
-)
+from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
 
-from . import canon, verdicts
+from . import canon, ed25519, verdicts
 
 
 @dataclass(frozen=True)
@@ -216,11 +212,9 @@ def verify(
     info = resolve(kid)
     if info is None or info.ed25519_public is None:
         return result(verdicts.FORGED, "signing key not resolvable")
-    try:
-        Ed25519PublicKey.from_public_bytes(info.ed25519_public).verify(
-            _canonical_b64(env["sig"], _SIG_RE), signing_input
-        )
-    except (InvalidSignature, ValueError):
+    if ed25519.is_weak_public_key(info.ed25519_public):
+        return result(verdicts.FORGED, "weak public key")
+    if not ed25519.verify(info.ed25519_public, _canonical_b64(env["sig"], _SIG_RE), signing_input):
         return result(verdicts.FORGED, "signature invalid")
     if env["att"]["mode"] == "producer":
         return result(verdicts.PRODUCER_SIGNED)

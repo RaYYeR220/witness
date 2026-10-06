@@ -7,7 +7,7 @@
  */
 
 import { b64urlDecode, b64urlEncode, isBytes } from "./bytes.js";
-import { ed25519Sign, ed25519Verify } from "./ed25519.js";
+import { ed25519Sign, ed25519Verify, isWeakPublicKey } from "./ed25519.js";
 import { CanonicalizationError, jcsBytes } from "./jcs.js";
 import { get, has, isDict, isUint, type Json, type JsonObject } from "./json.js";
 import { FORGED, MALFORMED, PRODUCER_SIGNED, RELAY_ATTESTED, type Verdict } from "./verdicts.js";
@@ -123,6 +123,7 @@ export function verifyEnvelope(env: unknown, blockTag: string, resolve: KeyResol
   if (kid.split("#")[0] !== iss) return result(FORGED, "kid does not belong to iss");
   const info = resolve(kid);
   if (!info || !isBytes(info.ed25519Public)) return result(FORGED, "signing key not resolvable");
+  if (isWeakPublicKey(info.ed25519Public)) return result(FORGED, "weak public key");
   if (!ed25519Verify(info.ed25519Public, canonicalB64(e.sig, SIG_RE)!, input)) {
     return result(FORGED, "signature invalid");
   }

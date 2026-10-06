@@ -30,6 +30,10 @@ SIGNER = Ed25519PrivateKey.from_private_bytes(b"\x05" * 32)
 KEX = X25519PrivateKey.from_private_bytes(b"\x06" * 32)
 ATTACKERS = [Ed25519PrivateKey.from_private_bytes(bytes([n]) * 32) for n in (0x0A, 0x0B)]
 ATTACKER_PUBS = {k.public_key().public_bytes_raw() for k in ATTACKERS}
+# The identity point as a public key: OpenSSL accepts R = identity, S = 0 under it for any
+# message, so it must never verify anything.
+IDENTITY = (1).to_bytes(32, "little")
+IDENTITY_SIG = IDENTITY + bytes(32)
 
 
 # ---------------------------------------------------------------- helpers
@@ -390,6 +394,45 @@ def test_forged_milestone_signed_by_attacker(vectors):
     assert _ok(bundle.verify(b, _cfg(vectors, trusted_coordinator_keys=ATTACKER_PUBS))) == (
         "TTTNN PARTIAL"
     )
+
+
+def _weak_coordinator(b: dict) -> dict:
+    """One real coordinator signature plus an identity-key signature that OpenSSL accepts."""
+    out = copy.deepcopy(b)
+    out["milestone"]["signatures"] = [
+        out["milestone"]["signatures"][0],
+        {"pk": to_hex(IDENTITY), "sig": to_hex(IDENTITY_SIG)},
+    ]
+    return out
+
+
+def test_small_order_coordinator_key_is_never_counted(vectors):
+    """Pinning a weak key by mistake must not let anyone sign milestones with it."""
+    b = _weak_coordinator(_real_bundle(vectors))
+    pinned = {from_hex(k) for k in vectors("coordinator_keys")["publicKeys"]} | {IDENTITY}
+    step = _step(bundle.verify(b, _cfg(vectors, trusted_coordinator_keys=pinned)),
+                 "milestone_signatures")
+    assert step.ok is False and "1 valid signature(s)" in step.detail
+    only_weak = _cfg(vectors, trusted_coordinator_keys={IDENTITY}, threshold=1)
+    assert _step(bundle.verify(b, only_weak), "milestone_signatures").ok is False
+
+
+def _weak_signer_snapshot() -> dict:
+    snap = _snapshot()
+    snap["keys"][0]["publicKeyHex"] = to_hex(IDENTITY)
+    return snap
+
+
+def _weak_signed() -> dict:
+    return {**_envelope(), "sig": envelope._b64(IDENTITY_SIG)}
+
+
+def test_small_order_signer_key_is_forged(vectors):
+    weak = _weak_signer_snapshot()
+    claimed = EnvelopeCheck(verdicts.PRODUCER_SIGNED, DID, KID, 1, NOW_MS, None)
+    s = _synthetic(vectors, _weak_signed(), snapshot=weak, claimed=claimed)
+    step = _step(bundle.verify(s.bundle, _cfg(vectors), resolve_did=_registry(weak)), "envelope")
+    assert (step.ok, step.detail) == (False, "FORGED: weak public key")
 
 
 def test_milestone_claims_must_match_essence(vectors):
@@ -959,6 +1002,7 @@ def _registries(vectors) -> dict[str, dict[str, dict]]:
         "registry_key_revoked_at_inclusion": {DID: _snapshot(revoked_at_ms=ms_time_ms)},
         "registry_key_revoked_after_inclusion": {DID: _snapshot(revoked_at_ms=ms_time_ms + 1000)},
         "registry_wrong_issuer": {DID: wrong_issuer},
+        "registry_weak_key": {DID: _weak_signer_snapshot()},
     }
 
 
@@ -1007,6 +1051,17 @@ def _cases(vectors) -> list[dict]:
     )
     upper_ms_path = _set(
         copy.deepcopy(b), ("anchor", "msPath", 0, "hash"), b["anchor"]["msPath"][0]["hash"].upper()
+    )
+    weak_pinned = _cfg(
+        vectors,
+        trusted_coordinator_keys={from_hex(k) for k in vectors("coordinator_keys")["publicKeys"]}
+        | {IDENTITY},
+    )
+    weak_signer = _synthetic(
+        vectors,
+        _weak_signed(),
+        snapshot=_weak_signer_snapshot(),
+        claimed=EnvelopeCheck(verdicts.PRODUCER_SIGNED, DID, KID, 1, NOW_MS, None),
     )
     reg = "registry"
     return [
@@ -1079,6 +1134,10 @@ def _cases(vectors) -> list[dict]:
         _case("noncanonical_hex_inclusion_path", bare_path, cfg, rec, reg, "TFTTT INVALID"),
         _case("noncanonical_hex_signature", upper_sig, cfg, rec, reg, "TTFTT INVALID"),
         _case("noncanonical_hex_ms_path", upper_ms_path, cfg, rec, reg, "TTTTF INVALID"),
+        _case("small_order_coordinator_key_not_counted", _weak_coordinator(b), weak_pinned, rec,
+              reg, "TTFTT INVALID"),
+        _case("small_order_signer_key", weak_signer.bundle, cfg, {"record": weak_signer.record},
+              "registry_weak_key", "TTTFT INVALID"),
     ]
 
 

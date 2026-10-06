@@ -1,6 +1,7 @@
 import copy
 import json
 import math
+import os
 from pathlib import Path
 
 import pytest
@@ -13,6 +14,9 @@ DID = "did:iota:testnet:0xabc"
 KID = DID + "#sig-1"
 NOW = 1_700_000_000_000
 ALPHABET = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-_"
+P = 2**255 - 19
+IDENTITY = (1).to_bytes(32, "little")
+IDENTITY_SIG = IDENTITY + bytes(32)  # R = identity, S = 0: OpenSSL accepts it for any message
 
 
 def _pub(key):
@@ -244,6 +248,40 @@ def test_canonicalization_errors():
 
 
 @pytest.mark.parametrize("depth", [1200, 5000])
+def _weak_signed(env: dict) -> dict:
+    """`env` re-signed with R = identity, S = 0."""
+    return {**env, "sig": envelope._b64(IDENTITY_SIG)}
+
+
+@pytest.mark.parametrize(
+    "public",
+    [
+        IDENTITY,
+        (P + 1).to_bytes(32, "little"),  # the identity again, non-canonical y
+        (1 | 1 << 255).to_bytes(32, "little"),  # the identity again, x = 0 with the sign bit
+        (P - 1).to_bytes(32, "little"),  # (0, -1), order 2
+        bytes(32),  # y = 0, order 4
+        bytes.fromhex("26e8958fc2b227b045c3f489f2ef98f0d5dfac05d3c63339b13802886d53fc05"),  # order 8
+        (2).to_bytes(32, "little"),  # not on the curve
+        bytes(31),
+    ],
+)
+def test_weak_public_key_is_forged(public):
+    env = _weak_signed(_seal(Ed25519PrivateKey.generate()))
+    info = KeyInfo(KID, public, None, None)
+    check = envelope.verify(env, "trust.score", lambda _k: info)
+    assert (check.verdict, check.reason) == (verdicts.FORGED, "weak public key")
+
+
+def test_weak_key_check_spares_real_keys():
+    key = Ed25519PrivateKey.generate()
+    env = _seal(key)
+    assert envelope.verify(env, "trust.score", _resolver(key)).verdict == verdicts.PRODUCER_SIGNED
+    check = envelope.verify(_weak_signed(env), "trust.score", _resolver(key))
+    assert (check.verdict, check.reason) == (verdicts.FORGED, "signature invalid")
+
+
+@pytest.mark.parametrize("depth", [1200, 5000])
 def test_deep_nesting_is_malformed_not_a_crash(depth):
     """json.loads accepts nesting the canonicalizer cannot recurse through."""
     key = Ed25519PrivateKey.generate()
@@ -265,10 +303,11 @@ def _signing_input(env):
 
 
 def _case(name, env, key, block_tag, expected):
+    public = key if isinstance(key, bytes) else _pub(key)
     return {
         "name": name,
         "envelope": env,
-        "public_key_hex": _pub(key).hex(),
+        "public_key_hex": public.hex(),
         "block_tag": block_tag,
         "signing_input": _signing_input(env),
         "expected_verdict": expected,
@@ -310,12 +349,17 @@ def _build_vectors():
         _case("padded_sig", twin(producer, sig=producer["sig"] + "="), key, t, bad),
         _case("noncanonical_sig", twin(producer, sig=_noncanonical(producer["sig"])), key, t, bad),
         _case("body_and_enc", twin(producer, enc={"alg": "x"}), key, t, bad),
+        _case("identity_key_zero_sig", _weak_signed(producer), IDENTITY, t, forged),
+        _case("identity_key_noncanonical", _weak_signed(producer), (P + 1).to_bytes(32, "little"),
+              t, forged),
     ]
     return {
         "description": "witness/v1 envelope vectors. verify(envelope, block_tag) using the "
         "ed25519 public key (hex) registered for envelope.kid. signing_input is the exact "
         "JCS text covered by the signature (envelope without sig), null if not canonicalizable. "
-        "float_seq carries seq as the JSON float 7.0 and must be MALFORMED.",
+        "float_seq carries seq as the JSON float 7.0 and must be MALFORMED. identity_key_* "
+        "sign with R = identity, S = 0 under a small-order key, which plain RFC 8032 / OpenSSL "
+        "verification accepts for any message: weak keys are refused (FORGED).",
         "cases": cases,
     }
 
@@ -327,7 +371,7 @@ def test_write_envelope_vectors():
         info = KeyInfo(env["kid"], bytes.fromhex(c["public_key_hex"]), None, None)
         got = envelope.verify(env, c["block_tag"], lambda k, i=info: i if k == i.kid else None)
         assert got.verdict == c["expected_verdict"], c["name"]
-    if not VECTORS.exists():
+    if not VECTORS.exists() or os.environ.get("WITNESS_REGEN_VECTORS") == "1":
         VECTORS.parent.mkdir(parents=True, exist_ok=True)
         VECTORS.write_text(json.dumps(vectors, indent=2) + "\n", encoding="utf-8")
     assert json.loads(VECTORS.read_text(encoding="utf-8")) == vectors

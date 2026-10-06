@@ -47,6 +47,8 @@ describe("envelopes.json parity", () => {
     }
     if (got.verdict === PRODUCER_SIGNED || got.verdict === RELAY_ATTESTED) expect(got.reason).toBeNull();
     else expect(typeof got.reason).toBe("string");
+    // The reference names the reason for small-order keys; plain verification would accept these.
+    if (c.name.startsWith("identity_key_")) expect(got.reason).toBe("weak public key");
   });
 
   it("covers every verdict the vectors name", () => {

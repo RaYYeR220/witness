@@ -21,10 +21,7 @@ from collections.abc import Callable
 from dataclasses import dataclass
 from typing import Any, Literal, Protocol
 
-from cryptography.exceptions import InvalidSignature
-from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PublicKey
-
-from . import checkpoint, codec, envelope, merkle, verdicts
+from . import checkpoint, codec, ed25519, envelope, merkle, verdicts
 from .codec import Ed25519Sig, MilestoneEssence
 from .envelope import EnvelopeCheck, KeyInfo
 from .ids import blake2b256, from_hex, to_hex
@@ -374,11 +371,9 @@ def _step_signatures(b: dict, cfg: VerifierConfig) -> tuple[bool | None, str]:
         sig = _hex(entry.get("sig"), f"milestone.signatures[{i}].sig", codec.SIG_LEN)
         if pk not in cfg.trusted_coordinator_keys or pk in valid:
             continue
-        try:
-            Ed25519PublicKey.from_public_bytes(pk).verify(sig, mid)
-        except (InvalidSignature, ValueError):
-            continue
-        valid.add(pk)
+        # A pinned key of small order would accept a forged signature: never counted.
+        if ed25519.verify(pk, sig, mid):
+            valid.add(pk)
     summary = f"{len(valid)} valid signature(s) by pinned keys, threshold {threshold}"
     return len(valid) >= threshold, f"milestone {essence.index} {to_hex(mid)}: {summary}"
 

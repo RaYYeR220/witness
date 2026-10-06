@@ -38,7 +38,7 @@ export {
   type JsonObject,
   type ParseOptions,
 } from "./json.js";
-export { ed25519Verify } from "./ed25519.js";
+export { ed25519Verify, isWeakPublicKey } from "./ed25519.js";
 export {
   FORGED,
   MALFORMED,

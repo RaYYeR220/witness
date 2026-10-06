@@ -3,10 +3,10 @@ import { sha512 } from "@noble/hashes/sha2";
 import { describe, expect, it } from "vitest";
 
 import { concatBytes } from "../src/bytes.js";
-import { ed25519Verify } from "../src/index.js";
+import { ed25519Verify, isWeakPublicKey } from "../src/index.js";
 
-// The Python reference verifies through OpenSSL: cofactorless equation, S < L,
-// lenient key decoding. These cases were cross-checked against
+// The Python reference verifies through OpenSSL (cofactorless equation, S < L)
+// after refusing weak keys. These cases were cross-checked against
 // cryptography 50 / OpenSSL 4 and pin that behaviour here.
 const P = ed25519.Point;
 const L = 2n ** 252n + 27742317777372353535851937790883648493n;
@@ -54,13 +54,25 @@ describe("ed25519Verify follows OpenSSL", () => {
     expect(rejected).toBeGreaterThan(0);
   });
 
-  it("decodes keys leniently, like OpenSSL (small-order and non-canonical keys are not refused)", () => {
+  it("refuses weak keys: small order, or not strictly encoded (OpenSSL alone accepts them)", () => {
     const anything = utf8("anything");
     const zeroSig = concatBytes(IDENTITY, le(0n));
-    expect(ed25519Verify(IDENTITY, zeroSig, anything)).toBe(true);
-    expect(ed25519Verify(le(p + 1n), zeroSig, anything)).toBe(true);
-    expect(ed25519Verify(le(1n | (1n << 255n)), zeroSig, utf8("x"))).toBe(true);
-    expect(ed25519Verify(IDENTITY, concatBytes(le(p + 1n), le(0n)), anything)).toBe(false);
-    expect(ed25519Verify(le(p - 1n), zeroSig, utf8("x"))).toBe(false);
+    const torsion = ED25519_TORSION_SUBGROUP.map((h) => P.fromHex(h).toBytes());
+    // Non-canonical encodings of small-order points: y >= p, and x = 0 with the sign bit set.
+    const aliases = [le(p + 1n), le(1n | (1n << 255n)), le(p), le(p - 1n | (1n << 255n))];
+    for (const pk of [...torsion, ...aliases]) {
+      expect(isWeakPublicKey(pk)).toBe(true);
+      expect(ed25519Verify(pk, zeroSig, anything)).toBe(false);
+    }
+    expect(torsion).toHaveLength(8);
+    expect(isWeakPublicKey(le(2n))).toBe(true); // y = 2 is not on the curve
+    expect(isWeakPublicKey(le(3n))).toBe(false); // y = 3 is, with large order...
+    expect(isWeakPublicKey(le(p + 3n))).toBe(true); // ...but y = p + 3 does not decode strictly
+    expect(isWeakPublicKey(new Uint8Array(31))).toBe(true);
+    const pk = ed25519.getPublicKey(new Uint8Array(32).fill(9));
+    expect(isWeakPublicKey(pk)).toBe(false);
+    // A key with a torsion component is not of small order: it stays usable.
+    const mixed = P.fromHex(pk).add(P.fromHex(ED25519_TORSION_SUBGROUP[1]!)).toBytes();
+    expect(isWeakPublicKey(mixed)).toBe(false);
   });
 });

@@ -1,5 +1,5 @@
 {
-  "description": "witness/v1 envelope vectors. verify(envelope, block_tag) using the ed25519 public key (hex) registered for envelope.kid. signing_input is the exact JCS text covered by the signature (envelope without sig), null if not canonicalizable. float_seq carries seq as the JSON float 7.0 and must be MALFORMED.",
+  "description": "witness/v1 envelope vectors. verify(envelope, block_tag) using the ed25519 public key (hex) registered for envelope.kid. signing_input is the exact JCS text covered by the signature (envelope without sig), null if not canonicalizable. float_seq carries seq as the JSON float 7.0 and must be MALFORMED. identity_key_* sign with R = identity, S = 0 under a small-order key, which plain RFC 8032 / OpenSSL verification accepts for any message: weak keys are refused (FORGED).",
   "cases": [
     {
       "name": "valid_producer",
@@ -466,6 +466,54 @@
       "block_tag": "trust.score",
       "signing_input": "{\"att\":{\"mode\":\"producer\"},\"body\":{\"id\":\"D:x\",\"score\":0.745},\"enc\":{\"alg\":\"x\"},\"iat\":1700000000000,\"iss\":\"did:iota:testnet:0xabc\",\"kid\":\"did:iota:testnet:0xabc#sig-1\",\"nonce\":\"AAECAwQFBgcICQoLDA0ODw\",\"seq\":7,\"tag\":\"trust.score\",\"w\":1}",
       "expected_verdict": "MALFORMED"
+    },
+    {
+      "name": "identity_key_zero_sig",
+      "envelope": {
+        "w": 1,
+        "tag": "trust.score",
+        "iss": "did:iota:testnet:0xabc",
+        "kid": "did:iota:testnet:0xabc#sig-1",
+        "seq": 7,
+        "iat": 1700000000000,
+        "nonce": "AAECAwQFBgcICQoLDA0ODw",
+        "att": {
+          "mode": "producer"
+        },
+        "body": {
+          "score": 0.745,
+          "id": "D:x"
+        },
+        "sig": "AQAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA"
+      },
+      "public_key_hex": "0100000000000000000000000000000000000000000000000000000000000000",
+      "block_tag": "trust.score",
+      "signing_input": "{\"att\":{\"mode\":\"producer\"},\"body\":{\"id\":\"D:x\",\"score\":0.745},\"iat\":1700000000000,\"iss\":\"did:iota:testnet:0xabc\",\"kid\":\"did:iota:testnet:0xabc#sig-1\",\"nonce\":\"AAECAwQFBgcICQoLDA0ODw\",\"seq\":7,\"tag\":\"trust.score\",\"w\":1}",
+      "expected_verdict": "FORGED"
+    },
+    {
+      "name": "identity_key_noncanonical",
+      "envelope": {
+        "w": 1,
+        "tag": "trust.score",
+        "iss": "did:iota:testnet:0xabc",
+        "kid": "did:iota:testnet:0xabc#sig-1",
+        "seq": 7,
+        "iat": 1700000000000,
+        "nonce": "AAECAwQFBgcICQoLDA0ODw",
+        "att": {
+          "mode": "producer"
+        },
+        "body": {
+          "score": 0.745,
+          "id": "D:x"
+        },
+        "sig": "AQAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA"
+      },
+      "public_key_hex": "eeffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff7f",
+      "block_tag": "trust.score",
+      "signing_input": "{\"att\":{\"mode\":\"producer\"},\"body\":{\"id\":\"D:x\",\"score\":0.745},\"iat\":1700000000000,\"iss\":\"did:iota:testnet:0xabc\",\"kid\":\"did:iota:testnet:0xabc#sig-1\",\"nonce\":\"AAECAwQFBgcICQoLDA0ODw\",\"seq\":7,\"tag\":\"trust.score\",\"w\":1}",
+      "expected_verdict": "FORGED"
     }
   ]
 }
