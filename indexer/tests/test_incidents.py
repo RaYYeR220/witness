@@ -187,6 +187,21 @@ async def test_aerios_incident_is_one_timeline_closed_on_recovery(store, engine,
     assert pub.sent[-1][1]["status"] == "closed:recovered"
 
 
+async def test_producer_signed_security_notification_opens(store, engine):
+    await feed(store, engine, score(0.9, ms=10))
+    note = security(ms=11)  # producer-signed
+    [opened] = await feed(store, engine, note)
+    assert (opened["action"], opened["role"], opened["severity"]) == ("opened", "trigger", "high")
+    [inc] = await store.incidents()
+    assert inc["title"] == f"Security notification for {IE_X}"
+    assert (inc["baseline_score"], inc["low_score"]) == (0.9, None)  # proven: target known
+    [event] = (await engine.timeline(inc["id"]))["events"]
+    assert (event["detail"]["as"], event["detail"]["trust"]) == ("security", "proven")
+    # a later drop makes it recoverable, back to the level before the notification
+    assert actions(await feed(store, engine, score(0.5, ms=12))) == ["attached"]
+    assert actions(await feed(store, engine, score(0.91, ms=13))) == ["attached", "closed"]
+
+
 async def test_unrelated_ie_gets_its_own_incident(store, engine):
     await feed(store, engine, score(0.9, ms=10))
     await feed(store, engine, score(0.9, ms=10, ie=IE_Y))
