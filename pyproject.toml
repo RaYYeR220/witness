@@ -1,0 +1,39 @@
+[project]
+name = "witness"
+version = "0.1.0"
+description = "IOTA Advanced Explorer for Eclipse aeriOS"
+requires-python = ">=3.11"
+license = "Apache-2.0"
+
+[tool.uv.workspace]
+members = ["core", "indexer", "api", "relay", "sdk", "cli", "mcp", "chaos"]
+
+[tool.uv.sources]
+witness-core = { workspace = true }
+witness-indexer = { workspace = true }
+witness-api = { workspace = true }
+witness-relay = { workspace = true }
+witness-sdk = { workspace = true }
+witness-cli = { workspace = true }
+witness-mcp = { workspace = true }
+witness-chaos = { workspace = true }
+
+[dependency-groups]
+dev = [
+  "pytest>=8.3",
+  "pytest-asyncio>=0.24",
+  "hypothesis>=6.112",
+  "respx>=0.21",
+  "grpcio-tools>=1.66",
+  "ruff>=0.7",
+]
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+asyncio_default_fixture_loop_scope = "function"
+markers = ["live: needs the local aeriOS IOTA stack (set WITNESS_LIVE=1)"]
+addopts = "-q"
+
+[tool.ruff]
+line-length = 100
+target-version = "py311"
