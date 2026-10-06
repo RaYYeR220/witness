@@ -11,6 +11,7 @@ import json
 import os
 import re
 import sys
+import unicodedata
 from collections.abc import Callable
 from pathlib import Path
 from typing import Annotated, Any, NoReturn
@@ -40,12 +41,19 @@ TokenFileOpt = Annotated[Path | None, typer.Option(
     "--token-file", help="Read the bearer token from this file (default: the environment)")]
 
 
-_CTRL = re.compile(r"[\x00-\x08\x0b-\x1f\x7f-\x9f]")
-
-
 def strip_ctrl(s: str) -> str:
-    """Drop control characters (ESC included) so server text cannot drive the terminal."""
-    return _CTRL.sub("", s)
+    """Make server text inert: no control (Cc) or format (Cf: bidi, zero-width) characters.
+
+    Tabs, line and paragraph breaks become a space, so a value stays on one line.
+    """
+    kept = []
+    for ch in s:
+        cat = unicodedata.category(ch)
+        if ch in "\t\n\r" or cat in ("Zl", "Zp"):
+            kept.append(" ")
+        elif cat not in ("Cc", "Cf"):
+            kept.append(ch)
+    return "".join(kept)
 
 
 def out() -> Console:
@@ -211,7 +219,8 @@ def verify(
         "IOTA Rebased RPC (the config must pin rebasedRpc, trailId and auditTrailPackage)")] = True,
     rebased_rpc: Annotated[str | None, typer.Option(
         "--rebased-rpc", envvar="WITNESS_REBASED_RPC",
-        help="Override the pinned rebasedRpc (https JSON-RPC of an IOTA Rebased fullnode)")] = None,
+        help="Override the pinned rebasedRpc (https JSON-RPC of an IOTA Rebased fullnode); "
+        "the trail and package pins still apply, and a differing value is noted on stderr")] = None,
     insecure_rpc: Annotated[bool, typer.Option(
         "--insecure-rpc", help="Allow a plain-http Rebased RPC (local tests only)")] = False,
     resolver: Annotated[str | None, typer.Option(
@@ -252,6 +261,9 @@ def verify(
                  "authentication; use https or --did-snapshot")
         resolve_did = did_resolver(resolver)
     fetch = None
+    if rebased_rpc and rebased_rpc != cfg.rebased_rpc:
+        warn(f"using Rebased RPC {rebased_rpc} instead of the pinned "
+             f"{cfg.rebased_rpc or 'none'}")
     if anchor and (rebased_rpc or cfg.rebased_rpc):
         fetch = rebased.make_fetcher(cfg, rpc_url=rebased_rpc, timeout=TIMEOUT,
                                      allow_http=insecure_rpc)

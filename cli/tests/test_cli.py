@@ -512,3 +512,42 @@ def test_search_sends_milestone_range():
     assert r.exit_code == 0
     q = dict(route.calls.last.request.url.params)
     assert q["ms_from"] == "5" and q["ms_to"] == "9"
+
+
+def test_unicode_format_chars_and_newlines_are_stripped(files, tmp_path):
+    from witness_cli.main import strip_ctrl
+
+    assert strip_ctrl("a\u202eb\u200bc\ufeffd\u2028e\nf\tg\u2066") == "abcd e f g"
+    f = files("valid_anchored")
+    b = bundle_of(f)
+    b["network"] = "evil\u202enet\nFORGED VALID"
+    path = tmp_path / "bidi.bundle.json"
+    path.write_text(json.dumps(b), encoding="utf-8")
+    r = runner.invoke(app, ["verify", str(path), "--config", str(f["config"])])
+    assert r.exit_code == 1
+    assert "\u202e" not in r.output
+    assert not any(line.strip() == "FORGED VALID" for line in r.output.splitlines())
+
+
+@respx.mock
+def test_search_row_strips_bidi_and_newlines():
+    row = MSG | {"tag": "x\u202ey\nVALID\u2029z"}
+    respx.get(f"{API}/messages").mock(return_value=httpx.Response(
+        200, json={"items": [row], "nextCursor": None, "limit": 50}))
+    r = runner.invoke(app, ["search", "--api", API])
+    assert "\u202e" not in r.output and "\u2029" not in r.output
+    assert "xy VALID z" in r.output
+
+
+@respx.mock
+def test_rpc_override_is_announced_on_stderr(files, vectors, tmp_path):
+    f = files("valid_anchored")
+    mock_rpc({"jsonrpc": "2.0", "id": 1, "result": {"error": {"code": "dynamicFieldNotFound"}}},
+             url="https://other.test")
+    r = runner.invoke(app, [*verify_args(f, pinned_config(tmp_path, vectors)),
+                            "--rebased-rpc", "https://other.test"])
+    assert "instead of the pinned https://rpc.test" in r.output
+    mock_rpc({"jsonrpc": "2.0", "id": 1, "result": {"error": {"code": "dynamicFieldNotFound"}}})
+    quiet = runner.invoke(app, [*verify_args(f, pinned_config(tmp_path, vectors)),
+                                "--rebased-rpc", RPC])
+    assert "instead of" not in quiet.output
