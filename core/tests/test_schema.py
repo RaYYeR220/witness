@@ -37,9 +37,11 @@ def _checkpoint() -> dict:
 def _anchor_body() -> dict:
     cp = _checkpoint()
     return {
+        "seq": 1,
         "checkpoint": cp,
         "checkpointHash": to_hex(checkpoint.hash(cp)),
-        "rebased": {"network": "testnet", "trail": "0x" + "7a" * 32, "record": 3, "tx": "5xGp"},
+        "rebased": {"network": "testnet", "trail": "0x" + "7a" * 32, "record": 3,
+                    "tx": "8L3KZB5SN8Dd7UTorJ6sUqC3DFyuatJ6WPvuSQZummtu"},
     }
 
 
@@ -226,6 +228,37 @@ def test_classify_witness_anchor():
     assert schema.classify("witness.anchor", _j(no_rebased)).schema_ok is False
     bad_record = {**body, "rebased": {**body["rebased"], "record": "3"}}
     assert schema.classify("witness.anchor", _j(bad_record)).schema_ok is False
+
+
+@pytest.mark.parametrize(
+    "change",
+    [
+        {"seq": None},
+        {"seq": 0},
+        {"seq": "1"},
+        {"seq": True},
+        {"seq": 2**53},
+        {"extra": 1},
+        {"rebased": {"network": "testnet", "trail": "0x" + "7a" * 32, "record": 3}},
+        {"rebased": {"network": "", "trail": "0x" + "7a" * 32, "record": 3, "tx": "5xGp" * 8}},
+        {"rebased": {"network": "testnet", "trail": "0x7a", "record": 3, "tx": "5xGp" * 8}},
+        {"rebased": {"network": "testnet", "trail": "0x" + "7a" * 32, "record": -1,
+                     "tx": "5xGp" * 8}},
+        {"rebased": {"network": "testnet", "trail": "0x" + "7a" * 32, "record": 3, "tx": ""}},
+        {"rebased": {"network": "testnet", "trail": "0x" + "7a" * 32, "record": 3,
+                     "tx": "0OIl" * 8}},
+        {"rebased": {"network": "testnet", "trail": "0x" + "7a" * 32, "record": 3,
+                     "tx": "5xGp" * 8, "extra": 1}},
+    ],
+    ids=["no-seq", "seq-0", "seq-str", "seq-bool", "seq-huge", "extra-field", "no-tx",
+         "empty-network", "short-trail", "negative-record", "empty-tx", "tx-not-base58",
+         "rebased-extra"],
+)
+def test_witness_anchor_full_shape(change):
+    body = {**_anchor_body(), **change}
+    if change.get("seq", 1) is None:
+        del body["seq"]
+    assert schema.classify("witness.anchor", _j(body)).schema_ok is False
 
 
 def test_classify_real_vector_blocks(vectors):

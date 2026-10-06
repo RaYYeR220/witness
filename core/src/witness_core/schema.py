@@ -104,9 +104,18 @@ def _self_orchestrator(m: dict) -> tuple[bool, str | None]:
     return code_ok, norm
 
 
+_ANCHOR_FIELDS = {"seq", "checkpoint", "checkpointHash", "rebased"}
+_REBASED_FIELDS = {"network", "trail", "record", "tx"}
+_TX_DIGEST = re.compile(r"[1-9A-HJ-NP-Za-km-z]{32,64}")  # base58
+
+
 def _witness_anchor(m: dict) -> tuple[bool, str | None]:
-    cp = m.get("checkpoint")
-    if checkpoint.shape_error(cp) is not None or not _h32(m.get("checkpointHash")):
+    """The anchor service's mirror of a checkpoint: `{seq, checkpoint, checkpointHash,
+    rebased: {network, trail, record, tx}}`, nothing more, the hash that of the checkpoint."""
+    if set(m) != _ANCHOR_FIELDS or not _uint(m["seq"]) or m["seq"] < 1:
+        return False, None
+    cp = m["checkpoint"]
+    if checkpoint.shape_error(cp) is not None or not _h32(m["checkpointHash"]):
         return False, None
     try:
         digest = checkpoint.hash(cp)
@@ -114,11 +123,16 @@ def _witness_anchor(m: dict) -> tuple[bool, str | None]:
         return False, None
     if "0x" + digest.hex() != m["checkpointHash"]:
         return False, None
-    rebased = m.get("rebased")
+    rebased = m["rebased"]
     ok = (
         isinstance(rebased, dict)
-        and all(_text(rebased.get(k)) for k in ("network", "trail", "tx"))
-        and _uint(rebased.get("record"))
+        and set(rebased) == _REBASED_FIELDS
+        and _text(rebased["network"])
+        and len(rebased["network"]) <= 64
+        and _h32(rebased["trail"])
+        and _uint(rebased["record"])
+        and isinstance(rebased["tx"], str)
+        and _TX_DIGEST.fullmatch(rebased["tx"]) is not None
     )
     return ok, None
 
