@@ -1,0 +1,296 @@
+{
+ "rpc": "https://api.testnet.iota.cafe",
+ "trail": "0xacb73c8f648cdb335e6644af7e52746c6a8d166e4ffced17826c7861ffbf3540",
+ "index": 4,
+ "trailObject": {
+  "jsonrpc": "2.0",
+  "id": 1,
+  "result": {
+   "data": {
+    "objectId": "0xacb73c8f648cdb335e6644af7e52746c6a8d166e4ffced17826c7861ffbf3540",
+    "version": "1130366328",
+    "digest": "HB6KP3fx96YdzodJMMmRWpyBcAKPzUeWWZYzTT3u2xx2",
+    "type": "0x51368931f28620c7f65b4ae2c5167b42390e69729357a6347be378755b46e7df::main::AuditTrail<0x51368931f28620c7f65b4ae2c5167b42390e69729357a6347be378755b46e7df::record::Data>",
+    "content": {
+     "dataType": "moveObject",
+     "type": "0x51368931f28620c7f65b4ae2c5167b42390e69729357a6347be378755b46e7df::main::AuditTrail<0x51368931f28620c7f65b4ae2c5167b42390e69729357a6347be378755b46e7df::record::Data>",
+     "fields": {
+      "created_at": "1791289299596",
+      "creator": "0xd40892daf5c81e3d67ffe9806575970b973ecf6625eb8a88562afae0d8c940c8",
+      "id": {
+       "id": "0xacb73c8f648cdb335e6644af7e52746c6a8d166e4ffced17826c7861ffbf3540"
+      },
+      "immutable_metadata": {
+       "type": "0x51368931f28620c7f65b4ae2c5167b42390e69729357a6347be378755b46e7df::main::ImmutableMetadata",
+       "fields": {
+        "description": "Witness checkpoints of the aeriOS private Tangle",
+        "name": "witness-anchor"
+       }
+      },
+      "locking_config": {
+       "type": "0x51368931f28620c7f65b4ae2c5167b42390e69729357a6347be378755b46e7df::locking::LockingConfig",
+       "fields": {
+        "delete_record_window": {
+         "type": "0x51368931f28620c7f65b4ae2c5167b42390e69729357a6347be378755b46e7df::locking::LockingWindow",
+         "variant": "TimeBased",
+         "fields": {
+          "seconds": "3153600000"
+         }
+        },
+        "delete_trail_lock": {
+         "type": "0xd45732966e800d52b28044cf3758088bfc4606618dfc96d1ec9b21587379b3d9::timelock::TimeLock",
+         "variant": "Infinite",
+         "fields": {}
+        },
+        "write_lock": {
+         "type": "0xd45732966e800d52b28044cf3758088bfc4606618dfc96d1ec9b21587379b3d9::timelock::TimeLock",
+         "variant": "None",
+         "fields": {}
+        }
+       }
+      },
+      "records": {
+       "type": "0x2::linked_table::LinkedTable<u64, 0x51368931f28620c7f65b4ae2c5167b42390e69729357a6347be378755b46e7df::record::Record<0x51368931f28620c7f65b4ae2c5167b42390e69729357a6347be378755b46e7df::record::Data>>",
+       "fields": {
+        "head": "0",
+        "id": {
+         "id": "0x092effb46c94b0e5080b1fda8959d3267e85d42bbffd84aa5bdfc7f638a33c33"
+        },
+        "size": "5",
+        "tail": "4"
+       }
+      },
+      "roles": {
+       "type": "0xd45732966e800d52b28044cf3758088bfc4606618dfc96d1ec9b21587379b3d9::role_map::RoleMap<0x51368931f28620c7f65b4ae2c5167b42390e69729357a6347be378755b46e7df::permission::Permission, 0x51368931f28620c7f65b4ae2c5167b42390e69729357a6347be378755b46e7df::record_tags::RoleTags>",
+       "fields": {
+        "capability_admin_permissions": {
+         "type": "0xd45732966e800d52b28044cf3758088bfc4606618dfc96d1ec9b21587379b3d9::role_map::CapabilityAdminPermissions<0x51368931f28620c7f65b4ae2c5167b42390e69729357a6347be378755b46e7df::permission::Permission>",
+         "fields": {
+          "add": {
+           "type": "0x51368931f28620c7f65b4ae2c5167b42390e69729357a6347be378755b46e7df::permission::Permission",
+           "variant": "AddCapabilities",
+           "fields": {}
+          },
+          "revoke": {
+           "type": "0x51368931f28620c7f65b4ae2c5167b42390e69729357a6347be378755b46e7df::permission::Permission",
+           "variant": "RevokeCapabilities",
+           "fields": {}
+          }
+         }
+        },
+        "initial_admin_cap_ids": {
+         "type": "0x2::vec_set::VecSet<0x2::object::ID>",
+         "fields": {
+          "contents": [
+           "0xdba267e86d2f299e00cc919e424c62b81f4f598d12df6a7985aacb6e441d7373"
+          ]
+         }
+        },
+        "initial_admin_role_name": "Admin",
+        "revoked_capabilities": {
+         "type": "0x2::linked_table::LinkedTable<0x2::object::ID, u64>",
+         "fields": {
+          "head": null,
+          "id": {
+           "id": "0xf5d202126620032d4f35bd3a74abe8b251dec5f967357a15139e71f6673ca0af"
+          },
+          "size": "0",
+          "tail": null
+         }
+        },
+        "role_admin_permissions": {
+         "type": "0xd45732966e800d52b28044cf3758088bfc4606618dfc96d1ec9b21587379b3d9::role_map::RoleAdminPermissions<0x51368931f28620c7f65b4ae2c5167b42390e69729357a6347be378755b46e7df::permission::Permission>",
+         "fields": {
+          "add": {
+           "type": "0x51368931f28620c7f65b4ae2c5167b42390e69729357a6347be378755b46e7df::permission::Permission",
+           "variant": "AddRoles",
+           "fields": {}
+          },
+          "delete": {
+           "type": "0x51368931f28620c7f65b4ae2c5167b42390e69729357a6347be378755b46e7df::permission::Permission",
+           "variant": "DeleteRoles",
+           "fields": {}
+          },
+          "update": {
+           "type": "0x51368931f28620c7f65b4ae2c5167b42390e69729357a6347be378755b46e7df::permission::Permission",
+           "variant": "UpdateRoles",
+           "fields": {}
+          }
+         }
+        },
+        "roles": {
+         "type": "0x2::vec_map::VecMap<0x1::string::String, 0xd45732966e800d52b28044cf3758088bfc4606618dfc96d1ec9b21587379b3d9::role_map::Role<0x51368931f28620c7f65b4ae2c5167b42390e69729357a6347be378755b46e7df::permission::Permission, 0x51368931f28620c7f65b4ae2c5167b42390e69729357a6347be378755b46e7df::record_tags::RoleTags>>",
+         "fields": {
+          "contents": [
+           {
+            "type": "0x2::vec_map::Entry<0x1::string::String, 0xd45732966e800d52b28044cf3758088bfc4606618dfc96d1ec9b21587379b3d9::role_map::Role<0x51368931f28620c7f65b4ae2c5167b42390e69729357a6347be378755b46e7df::permission::Permission, 0x51368931f28620c7f65b4ae2c5167b42390e69729357a6347be378755b46e7df::record_tags::RoleTags>>",
+            "fields": {
+             "key": "Admin",
+             "value": {
+              "type": "0xd45732966e800d52b28044cf3758088bfc4606618dfc96d1ec9b21587379b3d9::role_map::Role<0x51368931f28620c7f65b4ae2c5167b42390e69729357a6347be378755b46e7df::permission::Permission, 0x51368931f28620c7f65b4ae2c5167b42390e69729357a6347be378755b46e7df::record_tags::RoleTags>",
+              "fields": {
+               "data": null,
+               "permissions": {
+                "type": "0x2::vec_set::VecSet<0x51368931f28620c7f65b4ae2c5167b42390e69729357a6347be378755b46e7df::permission::Permission>",
+                "fields": {
+                 "contents": [
+                  {
+                   "type": "0x51368931f28620c7f65b4ae2c5167b42390e69729357a6347be378755b46e7df::permission::Permission",
+                   "variant": "AddCapabilities",
+                   "fields": {}
+                  },
+                  {
+                   "type": "0x51368931f28620c7f65b4ae2c5167b42390e69729357a6347be378755b46e7df::permission::Permission",
+                   "variant": "RevokeCapabilities",
+                   "fields": {}
+                  },
+                  {
+                   "type": "0x51368931f28620c7f65b4ae2c5167b42390e69729357a6347be378755b46e7df::permission::Permission",
+                   "variant": "AddRecordTags",
+                   "fields": {}
+                  },
+                  {
+                   "type": "0x51368931f28620c7f65b4ae2c5167b42390e69729357a6347be378755b46e7df::permission::Permission",
+                   "variant": "DeleteRecordTags",
+                   "fields": {}
+                  },
+                  {
+                   "type": "0x51368931f28620c7f65b4ae2c5167b42390e69729357a6347be378755b46e7df::permission::Permission",
+                   "variant": "AddRoles",
+                   "fields": {}
+                  },
+                  {
+                   "type": "0x51368931f28620c7f65b4ae2c5167b42390e69729357a6347be378755b46e7df::permission::Permission",
+                   "variant": "UpdateRoles",
+                   "fields": {}
+                  },
+                  {
+                   "type": "0x51368931f28620c7f65b4ae2c5167b42390e69729357a6347be378755b46e7df::permission::Permission",
+                   "variant": "DeleteRoles",
+                   "fields": {}
+                  },
+                  {
+                   "type": "0x51368931f28620c7f65b4ae2c5167b42390e69729357a6347be378755b46e7df::permission::Permission",
+                   "variant": "Migrate",
+                   "fields": {}
+                  }
+                 ]
+                }
+               }
+              }
+             }
+            }
+           },
+           {
+            "type": "0x2::vec_map::Entry<0x1::string::String, 0xd45732966e800d52b28044cf3758088bfc4606618dfc96d1ec9b21587379b3d9::role_map::Role<0x51368931f28620c7f65b4ae2c5167b42390e69729357a6347be378755b46e7df::permission::Permission, 0x51368931f28620c7f65b4ae2c5167b42390e69729357a6347be378755b46e7df::record_tags::RoleTags>>",
+            "fields": {
+             "key": "writer",
+             "value": {
+              "type": "0xd45732966e800d52b28044cf3758088bfc4606618dfc96d1ec9b21587379b3d9::role_map::Role<0x51368931f28620c7f65b4ae2c5167b42390e69729357a6347be378755b46e7df::permission::Permission, 0x51368931f28620c7f65b4ae2c5167b42390e69729357a6347be378755b46e7df::record_tags::RoleTags>",
+              "fields": {
+               "data": null,
+               "permissions": {
+                "type": "0x2::vec_set::VecSet<0x51368931f28620c7f65b4ae2c5167b42390e69729357a6347be378755b46e7df::permission::Permission>",
+                "fields": {
+                 "contents": [
+                  {
+                   "type": "0x51368931f28620c7f65b4ae2c5167b42390e69729357a6347be378755b46e7df::permission::Permission",
+                   "variant": "AddRecord",
+                   "fields": {}
+                  }
+                 ]
+                }
+               }
+              }
+             }
+            }
+           }
+          ]
+         }
+        },
+        "target_key": "0xacb73c8f648cdb335e6644af7e52746c6a8d166e4ffced17826c7861ffbf3540"
+       }
+      },
+      "sequence_number": "5",
+      "tags": {
+       "type": "0x51368931f28620c7f65b4ae2c5167b42390e69729357a6347be378755b46e7df::record_tags::TagRegistry",
+       "fields": {
+        "tag_map": {
+         "type": "0x2::vec_map::VecMap<0x1::string::String, u64>",
+         "fields": {
+          "contents": []
+         }
+        }
+       }
+      },
+      "updatable_metadata": null,
+      "version": "1"
+     }
+    }
+   }
+  }
+ },
+ "record": {
+  "jsonrpc": "2.0",
+  "id": 1,
+  "result": {
+   "data": {
+    "objectId": "0xd13d41150c8f1cb7c16330a51ff178ae30ffcaf425a5fad973ade2186c230910",
+    "version": "1130366328",
+    "digest": "ATHngG1Msk9vELuAxjpFyeHptJBSi8Xj9UwiNS5jwTph",
+    "type": "0x2::dynamic_field::Field<u64, 0x2::linked_table::Node<u64, 0x51368931f28620c7f65b4ae2c5167b42390e69729357a6347be378755b46e7df::record::Record<0x51368931f28620c7f65b4ae2c5167b42390e69729357a6347be378755b46e7df::record::Data>>>",
+    "owner": {
+     "ObjectOwner": "0x092effb46c94b0e5080b1fda8959d3267e85d42bbffd84aa5bdfc7f638a33c33"
+    },
+    "previousTransaction": "8L3KZB5SN8Dd7UTorJ6sUqC3DFyuatJ6WPvuSQZummtu",
+    "storageRebate": "7995200",
+    "content": {
+     "dataType": "moveObject",
+     "type": "0x2::dynamic_field::Field<u64, 0x2::linked_table::Node<u64, 0x51368931f28620c7f65b4ae2c5167b42390e69729357a6347be378755b46e7df::record::Record<0x51368931f28620c7f65b4ae2c5167b42390e69729357a6347be378755b46e7df::record::Data>>>",
+     "fields": {
+      "id": {
+       "id": "0xd13d41150c8f1cb7c16330a51ff178ae30ffcaf425a5fad973ade2186c230910"
+      },
+      "name": "4",
+      "value": {
+       "type": "0x2::linked_table::Node<u64, 0x51368931f28620c7f65b4ae2c5167b42390e69729357a6347be378755b46e7df::record::Record<0x51368931f28620c7f65b4ae2c5167b42390e69729357a6347be378755b46e7df::record::Data>>",
+       "fields": {
+        "next": null,
+        "prev": "3",
+        "value": {
+         "type": "0x51368931f28620c7f65b4ae2c5167b42390e69729357a6347be378755b46e7df::record::Record<0x51368931f28620c7f65b4ae2c5167b42390e69729357a6347be378755b46e7df::record::Data>",
+         "fields": {
+          "added_at": "1791315600518",
+          "added_by": "0xd40892daf5c81e3d67ffe9806575970b973ecf6625eb8a88562afae0d8c940c8",
+          "correction": {
+           "type": "0x51368931f28620c7f65b4ae2c5167b42390e69729357a6347be378755b46e7df::record::RecordCorrection",
+           "fields": {
+            "is_replaced_by": null,
+            "replaces": {
+             "type": "0x2::vec_set::VecSet<u64>",
+             "fields": {
+              "contents": []
+             }
+            }
+           }
+          },
+          "data": {
+           "type": "0x51368931f28620c7f65b4ae2c5167b42390e69729357a6347be378755b46e7df::record::Data",
+           "variant": "Text",
+           "fields": {
+            "pos0": "{\"domain\":\"did:iota:testnet:0x6b9a693ebf2ac6fb771a75d25b1284ba75aeb0ae16618eaf5d41d24828a6f7a2\",\"from\":{\"id\":\"0xf00bf46ac8964a410098ab79448a16f871859afa565addb0d0bb5df001ef4727\",\"index\":3768},\"kind\":\"witness.checkpoint\",\"msRoot\":\"0x87e223a6f07bb047d445fc8b504308bd0c497dba7555d25456186dd855243a06\",\"msgCount\":0,\"network\":\"private_tangle1\",\"policyHash\":\"0xf215ce0407df30eeb95787f24b7cce14ff7934d58e53c47753a2074096a3c94d\",\"prev\":null,\"to\":{\"id\":\"0x2b680576002aabe4a059f412f86d6dc936014e38b7c42fe8ee4e91caadb769b1\",\"index\":3779},\"v\":1}"
+           }
+          },
+          "metadata": "{\"checkpointHash\":\"0xd2b61dc88844954dbd1ff7e60a4db8d67480e1de330cfd9634c107b4598a4e44\",\"kind\":\"witness.checkpoint\",\"seq\":1}",
+          "sequence_number": "4",
+          "tag": null
+         }
+        }
+       }
+      }
+     }
+    }
+   }
+  }
+ }
+}

@@ -49,6 +49,9 @@ class VerifierConfig:
     threshold: int
     rebased_network: str | None = None
     trail_id: str | None = None
+    # Where and what to read the anchor record from (see `rebased.make_fetcher`).
+    rebased_rpc: str | None = None
+    audit_trail_package: str | None = None
 
 
 @dataclass(frozen=True)
