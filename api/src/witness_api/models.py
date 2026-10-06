@@ -320,13 +320,28 @@ class Flow(ApiModel):
 class Incident(ApiModel):
     id: int
     title: str
-    severity: str
-    status: str
+    severity: str = Field(description="Highest severity of its events and alerts",
+                          examples=["high"])
+    status: str = Field(description="open, closed:recovered (a proven trust score is back "
+                        "where the first drop fell from) or closed:quiet (no event for 30 "
+                        "minutes)", examples=["open"])
     ie_id: str | None = None
+    keys: list[str] = Field(default_factory=list,
+                            description="What it correlates on: ie:<IE>, sc:<service "
+                                        "component>, iss:<issuer>, ledger",
+                            examples=[["ie:MyDomain:fa163e5e25ef"]])
     opened_at_ms: int
     opened_at: str
+    last_event_ms: int | None = None
+    last_event_at: str | None = None
     closed_at_ms: int | None = None
     closed_at: str | None = None
+    closed_by: str | None = Field(None, description="Block id of the trust score that closed "
+                                  "it on recovery")
+    baseline_score: float | None = Field(None, description="Proven trust score before the "
+                                         "incident (the recovery target)")
+    low_score: float | None = Field(None, description="Lowest trusted score since its first "
+                                    "trust drop")
 
 
 class IncidentList(ApiModel):
@@ -335,19 +350,23 @@ class IncidentList(ApiModel):
 
 class IncidentEvent(ApiModel):
     block_id: str
-    role: str
+    role: str = Field(description="trigger, trust-drop, security, deployment, remediation "
+                      "or alert", examples=["trust-drop"])
+    at_ms: int | None = Field(None, description="When it happened (relay receipt, else "
+                              "confirmation)")
+    at: str | None = None
     tag: str | None = None
     kind: str | None = None
     verdict: str | None = None
-    status: str | None = None
+    status: str | None = Field(None, description="Lifecycle status of the block",
+                               examples=["CONTENT_VERIFIED"])
     ms_index: int | None = None
     date_ms: int | None = None
     date: str | None = None
+    indexed: bool = Field(True, description="False for a block the database has no message "
+                          "for (e.g. ORPHANED)")
+    detail: Any = Field(None, description="What the correlation engine saw in it")
     links: dict[str, str]
-
-
-class IncidentDetail(Incident):
-    events: list[IncidentEvent]
 
 
 # -- alerts, anchors, identity ----------------------------------------------------------------
@@ -366,6 +385,14 @@ class AlertOut(ApiModel):
 
 class AlertList(ApiModel):
     items: list[AlertOut]
+
+
+class IncidentDetail(Incident):
+    events: list[IncidentEvent] = Field(description="In time order; check each against its "
+                                        "block with links.proof")
+    alerts: list[AlertOut] = Field(default_factory=list,
+                                   description="Alerts that joined the incident, including "
+                                               "those about no single block")
 
 
 class AnchorOut(ApiModel):

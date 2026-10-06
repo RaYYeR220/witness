@@ -15,6 +15,10 @@ and the integrity rules run on every stored message, every `--periodic-s` second
 (drift, stale, anchors, shadow writes) and every `--rescan-s` seconds against the Tangle
 (rows missing from the database). An empty `--orion` turns the Orion rules off; an empty
 `--resolver` disables DID resolution (did:iota signers are then FORGED).
+
+The incident engine (Incident Explorer) runs after the rules on every message and pass,
+grouping trust events into incidents; `--alerts-mqtt` (default: the `--mqtt` broker)
+publishes each incident change to `witness/alerts/{severity}`. `--no-incidents` turns it off.
 """
 
 from __future__ import annotations
@@ -34,6 +38,14 @@ from witness_core import policy
 from witness_core.policy import WriterPolicy
 
 from .anchors import default_anchor_did
+from .incidents import (
+    ENGINE_STATUS,
+    MQTT_STATUS,
+    CorrelatedRules,
+    IncidentConfig,
+    IncidentEngine,
+    MqttAlertPublisher,
+)
 from .maintenance import Every, Rescanner
 from .orion import OrionClient
 from .pipeline import ALLOW_ALL, Indexer
@@ -87,6 +99,17 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
                                   "e.g. mqtt://127.0.0.1:1883")
     p.add_argument("--validate", action="store_true",
                    help="validate submitted blocks against the node's REST API")
+    p.add_argument("--incidents", action=argparse.BooleanOptionalAction, default=True,
+                   help="correlate trust events into incidents (default: on)")
+    p.add_argument("--alerts-mqtt", default=os.environ.get("WITNESS_ALERTS_MQTT"),
+                   help="publish incident alerts to witness/alerts/{severity} on this broker "
+                        "(default: $WITNESS_ALERTS_MQTT, else the --mqtt broker; empty: off)")
+    p.add_argument("--incident-window-s", type=float, default=600.0,
+                   help="events this close to an open incident's latest event join it")
+    p.add_argument("--incident-quiet-s", type=float, default=1800.0,
+                   help="an incident without events for this long closes (closed:quiet)")
+    p.add_argument("--incident-drop", type=float, default=0.2,
+                   help="trust score drop that opens an incident")
     p.add_argument("--log-level", default="INFO")
     args = p.parse_args(argv)
     if not args.db:
@@ -131,6 +154,20 @@ def build_rules(args: argparse.Namespace, store: Store, pol: WriterPolicy
     return RulesEngine(store, orion, resolver, pol, RulesConfig()), resolver, orion
 
 
+def build_incidents(args: argparse.Namespace, store: Store,
+                    orion: OrionClient | None) -> IncidentEngine | None:
+    """The incident engine, or None with --no-incidents."""
+    if not args.incidents:
+        return None
+    url = args.mqtt if args.alerts_mqtt is None else args.alerts_mqtt
+    publisher = (MqttAlertPublisher(url, client_id=f"witness-indexer-alerts-{args.schema}")
+                 if url else None)
+    cfg = IncidentConfig(window_ms=int(args.incident_window_s * 1000),
+                         quiet_close_ms=int(args.incident_quiet_s * 1000),
+                         drop_threshold=args.incident_drop)
+    return IncidentEngine(store, orion, cfg, publisher)
+
+
 def _now_ms() -> int:
     return int(time.time() * 1000)
 
@@ -159,6 +196,18 @@ async def amain(args: argparse.Namespace, *, stop: asyncio.Event | None = None) 
             closers.insert(0, orion.aclose)
         if rules.anchor is not None:
             closers.insert(0, rules.anchor.aclose)
+        incidents = build_incidents(args, store, orion)
+        if incidents is None:
+            await store.set_service_status(ENGINE_STATUS, "disabled")
+        else:
+            # Same calls as the rules engine; the incident engine runs after the rules.
+            rules = CorrelatedRules(rules, incidents)
+            closers.insert(0, incidents.aclose)
+            if incidents.publisher is None:
+                await store.set_service_status(MQTT_STATUS, "disabled")
+            else:
+                services.append((MQTT_STATUS, incidents.run_publisher,
+                                 incidents.stop_publisher))
         indexer = Indexer(source, store, policy=pol, policy_mode=policy_mode,
                           resolve=resolver, rules=rules, anchor_did=args.anchor_did or None)
         await indexer.anchors.publish_status(store)

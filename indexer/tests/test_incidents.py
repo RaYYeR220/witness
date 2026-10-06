@@ -208,15 +208,16 @@ async def test_small_moves_and_routine_scores_are_not_events(store, engine):
 
 # -- what may open, attach and close --------------------------------------------------------------
 
-async def test_forged_and_shadow_blocks_never_open_or_close(store, engine):
+async def test_forged_and_shadow_blocks_never_close_or_remediate(store, engine):
     await feed(store, engine, score(0.9, ms=10))
     await feed(store, engine, score(0.9, ms=10, ie=IE_Y))
-    # A forged self-orchestrator error for Z and a drop for Y written around the relay open
-    # nothing, even once their alerts are scanned.
-    assert await feed(store, engine, so_error("isolate-ie", ms=11, ie=IE_Z, verdict=V.FORGED),
-                      alerts=("FORGED",)) == []
+    # Written content alone opens nothing: a drop for Y written around the relay, and a forged
+    # report about a component no one can place on an IE (alert only), even once scanned.
     assert await feed(store, engine, score(0.1, ms=11, ie=IE_Y,
                                            verdict=V.UNSIGNED_LEGACY)) == []
+    assert await feed(store, engine, llo("Service component failed", ms=11, verdict=V.FORGED,
+                                         sc="urn-ngsi-ld-service-ff-component-x"),
+                      alerts=("FORGED",)) == []
     await engine.periodic(now_ms=(T0 + 30 * 11) * 1000)
     assert await store.incidents() == []
 
@@ -245,22 +246,70 @@ async def test_forged_and_shadow_blocks_never_open_or_close(store, engine):
     assert inc["status"] == "closed:recovered" and inc["closed_by"] == real.block_id
 
 
-async def test_forged_evidence_neither_prolongs_nor_reshapes_an_incident(store, engine):
+async def test_attacker_content_never_reshapes_an_incident(store, engine):
     await feed(store, engine, score(0.9, ms=10))
     await feed(store, engine, score(0.4, ms=11))
     [inc] = await store.incidents()
     last = inc["last_event_ms"]
-    # forged LLO report claiming a component of X, and a forged error, minutes later
-    forged = llo("Service component failed", ms=12, sc="urn-ngsi-ld-service-ff-component-x",
+    # an unsigned score written around the relay is evidence; it does not keep the incident
+    # going, nor count as a lower score
+    bypass = score(0.2, ms=12, verdict=V.UNSIGNED_LEGACY, ts=T0 + 330 + 300)
+    assert actions(await feed(store, engine, bypass)) == ["attached"]
+    [inc] = await store.incidents()
+    assert inc["last_event_ms"] == last and inc["low_score"] == 0.4
+    # a forged LLO report naming some component of X: its FORGED alert is an attack in
+    # progress (the incident stays open), the component claim does not join the keys
+    forged = llo("Service component failed", ms=13, sc="urn-ngsi-ld-service-ff-component-x",
                  verdict=V.FORGED, ts=T0 + 330 + 500)
     await store_row(store, forged)
     await store.put_alert(Alert("FORGED", "critical", forged.block_id, IE_X, {}, 1))
-    [change] = await engine.on_message(forged)  # joins through its FORGED alert's IE
+    [change] = await engine.on_message(forged)
     assert (change["action"], change["role"], change["severity"]) == (
         "attached", "alert", "critical")
     [inc] = await store.incidents()
-    assert inc["last_event_ms"] == last and inc["keys"] == [f"ie:{IE_X}"]
-    assert actions(await engine.periodic(now_ms=last + 1_800_001)) == ["closed"]
+    assert inc["last_event_ms"] == (T0 + 830) * 1000 and inc["keys"] == [f"ie:{IE_X}"]
+    assert await engine.periodic(now_ms=last + 1_800_001) == []
+    assert actions(await engine.periodic(now_ms=(T0 + 830) * 1000 + 1_800_001)) == ["closed"]
+
+
+async def test_a_witnessed_attack_on_an_ie_opens_an_incident(store, engine):
+    await feed(store, engine, score(0.9, ms=10, ie=IE_Z))
+    forged = score(0.1, ms=11, ie=IE_Z, verdict=V.FORGED)
+    [opened] = await feed(store, engine, forged, alerts=("FORGED",))
+    assert (opened["action"], opened["role"], opened["rule"]) == ("opened", "trigger", "FORGED")
+    [inc] = await store.incidents()
+    assert (inc["ie_id"], inc["severity"], inc["status"]) == (IE_Z, "critical", "open")
+    assert "Forged" in inc["title"] and IE_Z in inc["title"]
+    assert inc["low_score"] is None  # a forged drop is no trust drop
+    # the attack goes on: a replay two minutes later joins and keeps the incident open
+    replay = score(0.1, ms=15, ie=IE_Z, verdict=V.REPLAY)
+    assert actions(await feed(store, engine, replay, alerts=("REPLAY",))) == ["attached"]
+    # a forged "recovery" is evidence too, never the closure
+    fake_ok = score(0.99, ms=16, ie=IE_Z, verdict=V.FORGED)
+    assert actions(await feed(store, engine, fake_ok, alerts=("FORGED",))) == ["attached"]
+    [inc] = await store.incidents()
+    assert inc["status"] == "open" and inc["last_event_ms"] == (T0 + 30 * 16) * 1000
+    tl = await engine.timeline(inc["id"])
+    assert [e["role"] for e in tl["events"]] == ["trigger", "alert", "alert"]
+    assert [e["verdict"] for e in tl["events"]] == [V.FORGED, V.REPLAY, V.FORGED]
+    assert sorted(a["rule"] for a in tl["alerts"]) == ["FORGED", "FORGED", "REPLAY"]
+    # only time closes it
+    assert actions(await engine.periodic(now_ms=(T0 + 30 * 16) * 1000 + 1_800_001)) == [
+        "closed"]
+
+
+async def test_attack_alerts_find_the_ie_through_the_component(store, engine):
+    # the LLO names only its component; Orion places it on X
+    rogue = llo("Service component deployed", ms=10, verdict=V.UNAUTHORIZED_WRITER)
+    [opened] = await feed(store, engine, rogue, alerts=("UNAUTHORIZED_WRITER",))
+    assert (opened["action"], opened["ieId"], opened["severity"]) == ("opened", IE_X, "high")
+    # without an IE an attack stays an alert
+    lost = llo("Service component failed", ms=11, verdict=V.FORGED,
+               sc="urn-ngsi-ld-service-ff-component-q")
+    assert await feed(store, engine, lost, alerts=("FORGED",)) == []
+    junk = row("unknown-tag", {"anything": 1}, ms=12, verdict=V.FORGED)
+    assert await feed(store, engine, junk, alerts=("FORGED",)) == []
+    assert [i["ie_id"] for i in await store.incidents()] == [IE_X]
 
 
 async def test_relay_routed_unsigned_events_may_open(store, engine):

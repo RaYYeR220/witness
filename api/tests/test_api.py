@@ -351,6 +351,7 @@ async def test_flows_and_incidents(client, store, vectors):
     assert events[B370_5]["verdict"] == verdicts.UNSIGNED_LEGACY
     assert events[B370_5]["links"]["proof"] == f"/proofs/{B370_5}"
     assert events["0x" + e1.hex()]["verdict"] == verdicts.PRODUCER_SIGNED
+    assert (inc["keys"], inc["alerts"], inc["lastEventMs"]) == ([], [], MS371_TS * 1000)
     assert (await client.get("/incidents/999999")).status_code == 404
 
 

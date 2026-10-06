@@ -136,6 +136,20 @@ def anchor(row: dict) -> m.AnchorOut:
 
 def incident(row: dict) -> dict[str, Any]:
     return {"id": row["id"], "title": row["title"], "severity": row["severity"],
-            "status": row["status"], "ie_id": row["ie_id"],
+            "status": row["status"], "ie_id": row["ie_id"], "keys": list(row["keys"] or []),
             "opened_at_ms": row["opened_at_ms"], "opened_at": iso(row["opened_at_ms"]),
-            "closed_at_ms": row["closed_at_ms"], "closed_at": iso(row["closed_at_ms"])}
+            "last_event_ms": row["last_event_ms"], "last_event_at": iso(row["last_event_ms"]),
+            "closed_at_ms": row["closed_at_ms"], "closed_at": iso(row["closed_at_ms"]),
+            "closed_by": hx(row["closed_by"]), "baseline_score": row["baseline_score"],
+            "low_score": row["low_score"]}
+
+
+def incident_event(row: dict, link: Linker) -> m.IncidentEvent:
+    """One row of Store.incident_timeline."""
+    bid = hx(row["block_id"])
+    date = row["received_at_ms"] or row["confirmed_at_ms"] or sec_to_ms(row["ts"])
+    return m.IncidentEvent(
+        block_id=bid, role=row["role"], at_ms=row["at_ms"], at=iso(row["at_ms"]),
+        tag=row["tag"], kind=row["kind"], verdict=row["verdict"], status=row["status"],
+        ms_index=row["ms_index"], date_ms=date, date=iso(date), indexed=row["indexed"],
+        detail=row["detail"], links=link.message(bid))

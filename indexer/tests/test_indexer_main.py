@@ -10,6 +10,7 @@ from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
 from fakechain import FakeChain, FakeSource, signed, tamper
 from witness_core import policy
 from witness_indexer import main as cli
+from witness_indexer.incidents import CorrelatedRules, IncidentEngine, MqttAlertPublisher
 from witness_indexer.pipeline import ALLOW_ALL
 from witness_indexer.resolver import DidResolver
 from witness_indexer.rules import RulesEngine
@@ -120,7 +121,8 @@ async def test_amain_indexes_and_shuts_down_cleanly(monkeypatch):
             while True:
                 try:
                     st = await store.stats()
-                    if st["cursor"] == 3 and st.get("rules") == "ok":
+                    if (st["cursor"] == 3 and st.get("rules") == "ok"
+                            and st.get("incident-engine") == "ok"):
                         return
                 except psycopg.errors.UndefinedTable:
                     pass  # amain has not migrated yet
@@ -137,6 +139,11 @@ async def test_amain_indexes_and_shuts_down_cleanly(monkeypatch):
         # the rules engine judged the stored messages and ran its periodic pass
         assert [a["rule"] for a in await store.alerts()] == ["FORGED"]
         assert stats["shadow"] == "no-baseline"
+        # ... and the incident engine made the forgery against the IE an incident
+        [inc] = await store.incidents()
+        assert (inc["ie_id"], inc["severity"], inc["status"]) == (
+            "D:aabbccddeeff", "critical", "open")
+        assert stats["alerts-mqtt"] == "disabled"  # no broker configured
     finally:
         stop.set()
         await asyncio.gather(task, return_exceptions=True)
@@ -162,6 +169,37 @@ def test_build_rules_wiring(caplog):
                             "--orion", ""]), store, ALLOW_ALL)
     assert resolver.base_url is None and orion is None and rules.orion is None
     assert "no --resolver" in caplog.text
+
+
+def test_incident_engine_wiring(monkeypatch):
+    monkeypatch.delenv("WITNESS_ALERTS_MQTT", raising=False)
+    base = ["--db", "postgresql://x", "--allow-any-writer", "--schema", "s1"]
+    a = cli.parse_args(base)
+    assert (a.incidents, a.alerts_mqtt, a.incident_window_s, a.incident_quiet_s,
+            a.incident_drop) == (True, None, 600.0, 1800.0, 0.2)
+    store, orion = object(), object()
+    eng = cli.build_incidents(a, store, orion)
+    assert isinstance(eng, IncidentEngine) and eng.publisher is None and eng.orion is orion
+    assert (eng.cfg.window_ms, eng.cfg.quiet_close_ms, eng.cfg.drop_threshold) == (
+        600_000, 1_800_000, 0.2)
+    # alerts go to the submission broker unless told otherwise
+    eng = cli.build_incidents(cli.parse_args([*base, "--mqtt", "mqtt://broker:1883",
+                                              "--incident-window-s", "60",
+                                              "--incident-drop", "0.3"]), store, None)
+    assert isinstance(eng.publisher, MqttAlertPublisher)
+    assert eng.publisher._params["hostname"] == "broker"
+    assert eng.publisher._params["identifier"] == "witness-indexer-alerts-s1"
+    assert (eng.cfg.window_ms, eng.cfg.drop_threshold) == (60_000, 0.3)
+    eng = cli.build_incidents(cli.parse_args([*base, "--mqtt", "mqtt://broker:1883",
+                                              "--alerts-mqtt", ""]), store, None)
+    assert eng.publisher is None
+    monkeypatch.setenv("WITNESS_ALERTS_MQTT", "mqtt://alerts:1884")
+    eng = cli.build_incidents(cli.parse_args(base), store, None)
+    assert (eng.publisher._params["hostname"], eng.publisher._params["port"]) == (
+        "alerts", 1884)
+    assert cli.build_incidents(cli.parse_args([*base, "--no-incidents"]), store, None) is None
+    rules = object()
+    assert CorrelatedRules(rules, eng).rules is rules
 
 
 def test_parse_args_rules_defaults():

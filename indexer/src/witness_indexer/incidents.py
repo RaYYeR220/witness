@@ -11,9 +11,13 @@ Triggers (a message or alert that may open an incident):
 - a `self-orchestrator` message with a non-zero, non-empty `errorCode`;
 - an LLO (`LLO-K8s` / `LLO-Docker`) "Service component failed";
 - a message on one of `security_tags` naming an IE (e.g. `self-security`);
-- a critical or high alert on a block (FORGED, REPLAY, CHAIN_FORK, CONTENT_MISMATCH, ...).
-  Alerts about the explorer's own records (`INTEGRITY_RULES`: DB_TAMPER, MISSING_IN_DB,
-  ANCHOR_MISMATCH, ...) form a `ledger` incident unless they name an IE.
+- a critical or high alert on a trusted block (CHAIN_FORK, ...);
+- a witnessed attack (`ATTACK_RULES`: FORGED, REPLAY, UNAUTHORIZED_WRITER, REVOKED_KEY at
+  critical/high) on a message that names an IE, directly or through its service component:
+  a forgery attempt shows up as an incident on the IE it targets. Without an IE it stays an
+  alert (and evidence for an incident already open on its component);
+- an alert about the explorer's own records (`INTEGRITY_RULES`: DB_TAMPER, MISSING_IN_DB,
+  ANCHOR_MISMATCH, ...), grouped into a `ledger` incident unless it names an IE.
 
 Correlation: an incident has keys (`ie:<IE id>`, `sc:<service component>`, `iss:<issuer>`,
 `ledger`). An event joins the open incident it shares a key with when it happened within
@@ -23,11 +27,13 @@ comes from Orion's ServiceComponent entities (fetched only outside a database tr
 2 s budget, cached), else the component id alone is the key. The LLO's k8s resource name
 (`urn-ngsi-ld-service-<id>-component-<name>`) and the Orion entity id are lined up.
 
-Trust: only PROVEN (producer-signed or relay-attested) or relay-routed unsigned events (a
-submission names the block) without a SHADOW alert may open an incident or add keys to it.
-Anything else (FORGED, REPLAY, written around the relay, ...) joins an open incident as
-`alert` evidence only: it never opens, closes, extends or remediates one, so an attacker can
-neither invent an incident nor write its closure.
+Trust: what a message claims counts only if it is PROVEN (producer-signed or relay-attested)
+or relay-routed unsigned (a submission names the block), without a SHADOW alert. Only such
+messages open incidents from their content, add keys to one or close it. Anything else
+(FORGED, REPLAY, written around the relay, ...) joins as `alert` evidence; it is an incident
+only through the alert Witness raised about it (above), which can open and prolong one but
+never reshapes, remediates or closes it: an attacker can neither write a closure nor
+fabricate a trust drop, an orchestrator error or a failed deployment.
 
 Every event carries its block id and a role: `trigger` (the event that opened the incident),
 `trust-drop`, `security`, `deployment` (LLO reports), `remediation` (a cleared self-
@@ -51,17 +57,10 @@ every step runs in a savepoint, a failure is logged and reported (`incident-engi
 `incidents` itself is the table count in `Store.stats()`) and never raised into the caller's
 transaction, and no HTTP happens inside a transaction.
 
-Wiring (indexer `main.py`):
-
-    incidents = IncidentEngine(store, orion, IncidentConfig(),
-                               MqttAlertPublisher(args.mqtt) if args.mqtt else None)
-    rules = CorrelatedRules(rules, incidents)     # Indexer(rules=...), Every(... periodic)
-    services.append(("alerts-mqtt", incidents.run_publisher, incidents.stop_publisher))
-    closers.append(incidents.aclose)
-
-`CorrelatedRules` is a drop-in for the RulesEngine: it returns the rules' alerts and runs the
-incident engine after them, per message (inside the milestone transaction) and per periodic
-pass (which also picks up the alerts the validator and the periodic rules raise).
+`CorrelatedRules(rules, incidents)` is what the indexer (`main.py`) runs in place of the
+rules engine: it returns the rules' alerts and runs the incident engine after them, per
+message (inside the milestone transaction) and per periodic pass (which also picks up the
+alerts the validator and the periodic rules raise); `run_publisher` is its own service.
 """
 
 from __future__ import annotations
@@ -100,6 +99,8 @@ TRIGGER_SEVERITIES = ["critical", "high"]
 # Alerts about the explorer's own records rather than about what a writer claimed.
 INTEGRITY_RULES = frozenset({"MISSING_IN_DB", "DB_TAMPER", "ANCHOR_MISMATCH",
                              "CONTENT_MISMATCH", "NOT_FOUND", "ORPHANED"})
+# Alerts that a writer attacked the record of whatever IE its message names.
+ATTACK_RULES = frozenset({"FORGED", "REPLAY", "UNAUTHORIZED_WRITER", "REVOKED_KEY"})
 RULE_TITLES = {
     "FORGED": "Forged message",
     "REPLAY": "Replayed message",
@@ -248,8 +249,9 @@ class _Obs:
     keys: set[str]
     at_ms: int
     role: str                     # its role when it joins an open incident
-    trusted: bool                 # proven or relay-routed, no SHADOW
+    trusted: bool                 # proven or relay-routed, no SHADOW: may shape an incident
     opens: bool = False           # a trigger
+    extends: bool = False         # moves the incident's last event (keeps it from going quiet)
     severity: str | None = None
     title: str = ""
     ie_id: str | None = None
@@ -380,7 +382,8 @@ class IncidentEngine:
                 return 0
 
     async def run_publisher(self) -> None:
-        """Deliver alerts as their transactions commit (polls every `publish_poll_s`)."""
+        """Deliver alerts as their transactions commit (polls every `publish_poll_s`); a last
+        delivery attempt when stopped."""
         self._stopping = False
         self._wake = asyncio.Event()
         while not self._stopping:
@@ -388,6 +391,7 @@ class IncidentEngine:
             with contextlib.suppress(TimeoutError):
                 await asyncio.wait_for(self._wake.wait(), self.cfg.publish_poll_s)
             self._wake.clear()
+        await self.flush()
 
     async def stop_publisher(self) -> None:
         self._stopping = True
@@ -459,6 +463,7 @@ class IncidentEngine:
                    position=None if row.ms_index is None else (row.ms_index, row.wf_index or 0))
         if not obs.trusted:
             return obs  # evidence only
+        obs.extends = True
         if kind == SCORE_KIND:
             await self._score_obs(obs, row, ie, value, trust)
         elif kind == ORCHESTRATOR_KIND:
@@ -542,6 +547,7 @@ class IncidentEngine:
             trusted = True
             keys = {f"ie:{alert_ie}"} if alert_ie else {LEDGER}
             ie = alert_ie
+            opens = True
         else:
             trusted = (msg is not None
                        and await self._trust(bid, msg["verdict"]) != "untrusted")  # type: ignore[arg-type]
@@ -552,10 +558,14 @@ class IncidentEngine:
             ie = ie or self._host(sc)
             if not keys:
                 return
+            opens = trusted
+            if not trusted and rule in ATTACK_RULES and ie:
+                keys, opens = {f"ie:{ie}"}, True  # an attack on this IE's record
         label = RULE_TITLES.get(rule, _label(rule, 40))
         where = f"on {ie}" if ie else (f"in block {_hex(bid)[:12]}..." if bid else "")
         obs = _Obs(bid, keys, _msg_time(msg) or _int(a["ts"]) or self._now(), "alert",
-                   trusted=trusted, opens=trusted, severity=a["severity"], ie_id=ie,
+                   trusted=trusted, opens=opens, extends=opens, severity=a["severity"],
+                   ie_id=ie,
                    title=f"{label} {where}".strip() + f" ({rule})" * (label != rule),
                    detail={"rule": rule, "alertId": a["id"],
                            "reason": _clean_value((a["evidence"] or {}).get("reason"))},
@@ -565,15 +575,24 @@ class IncidentEngine:
         await self._correlate(obs, step)
 
     async def _link(self, inc: dict, a: dict, step: _Step) -> None:
-        """Join an alert to an incident; reported unless its block joined in this very step
-        and the severity stays."""
+        """Join an alert to the incident its block is in; reported unless the block joined in
+        this very step and the severity stays. A witnessed attack or integrity alert counts
+        as activity of the incident."""
         if not await self.store.link_incident_alert(a["id"], inc["id"], self._now()):
             return
+        fields: dict[str, Any] = {}
         sev = _max_sev(inc["severity"], a["severity"])
         if sev != inc["severity"]:
-            await self.store.update_incident(inc["id"], severity=sev)
-            inc["severity"] = sev
-        elif a["block_id"] is not None and bytes(a["block_id"]) in step.attached:
+            fields["severity"] = sev
+        at = inc.get("event_at_ms")
+        if (a["rule"] in ATTACK_RULES | INTEGRITY_RULES and inc["status"] == OPEN
+                and at is not None and at > (inc["last_event_ms"] or 0)):
+            fields["last_event_ms"] = at
+        if fields:
+            await self.store.update_incident(inc["id"], **fields)
+            inc.update(fields)
+        joined_now = a["block_id"] is not None and bytes(a["block_id"]) in step.attached
+        if joined_now and "severity" not in fields:
             return
         step.changes.append(_change("updated", inc, block_id=a["block_id"], rule=a["rule"]))
 
@@ -597,7 +616,7 @@ class IncidentEngine:
             return
         inc = self._pick(candidates, obs.at_ms)
         if inc is None:
-            if obs.opens and obs.trusted:
+            if obs.opens:
                 await self._open(obs, step)
             return
         await self._attach(inc, obs, step)
@@ -640,12 +659,12 @@ class IncidentEngine:
         sev = _max_sev(inc["severity"], obs.severity)
         if sev != inc["severity"]:
             fields["severity"] = sev
-        if obs.trusted:  # evidence an attacker wrote never shapes or prolongs an incident
+        if obs.extends and obs.at_ms > (inc["last_event_ms"] or 0):
+            fields["last_event_ms"] = obs.at_ms
+        if obs.trusted:  # what an attacker wrote never shapes an incident
             keys = set(inc["keys"]) | obs.keys
             if keys != set(inc["keys"]):
                 fields["keys"] = sorted(keys)
-            if obs.at_ms > (inc["last_event_ms"] or 0):
-                fields["last_event_ms"] = obs.at_ms
             if obs.ie_id and inc["ie_id"] is None:
                 fields["ie_id"] = obs.ie_id
             ie = fields.get("ie_id", inc["ie_id"])
@@ -743,11 +762,8 @@ class IncidentEngine:
 
     def _event_view(self, r: dict) -> dict:
         bid = _hex(r["block_id"])
-        status = r["lifecycle_status"] or r["message_status"]
-        if status is None and r["ms_index"] is not None:
-            status = "CONFIRMED"  # in a milestone's cone, never seen through the relay
         return {"blockId": bid, "role": r["role"], "atMs": r["at_ms"], "tag": r["tag"],
-                "kind": r["kind"], "verdict": r["verdict"], "status": status,
+                "kind": r["kind"], "verdict": r["verdict"], "status": r["status"],
                 "msIndex": r["ms_index"], "ieId": r["ie_id"], "iss": r["iss"],
                 "indexed": r["indexed"], "detail": r["detail"], "proof": f"/proofs/{bid}"}
 

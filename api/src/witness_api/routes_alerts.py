@@ -54,8 +54,8 @@ async def incidents(
 
 @router.get("/incidents/{incident_id}", response_model=m.IncidentDetail,
             summary="One incident with its timeline",
-            description="Each event with its verdict, lifecycle status and proof link, in "
-                        "time order.",
+            description="Each event with its role, verdict, lifecycle status and proof "
+                        "link, in time order, and the alerts that joined it.",
             responses={404: {"description": "Unknown incident"}})
 async def incident(
     incident_id: Annotated[int, Path(ge=1, le=2**63 - 1)], svc: Svc,
@@ -63,15 +63,7 @@ async def incident(
     row = await svc.store.incident(incident_id)
     if row is None:
         raise HTTPException(404, f"no incident {incident_id}")
-    events = []
-    for e in row["events"]:
-        bid = bytes(e["block_id"])
-        msg = await svc.store.get_message(bid)
-        hexid = views.hx(bid)
-        item = views.message(msg, svc.link) if msg is not None else None
-        events.append(m.IncidentEvent(
-            block_id=hexid, role=e["role"], tag=item and item.tag, kind=item and item.kind,
-            verdict=item and item.verdict, status=item and item.status,
-            ms_index=item and item.ms_index, date_ms=item and item.date_ms,
-            date=item and item.date, links=svc.link.message(hexid)))
-    return m.IncidentDetail(**views.incident(row), events=events)
+    events = [views.incident_event(e, svc.link)
+              for e in await svc.store.incident_timeline(incident_id)]
+    alerts = [views.alert(a) for a in await svc.store.incident_alerts(incident_id)]
+    return m.IncidentDetail(**views.incident(row), events=events, alerts=alerts)

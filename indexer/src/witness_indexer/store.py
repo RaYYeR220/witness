@@ -972,7 +972,7 @@ class Store:
     async def incidents_with_block(self, block_id: bytes) -> list[dict]:
         """Incidents the block is an event of, open ones first, then newest."""
         return await self._fetch(
-            "SELECT i.*, e.role AS event_role FROM incident_events e "
+            "SELECT i.*, e.role AS event_role, e.at_ms AS event_at_ms FROM incident_events e "
             "JOIN incidents i ON i.id = e.incident_id WHERE e.block_id = %s "
             "ORDER BY (i.status = 'open') DESC, i.id DESC", (block_id,))
 
@@ -988,19 +988,22 @@ class Store:
 
     async def incident_alerts(self, incident_id: int) -> list[dict]:
         return await self._fetch(
-            "SELECT a.id, a.rule, a.severity, a.block_id, a.ie_id, a.evidence, a.ts "
+            "SELECT a.id, a.rule, a.severity, a.block_id, a.ie_id, a.evidence, a.ts, "
+            "a.dedupe_key "
             "FROM incident_alerts l JOIN alerts a ON a.id = l.alert_id "
             "WHERE l.incident_id = %s ORDER BY a.ts, a.id", (incident_id,))
 
     async def incident_timeline(self, incident_id: int) -> list[dict]:
         """The incident's events in time order, each with what the database knows about its
-        block: message fields and the latest lifecycle status."""
+        block: message fields and its status, the latest lifecycle status (else CONFIRMED
+        for a block of a milestone cone that never came through the Messages API)."""
         return await self._fetch(
             "SELECT e.block_id, e.role, e.at_ms, e.attached_at_ms, e.detail, m.tag, m.kind, "
-            "m.verdict, m.ie_id, m.iss, m.ms_index, m.ts, m.status AS message_status, "
-            "(m.block_id IS NOT NULL) AS indexed, "
-            "(SELECT l.status FROM lifecycle l WHERE l.block_id = e.block_id "
-            " ORDER BY l.at_ms DESC, l.id DESC LIMIT 1) AS lifecycle_status "
+            "m.verdict, m.ie_id, m.iss, m.ms_index, m.ts, m.received_at_ms, "
+            "m.confirmed_at_ms, (m.block_id IS NOT NULL) AS indexed, "
+            "COALESCE((SELECT l.status FROM lifecycle l WHERE l.block_id = e.block_id "
+            " ORDER BY l.at_ms DESC, l.id DESC LIMIT 1), m.status, "
+            " CASE WHEN m.ms_index IS NOT NULL THEN 'CONFIRMED' END) AS status "
             "FROM incident_events e LEFT JOIN messages m ON m.block_id = e.block_id "
             "WHERE e.incident_id = %s ORDER BY COALESCE(e.at_ms, m.received_at_ms, "
             "m.confirmed_at_ms, m.ts * 1000) NULLS LAST, e.attached_at_ms, e.block_id",
