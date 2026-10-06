@@ -8,10 +8,10 @@ import {
   type MilestoneSource,
   type Window,
 } from "./checkpoint.js";
-import { fromHex } from "@witness/verify";
+import { fromHex, toHex } from "@witness/verify";
 import { MilestoneMismatch, type WindowVerifier } from "./hornet.js";
 import { log } from "./log.js";
-import { postMirror, type MirrorSigner, type RelayClient } from "./mirror.js";
+import { ANCHOR_TAG, RECEIPTS_LIMIT, mirrorOnNode, postMirror, type BlockReader, type MirrorSigner, type RelayClient } from "./mirror.js";
 import { chainProblem, emptyState, type AnchorState, type CheckpointEntry, type StateStore } from "./state.js";
 import type { AppendResult, PendingAppend, ResumeResult, TrailRecord, TrailService } from "./trail.js";
 
@@ -27,7 +27,9 @@ export interface LoopDeps {
   source: MilestoneSource;
   /** Checks every milestone id of a window against the node and the coordinator keys. */
   verifier: WindowVerifier;
-  relay: Pick<RelayClient, "upload" | "findReceipt">;
+  relay: Pick<RelayClient, "upload" | "receipts">;
+  /** Reads posted mirror blocks back from the node (HornetClient). */
+  blocks: BlockReader;
   signer: MirrorSigner;
   store: StateStore;
   params: CheckpointParams;
@@ -176,6 +178,15 @@ export class AnchorLoop {
       };
     }
 
+    const head = state.checkpoints.at(-1);
+    if (head && (head.checkpoint.network !== d.params.network || head.checkpoint.domain !== d.params.domain)) {
+      return {
+        status: "error",
+        stage: "state",
+        error: `the chain so far is for ${head.checkpoint.network} / ${head.checkpoint.domain}, the configuration says ${d.params.network} / ${d.params.domain}`,
+      };
+    }
+
     if (state.pending) {
       try {
         await this.#settlePending(state);
@@ -276,17 +287,12 @@ export class AnchorLoop {
         d.store.save(state);
         return;
       }
-      let out;
-      try {
-        out = await postMirror(entry, state.mirror, d.signer, d.relay, d.network);
-      } catch (err) {
-        out = { ok: false as const, error: message(err) };
-      }
+      const out = await postMirror(entry, state.mirror, d.signer, d.relay, d.network, d.blocks);
       if (!out.ok) {
         entry.mirrorError = out.error;
         if (out.burntSeq !== undefined) state.mirror.lastSeq = Math.max(state.mirror.lastSeq, out.burntSeq);
         d.store.save(state);
-        log.warn("checkpoint mirror not posted; retrying next tick", { seq: entry.seq, error: out.error });
+        log.warn("checkpoint mirror not posted; retrying next tick", { seq: entry.seq, error: out.error, detail: out.detail });
         return;
       }
       entry.mirror = { status: "posted", blockId: out.blockId, envelopeSeq: out.envelopeSeq, at: new Date().toISOString(), ...(out.recovered ? { recovered: true } : {}) };
@@ -300,7 +306,8 @@ export class AnchorLoop {
   /**
    * Rebuilds the state when its file is missing: checkpoint records this writer added to the
    * trail are read back (newest first, down to seq 1) so the chain continues instead of starting
-   * over. Whether they were mirrored is unknown, so they are not mirrored again.
+   * over, provided it was built for the same Tangle, domain and writer policy as now. The mirror
+   * chain is then seeded from the relay's receipts (see #seedMirror).
    */
   async #recover(trailId: string): Promise<AnchorState> {
     const d = this.#d;
@@ -338,9 +345,55 @@ export class AnchorLoop {
     found.sort((a, b) => a.seq - b.seq);
     const problem = chainProblem(found);
     if (problem) throw new Error(`state file ${d.store.path} is missing and the trail's checkpoints do not form one chain (${problem})`);
+    const last = found.at(-1)!.checkpoint;
+    const expected = { network: d.params.network, domain: d.params.domain, policyHash: toHex(d.params.policyHash) };
+    for (const field of ["network", "domain", "policyHash"] as const) {
+      if (last[field] !== expected[field]) {
+        throw new Error(
+          `state file ${d.store.path} is missing and the trail's last checkpoint has ${field} ${JSON.stringify(last[field])}, ` +
+            `the configuration says ${JSON.stringify(expected[field])}; restore the state file or fix the configuration`,
+        );
+      }
+    }
     state.checkpoints = found;
     state.mirror.lastSeq = found.at(-1)!.seq;
+    await this.#seedMirror(state);
     log.warn("state file missing; checkpoint chain rebuilt from the trail", { checkpoints: found.length, last: found.at(-1)!.seq });
     return state;
+  }
+
+  /**
+   * After a rebuild: every seq the relay holds for us is spent, the newest receipt is the head of
+   * the mirror chain, and a rebuilt checkpoint counts as mirrored when a receipt's block, read
+   * back from the node, carries its seq and checkpoint hash. When the relay listed all our
+   * receipts, the checkpoints none of them carries are mirrored again; otherwise they stay
+   * "unknown". Best effort: without the relay or the node the chain continues unseeded.
+   */
+  async #seedMirror(state: AnchorState): Promise<void> {
+    const d = this.#d;
+    try {
+      const receipts = await d.relay.receipts(d.signer.iss, ANCHOR_TAG);
+      if (receipts.length === 0) {
+        // Nothing of ours on the relay: mirror the rebuilt checkpoints again, seq = checkpoint seq.
+        for (const e of state.checkpoints) e.mirror = null;
+        state.mirror = { lastSeq: 0, lastBlockId: null };
+        return;
+      }
+      const newest = receipts.reduce((a, b) => (b.seq > a.seq ? b : a));
+      state.mirror = { lastSeq: Math.max(state.mirror.lastSeq, newest.seq), lastBlockId: newest.blockId };
+      const bySeq = new Map(state.checkpoints.map((e) => [e.seq, e]));
+      for (const r of receipts) {
+        const onNode = await mirrorOnNode(d.blocks, r.blockId, d.signer.iss);
+        const e = onNode ? bySeq.get(onNode.seq) : undefined;
+        if (e && onNode!.checkpointHash === e.checkpointHash && e.mirror?.status !== "posted") {
+          e.mirror = { status: "posted", blockId: r.blockId, envelopeSeq: r.seq, at: new Date().toISOString(), recovered: true };
+        }
+      }
+      if (receipts.length < RECEIPTS_LIMIT) {
+        for (const e of state.checkpoints) if (e.mirror?.status === "unknown") e.mirror = null;
+      }
+    } catch (err) {
+      log.warn("could not seed the mirror chain from the relay; continuing without it", { error: err });
+    }
   }
 }

@@ -197,8 +197,27 @@ export class FakeRelay {
     return { kind: "posted", blockId };
   }
 
-  async findReceipt(iss: string, tag: string, seq: number): Promise<string | null> {
-    return this.posted.find((p) => p.tag === tag && p.env.iss === iss && p.env.seq === seq)?.blockId ?? null;
+  receiptsDown = false;
+  async receipts(iss: string, tag: string): Promise<{ blockId: string; seq: number }[]> {
+    if (this.receiptsDown) throw new RelayError("relay unreachable: ECONNREFUSED");
+    return this.posted
+      .filter((p) => p.tag === tag && p.env.iss === iss)
+      .map((p) => ({ blockId: p.blockId, seq: p.env.seq as number }))
+      .reverse();
+  }
+
+  /** The private Tangle as far as these tests go: every block the relay posted. */
+  async taggedData(blockId: string): Promise<{ tag: string; data: Uint8Array } | null> {
+    const p = this.posted.find((x) => x.blockId === blockId);
+    return p ? { tag: p.tag, data: jcsBytes(p.env) } : null;
+  }
+
+  /** Posts a message directly, as an earlier run of the anchor would have. */
+  seedPosted(tag: string, env: Envelope): string {
+    const blockId = toHex(blake2b256(jcsBytes(env)));
+    this.posted.push({ tag, env, blockId });
+    this.#last.set(env.iss as string, Math.max(this.#last.get(env.iss as string) ?? 0, env.seq as number));
+    return blockId;
   }
 }
 

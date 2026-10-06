@@ -37,6 +37,7 @@ async function main(): Promise<void> {
 
   let loop: AnchorLoop | null = null;
   if (wallet) {
+    const hornet = new HornetClient(cp.hornetUrl!, cp.httpTimeoutMs);
     const ids = identities();
     const domain = cp.domain ?? ids?.domain ?? null;
     if (!domain) throw new ConfigError([`ANCHOR_DOMAIN is not set and ${cfg.identitiesFile} names no domain DID`]);
@@ -45,7 +46,8 @@ async function main(): Promise<void> {
       writer: wallet.address,
       trail,
       source: new ApiMilestoneSource(cp.apiUrl, cp.httpTimeoutMs),
-      verifier: new HornetWindowVerifier(new HornetClient(cp.hornetUrl!, cp.httpTimeoutMs), {
+      blocks: hornet,
+      verifier: new HornetWindowVerifier(hornet, {
         keys: new Set(cp.coordinatorKeys),
         threshold: cp.coordinatorThreshold,
       }),

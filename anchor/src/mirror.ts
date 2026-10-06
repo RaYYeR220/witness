@@ -151,9 +151,9 @@ export class RelayClient {
     return { kind: "rejected", status, error };
   }
 
-  /** Block id of the receipt for `iss`'s message with this seq on `tag`, if the relay has one. */
-  async findReceipt(iss: string, tag: string, seq: number): Promise<string | null> {
-    const q = new URLSearchParams({ iss, tag, limit: "200" });
+  /** The relay's receipts of `iss` on `tag` (newest first, at most `limit`), as {blockId, seq}. */
+  async receipts(iss: string, tag: string, limit = RECEIPTS_LIMIT): Promise<Receipt[]> {
+    const q = new URLSearchParams({ iss, tag, limit: String(limit) });
     const { status, text } = await this.#request(`${this.#base}/receipts?${q}`, { headers: { accept: "application/json" } });
     if (status !== 200) throw new RelayError(`relay receipts answered HTTP ${status}`);
     let body: any;
@@ -162,11 +162,38 @@ export class RelayClient {
     } catch {
       throw new RelayError("relay receipts sent no JSON");
     }
-    const hit = (Array.isArray(body?.receipts) ? body.receipts : []).find(
-      (r: any) => r?.iss === iss && r?.seq === seq && r?.tag === tag && typeof r?.blockId === "string" && BLOCK_ID.test(r.blockId),
-    );
-    return hit ? hit.blockId : null;
+    return (Array.isArray(body?.receipts) ? body.receipts : [])
+      .filter((r: any) => r?.iss === iss && r?.tag === tag && Number.isSafeInteger(r?.seq) && typeof r?.blockId === "string" && BLOCK_ID.test(r.blockId))
+      .map((r: any) => ({ blockId: r.blockId, seq: r.seq }));
   }
+}
+
+/** Most receipts asked for at once (the relay's own cap). */
+export const RECEIPTS_LIMIT = 1000;
+
+export interface Receipt {
+  blockId: string;
+  seq: number;
+}
+
+/** What the mirror needs to read posted blocks back (HornetClient). */
+export interface BlockReader {
+  taggedData(blockId: string): Promise<{ tag: string; data: Uint8Array } | null>;
+}
+
+/** The mirror body a posted block carries, read from the node; null if it is no mirror of `iss`. */
+export async function mirrorOnNode(blocks: BlockReader, blockId: string, iss: string): Promise<{ seq: number; checkpointHash: string } | null> {
+  const td = await blocks.taggedData(blockId);
+  if (!td || td.tag !== ANCHOR_TAG) return null;
+  let env: any;
+  try {
+    env = JSON.parse(Buffer.from(td.data).toString("utf8"));
+  } catch {
+    return null;
+  }
+  const body = env?.body;
+  if (env?.iss !== iss || !Number.isSafeInteger(body?.seq) || typeof body?.checkpointHash !== "string") return null;
+  return { seq: body.seq, checkpointHash: body.checkpointHash };
 }
 
 export interface MirrorChain {
@@ -176,28 +203,54 @@ export interface MirrorChain {
 
 export type MirrorOutcome =
   | { ok: true; blockId: string; envelopeSeq: number; recovered: boolean }
-  /** `burntSeq`: a seq the relay already holds without a receipt; never use it again. */
-  | { ok: false; error: string; burntSeq?: number };
+  /**
+   * `error` is safe to show; `detail` is for the log. `burntSeq`: a seq the relay already holds
+   * for something else (or without a receipt); never use it again.
+   */
+  | { ok: false; error: string; detail?: string; burntSeq?: number };
 
 /**
  * Posts one checkpoint's `witness.anchor` envelope. The envelope seq is the checkpoint seq unless
  * the issuer's chain is already past it; `prev` is the previous mirror block. A REPLAY answer
- * means an earlier attempt with this seq reached the relay (say its reply was lost): its receipt
- * gives the block id. Without a receipt the seq is burnt and the next attempt uses a newer one.
+ * means an earlier attempt with this seq reached the relay (say its reply was lost). The receipt
+ * with that seq is adopted only if the block it names, read back from the node, mirrors this very
+ * checkpoint (same seq and checkpoint hash); otherwise the seq is burnt and the next attempt uses
+ * a newer one.
  */
 export async function postMirror(
   entry: CheckpointEntry,
   chain: MirrorChain,
   signer: MirrorSigner,
-  relay: Pick<RelayClient, "upload" | "findReceipt">,
+  relay: Pick<RelayClient, "upload" | "receipts">,
   rebasedNetwork: string,
+  blocks: BlockReader,
 ): Promise<MirrorOutcome> {
   const envelopeSeq = Math.max(entry.seq, chain.lastSeq + 1);
   const env = signer.seal(ANCHOR_TAG, mirrorBody(entry, rebasedNetwork), envelopeSeq, chain.lastBlockId);
-  const out = await relay.upload(ANCHOR_TAG, env);
+  let out: UploadOutcome;
+  try {
+    out = await relay.upload(ANCHOR_TAG, env);
+  } catch (err) {
+    return { ok: false, error: "relay unreachable", detail: (err as Error).message };
+  }
   if (out.kind === "posted") return { ok: true, blockId: out.blockId, envelopeSeq, recovered: false };
-  if (out.kind === "rejected") return { ok: false, error: `relay refused the mirror (HTTP ${out.status}): ${out.error}` };
-  const blockId = await relay.findReceipt(signer.iss, ANCHOR_TAG, envelopeSeq);
-  if (blockId) return { ok: true, blockId, envelopeSeq, recovered: true };
-  return { ok: false, error: `relay already holds seq ${envelopeSeq} of ${signer.iss} but has no receipt for it`, burntSeq: envelopeSeq };
+  if (out.kind === "rejected") return { ok: false, error: `relay refused the mirror (HTTP ${out.status})`, detail: out.error };
+  let candidates: Receipt[];
+  try {
+    candidates = (await relay.receipts(signer.iss, ANCHOR_TAG)).filter((r) => r.seq === envelopeSeq);
+  } catch (err) {
+    return { ok: false, error: "relay receipts unavailable", detail: (err as Error).message };
+  }
+  for (const r of candidates) {
+    let onNode;
+    try {
+      onNode = await mirrorOnNode(blocks, r.blockId, signer.iss);
+    } catch (err) {
+      return { ok: false, error: "node unreachable while confirming a mirror receipt", detail: (err as Error).message };
+    }
+    if (onNode && onNode.seq === entry.seq && onNode.checkpointHash === entry.checkpointHash) {
+      return { ok: true, blockId: r.blockId, envelopeSeq, recovered: true };
+    }
+  }
+  return { ok: false, error: `seq ${envelopeSeq} is already used without a mirror of this checkpoint`, burntSeq: envelopeSeq };
 }

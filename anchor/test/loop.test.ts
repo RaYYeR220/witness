@@ -3,7 +3,7 @@ import { checkpointShapeError, merkleRoot, toHex } from "@witness/verify";
 import { afterEach, describe, expect, it } from "vitest";
 import { buildNextCheckpoint, checkpointHashHex } from "../src/checkpoint.js";
 import { AnchorLoop, type LoopDeps } from "../src/loop.js";
-import { ANCHOR_TAG } from "../src/mirror.js";
+import { ANCHOR_TAG, mirrorBody } from "../src/mirror.js";
 import { StateStore, type AnchorState } from "../src/state.js";
 import { HornetError, MilestoneMismatch } from "../src/hornet.js";
 import { ANCHOR_DID, FakeRelay, FakeTangle, FakeTrail, FakeVerifier, POLICY_HASH, TRAIL, WRITER, cleanupDirs, makeSigner, mid, tmpDir } from "./helpers.js";
@@ -25,6 +25,7 @@ function setup(over: Partial<LoopDeps> = {}, latest = 24) {
     trail,
     source: tangle,
     verifier,
+    blocks: relay,
     relay,
     signer,
     store,
@@ -34,7 +35,7 @@ function setup(over: Partial<LoopDeps> = {}, latest = 24) {
     pollMs: 60_000,
     ...over,
   };
-  return { deps, trail, tangle, relay, store, verifier, loop: new AnchorLoop(deps), restart: () => new AnchorLoop(deps) };
+  return { deps, trail, tangle, relay, store, verifier, signer, loop: new AnchorLoop(deps), restart: () => new AnchorLoop(deps) };
 }
 
 describe("AnchorLoop", () => {
@@ -252,13 +253,80 @@ describe("restarts", () => {
     expect(r).toMatchObject({ status: "anchored", seq: 3, window: { from: 25, to: 36 } });
     const state = store.load()!;
     expect(state.checkpoints.map((c) => [c.seq, c.record, c.tx, c.mirror?.status])).toEqual([
-      [1, 1, "TxSeed1", "unknown"],
-      [2, 3, "TxSeed2", "unknown"],
+      [1, 1, "TxSeed1", "posted"],
+      [2, 3, "TxSeed2", "posted"],
       [3, 4, "Tx1", "posted"],
     ]);
     expect(state.checkpoints[2]!.checkpoint.prev).toBe(two.checkpointHash);
-    // Only the new checkpoint is mirrored, with a seq past the recovered ones.
-    expect(relay.posted.map((p) => p.env.seq)).toEqual([3]);
+    // The relay holds no mirror of ours, so the rebuilt checkpoints are mirrored again, in order.
+    expect(relay.posted.map((p) => [(p.env.body as any).seq, p.env.seq])).toEqual([
+      [1, 1],
+      [2, 2],
+      [3, 3],
+    ]);
+  });
+
+  it("seeds the mirror chain from the relay receipts that carry the rebuilt checkpoints", async () => {
+    const { deps, trail, tangle, store, relay, signer } = setup({}, 36);
+    const one = await buildNextCheckpoint(tangle, PARAMS, null, 1, 12);
+    const two = one.status === "ready" ? await buildNextCheckpoint(tangle, PARAMS, one, 1, 12) : one;
+    if (one.status !== "ready" || two.status !== "ready") throw new Error("expected checkpoints");
+    trail.seed(1, one.checkpoint, one.checkpointHash);
+    trail.seed(2, two.checkpoint, two.checkpointHash);
+    // An earlier run mirrored checkpoint 1 (envelope seq 1) and then posted seq 5 for checkpoint 2.
+    const entry = (seq: number, w: typeof one, record: number) => ({
+      seq, checkpoint: w.checkpoint, checkpointHash: w.checkpointHash, trail: TRAIL, record, tx: `TxSeed${seq}`,
+      timestampMs: 0, addedBy: WRITER, anchoredAt: "", mirror: null,
+    });
+    const b1 = relay.seedPosted(ANCHOR_TAG, signer.seal(ANCHOR_TAG, mirrorBody(entry(1, one, 1), "testnet"), 1, null));
+    const b2 = relay.seedPosted(ANCHOR_TAG, signer.seal(ANCHOR_TAG, mirrorBody(entry(2, two, 2), "testnet"), 5, b1));
+
+    expect(await new AnchorLoop(deps).runOnce()).toMatchObject({ status: "anchored", seq: 3 });
+    const state = store.load()!;
+    expect(state.checkpoints.map((c) => c.mirror)).toEqual([
+      expect.objectContaining({ status: "posted", blockId: b1, envelopeSeq: 1, recovered: true }),
+      expect.objectContaining({ status: "posted", blockId: b2, envelopeSeq: 5, recovered: true }),
+      expect.objectContaining({ status: "posted", envelopeSeq: 6 }),
+    ]);
+    const third = relay.posted.at(-1)!.env;
+    expect([third.seq, third.prev]).toEqual([6, b2]);
+  });
+
+  it("does not adopt a receipt whose block mirrors another checkpoint", async () => {
+    const { loop, relay, store, restart, signer } = setup({}, 12);
+    relay.down = true;
+    await loop.runOnce(); // checkpoint 1 anchored, mirror pending
+    relay.down = false;
+    const entry = store.load()!.checkpoints[0]!;
+    // Something else already went out under seq 1 for this issuer.
+    relay.seedPosted(ANCHOR_TAG, signer.seal(ANCHOR_TAG, mirrorBody({ ...entry, checkpointHash: "0x" + "00".repeat(32) }, "testnet"), 1, null));
+    await restart().runOnce();
+    expect(store.load()!.checkpoints[0]!.mirror).toBeNull();
+    expect(store.load()!.mirror.lastSeq).toBe(1);
+    await restart().runOnce();
+    expect(store.load()!.checkpoints[0]!.mirror).toMatchObject({ status: "posted", envelopeSeq: 2 });
+    expect(store.load()!.checkpoints[0]!.mirror).not.toHaveProperty("recovered");
+  });
+
+  it("refuses to rebuild a chain made for another policy, domain or Tangle", async () => {
+    const { deps, trail, tangle, store } = setup({}, 24);
+    const one = await buildNextCheckpoint(tangle, PARAMS, null, 1, 12);
+    if (one.status !== "ready") throw new Error("expected a checkpoint");
+    trail.seed(1, one.checkpoint, one.checkpointHash);
+    const otherPolicy = new AnchorLoop({ ...deps, params: { ...PARAMS, policyHash: new Uint8Array(32) } });
+    expect(await otherPolicy.runOnce()).toMatchObject({ status: "error", stage: "state", error: expect.stringMatching(/policyHash/) });
+    const otherDomain = new AnchorLoop({ ...deps, params: { ...PARAMS, domain: "Elsewhere" } });
+    expect(await otherDomain.runOnce()).toMatchObject({ status: "error", stage: "state", error: expect.stringMatching(/domain/) });
+    expect(store.load()).toBeNull();
+    expect(trail.appends).toBe(0);
+  });
+
+  it("will not continue a chain under another network or domain", async () => {
+    const { deps, loop, trail } = setup({}, 24);
+    await loop.runOnce();
+    const moved = new AnchorLoop({ ...deps, params: { ...PARAMS, network: "private_tangle2" } });
+    expect(await moved.runOnce()).toMatchObject({ status: "error", stage: "state", error: expect.stringMatching(/private_tangle2/) });
+    expect(trail.appends).toBe(1);
   });
 
   it("ignores checkpoint records added by another address when rebuilding", async () => {

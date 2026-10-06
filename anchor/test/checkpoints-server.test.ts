@@ -31,6 +31,7 @@ async function start(opts: { latest?: number; adminToken?: string | null; withLo
     trail,
     source: tangle,
     verifier,
+    blocks: relay,
     relay,
     signer,
     store,
