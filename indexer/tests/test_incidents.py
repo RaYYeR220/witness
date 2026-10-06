@@ -338,6 +338,78 @@ async def test_a_witnessed_attack_on_an_ie_opens_an_incident(store, engine):
         "closed"]
 
 
+@pytest.mark.parametrize("alert_first", [True, False])
+async def test_alerts_on_relayed_blocks_stay_within_a_window(store, engine, alert_first):
+    # every few minutes an unsigned error through the relay, each with a faked submission
+    # whose bytes differ: a CONTENT_MISMATCH on every one, raised before the block is
+    # correlated (same milestone) or found later by the validator (periodic pass)
+    await feed(store, engine, score(0.9, ms=10))
+    drop = score(0.4, ms=11)
+    assert actions(await feed(store, engine, drop)) == ["opened"]
+    anchor = drop.ts * 1000
+    for n, minutes in enumerate((4, 8, 12, 16, 19), start=1):
+        r = so_error("restart", ms=11 + n, verdict=V.UNSIGNED_LEGACY, ts=drop.ts + 60 * minutes)
+        mismatch = Alert("CONTENT_MISMATCH", "critical", r.block_id, None,
+                         {"reason": "bytes differ"}, r.ts * 1000)
+        if alert_first:
+            await store_row(store, r, submitted=True)
+            await raise_alert(store, mismatch)
+            await engine.on_message(r)
+        else:
+            await feed(store, engine, r, submitted=True)
+            await raise_alert(store, mismatch)
+            await engine.periodic(now_ms=r.ts * 1000)
+        [inc] = await store.incidents()
+        assert inc["last_event_ms"] <= anchor + 600_000
+    [inc] = await store.incidents()
+    assert (inc["last_event_ms"], inc["anchor_ms"]) == (anchor + 600_000, anchor)
+    assert await engine.periodic(now_ms=anchor + 600_000 + 1_800_000) == []
+    assert actions(await engine.periodic(now_ms=anchor + 600_000 + 1_800_001)) == ["closed"]
+
+
+@pytest.mark.parametrize("alert_first", [True, False])
+async def test_join_only_forgeries_never_keep_an_incident_open(store, engine, alert_first):
+    w = "Other:aabbccddeeff"  # an IE Orion does not list: its forgeries can only join
+    await feed(store, engine, score(0.9, ms=10, ie=w))
+    drop = score(0.4, ms=11, ie=w)
+    assert actions(await feed(store, engine, drop)) == ["opened"]
+    t0 = drop.ts * 1000
+    for n in range(1, 5):
+        f = score(0.1, ms=11 + n, ie=w, verdict=V.FORGED, ts=drop.ts + 120 * n)
+        forged = Alert("FORGED", "critical", f.block_id, w, {}, f.ts * 1000)
+        mismatch = Alert("CONTENT_MISMATCH", "critical", f.block_id, None, {}, f.ts * 1000)
+        await store_row(store, f)
+        if alert_first:
+            await raise_alert(store, forged)
+            await raise_alert(store, mismatch)
+            await engine.on_message(f)
+        else:
+            await engine.on_message(f)
+            await raise_alert(store, forged)
+            await engine.periodic(now_ms=f.ts * 1000)
+            await raise_alert(store, mismatch)
+            await engine.periodic(now_ms=f.ts * 1000)
+        [inc] = await store.incidents()
+        assert (inc["last_event_ms"], inc["severity"]) == (t0, "critical")
+    [inc] = await store.incidents()
+    roles = [e["role"] for e in (await engine.timeline(inc["id"]))["events"]]
+    assert roles == ["trigger", "alert", "alert", "alert", "alert"]
+    assert actions(await engine.periodic(now_ms=t0 + 1_800_001)) == ["closed"]
+
+
+async def test_a_sustained_attack_shows_as_bounded_incidents(store, engine):
+    # forgeries about a known IE every 4 minutes: each incident stays at most one window
+    # past its opening, so the attack shows as a series of incidents that all close
+    t = T0 + 330
+    for n in range(7):
+        f = score(0.1, ms=11 + n, ie=IE_Z, verdict=V.FORGED, ts=t + 240 * n)
+        await feed(store, engine, f, alerts=("FORGED",))
+    incs = sorted(await store.incidents(), key=lambda i: i["opened_at_ms"])
+    assert [i["opened_at_ms"] for i in incs] == [t * 1000, (t + 1440) * 1000]
+    assert incs[0]["last_event_ms"] == t * 1000 + 600_000
+    assert actions(await engine.periodic(now_ms=t * 1000 + 600_000 + 1_800_001)) == ["closed"]
+
+
 async def test_attacks_on_ies_orion_does_not_know_stay_alerts(store, engine):
     for n in range(5):
         made_up = score(0.1, ms=10 + n, ie=f"Made:{n:012x}", verdict=V.FORGED)

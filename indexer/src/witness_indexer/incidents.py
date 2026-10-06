@@ -50,10 +50,13 @@ Trust: every block is judged at one of three levels.
 - untrusted: anything else (FORGED, REPLAY, written around the relay, R4 UNSIGNED, a
   verdict the engine does not know, ...). Its content is never evidence. It counts only
   through the attack alert Witness raised about it (above): that alert opens an incident on
-  an IE Orion knows, or joins one already open on the IE it names, raising its severity and
-  moving its latest event, but never its anchor, keys, IE, recovery target or status.
-- Alerts about the explorer's own records count the same way: they open or join, move the
-  latest event, and shape nothing.
+  an IE Orion knows, or joins one already open on the IE it names, raising its severity,
+  but never touches its anchor, keys, IE, recovery target or status.
+- Alerts about the explorer's own records count the same way: they open or join and shape
+  nothing. Attack and integrity alerts can be provoked by anyone who can write a block or a
+  submission record, so like relayed events they move an incident's latest event at most
+  one window past its anchor, and an alert on a block already in an incident moves it only
+  as far as that block's own trust level allows (none for evidence-only blocks).
 
 The policy check is the engine's own (from the writer policy the indexer was started with),
 not only the rules' UNSIGNED alert, so a rules failure cannot promote an unsigned write.
@@ -645,14 +648,15 @@ class IncidentEngine:
         rule = str(a["rule"])
         alert_ie = _ident(a["ie_id"]) if isinstance(a["ie_id"], str) and a["ie_id"] else None
         witnessed = False
+        block_level = UNTRUSTED
+        if msg is not None and bid is not None:
+            block_level = await self._trust(bid, msg["verdict"], msg["tag"], msg["iss"])
         if rule in INTEGRITY_RULES:  # about the explorer's own records: shapes nothing
             level, witnessed, opens = UNTRUSTED, True, True
             keys = {f"ie:{alert_ie}"} if alert_ie else {LEDGER}
             ie = alert_ie
         else:
-            level = UNTRUSTED
-            if msg is not None and bid is not None:
-                level = await self._trust(bid, msg["verdict"], msg["tag"], msg["iss"])
+            level = block_level
             if level == UNTRUSTED and rule not in ATTACK_RULES:
                 return  # stays in /alerts
             body = msg["json"] if msg is not None and isinstance(msg["json"], dict) else None
@@ -675,7 +679,7 @@ class IncidentEngine:
         obs = _Obs(bid, keys, at, "alert",
                    level, opens=opens, witnessed=witnessed, severity=a["severity"], ie_id=ie,
                    title=f"{label} {where}".strip() + f" ({rule})" * (label != rule),
-                   detail={"rule": rule, "alertId": a["id"],
+                   detail={"rule": rule, "alertId": a["id"], "trust": block_level,
                            "reason": _clean_value((a["evidence"] or {}).get("reason"))},
                    alert=a)
         if msg is not None and msg["ms_index"] is not None:
@@ -684,8 +688,9 @@ class IncidentEngine:
 
     async def _link(self, inc: dict, a: dict, step: _Step) -> None:
         """Join an alert to the incident its block is in; reported unless the block joined in
-        this very step and the severity stays. A witnessed attack or integrity alert counts
-        as activity of the incident."""
+        this very step and the severity stays. An attack or integrity alert counts as
+        activity of the incident only as far as the block itself does: freely for a proven
+        block, capped for a relayed one, not at all for evidence (an `alert` event)."""
         if not await self.store.link_incident_alert(a["id"], inc["id"], self._now()):
             return
         fields: dict[str, Any] = {}
@@ -693,8 +698,10 @@ class IncidentEngine:
         if sev != inc["severity"]:
             fields["severity"] = sev
         at = inc.get("event_at_ms")
-        if a["rule"] in ATTACK_RULES | INTEGRITY_RULES and inc["status"] == OPEN and at:
-            fields.update(self._extension(inc, at, WITNESSED))
+        mode = self._holder_mode(inc)
+        if (a["rule"] in ATTACK_RULES | INTEGRITY_RULES and inc["status"] == OPEN and at
+                and mode is not None):
+            fields.update(self._extension(inc, at, mode))
         if fields:
             await self.store.update_incident(inc["id"], **fields)
             inc.update(fields)
@@ -702,6 +709,16 @@ class IncidentEngine:
         if joined_now and "severity" not in fields:
             return
         step.changes.append(_change("updated", inc, block_id=a["block_id"], rule=a["rule"]))
+
+    @staticmethod
+    def _holder_mode(inc: dict) -> str | None:
+        """How far the event a block already has in an incident may move it, from the trust
+        recorded when it joined: PROVEN, RELAYED, or None (evidence, untrusted, unknown)."""
+        if inc.get("event_role") == "alert":
+            return None
+        detail = inc.get("event_detail")
+        trust = detail.get("trust") if isinstance(detail, dict) else None
+        return trust if trust in (PROVEN, RELAYED) else None
 
     async def _revoke(self, inc: dict, bid: bytes, rule: str, step: _Step) -> None:
         """A block an incident counted turned out SHADOW: its event becomes evidence only,
@@ -832,13 +849,14 @@ class IncidentEngine:
 
     def _extension(self, inc: dict, at: int, mode: str) -> dict[str, int]:
         """How an event at `at` moves the incident's latest event: freely for PROVEN events
-        (which also move the anchor) and WITNESSED alerts, at most one window past the anchor
-        for RELAYED ones."""
+        (which also move the anchor), at most one window past the anchor for RELAYED events
+        and WITNESSED alerts."""
         fields: dict[str, int] = {}
         anchor = inc["anchor_ms"] or inc["opened_at_ms"]
-        if mode == PROVEN and at > anchor:
-            fields["anchor_ms"] = at
-        elif mode == RELAYED:
+        if mode == PROVEN:
+            if at > anchor:
+                fields["anchor_ms"] = at
+        else:
             at = min(at, anchor + self.cfg.window_ms)
         if at > (inc["last_event_ms"] or 0):
             fields["last_event_ms"] = at
