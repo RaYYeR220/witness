@@ -246,7 +246,6 @@ def test_canonicalization_errors():
         _seal(key, seq=-1)
 
 
-@pytest.mark.parametrize("depth", [1200, 5000])
 def _weak_signed(env: dict) -> dict:
     """`env` re-signed with R = identity, S = 0."""
     return {**env, "sig": envelope._b64(IDENTITY_SIG)}
