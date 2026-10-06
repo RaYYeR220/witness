@@ -17,10 +17,11 @@ from typing import Literal
 
 from witness_core import envelope, policy, verdicts
 from witness_core.envelope import KeyInfo
+from witness_core.ids import NON_CANONICAL_DID
 from witness_core.policy import WriterPolicy
 
 from .auth import ANONYMOUS
-from .keys import KeyResolver
+from .keys import KeyResolver, NonCanonicalDid
 
 _ACCEPTED = (verdicts.PRODUCER_SIGNED, verdicts.RELAY_ATTESTED)
 
@@ -77,7 +78,11 @@ class PolicyGate:
         info = None
         if asked:
             kid = asked[0]
-            info = await self._resolver.resolve(kid)
+            try:
+                info = await self._resolver.resolve(kid)
+            except NonCanonicalDid:
+                return Decision(False, verdicts.FORGED, "producer", check.iss, check.kid,
+                                check.seq, reason=NON_CANONICAL_DID)
             check = envelope.verify(env, tag, lambda k: info if k == kid else None)
 
         def refuse(verdict: str, reason: str) -> Decision:

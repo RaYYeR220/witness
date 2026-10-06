@@ -47,6 +47,7 @@ import httpx
 from witness_core import nesting
 from witness_core.bundle import second_end_ms, snapshot_resolver
 from witness_core.envelope import KeyInfo
+from witness_core.ids import is_canonical_did
 
 DID_RE = re.compile(r"did:(iota|key):[A-Za-z0-9:._%-]+")
 MAX_DID_LENGTH = 128  # the anchor service refuses longer ones
@@ -109,7 +110,7 @@ def _split(kid: object) -> tuple[str, str] | None:
     if not isinstance(kid, str):
         return None
     did, sep, _ = kid.partition("#")
-    if len(did) > MAX_DID_LENGTH or not DID_RE.fullmatch(did):
+    if len(did) > MAX_DID_LENGTH or not DID_RE.fullmatch(did) or not is_canonical_did(did):
         return None
     if did.startswith(_KEY_PREFIX) and not sep:
         kid = f"{did}#{did[len(_KEY_PREFIX):]}"
@@ -260,8 +261,10 @@ class DidResolver:
 
     def can_resolve(self, did: str) -> bool:
         """Whether `did` can be looked up at all: a well-formed did:key, a pinned document,
-        or any supported DID while a registry is configured."""
+        or any supported DID in canonical form while a registry is configured."""
         if not isinstance(did, str) or len(did) > MAX_DID_LENGTH or not DID_RE.fullmatch(did):
+            return False
+        if not is_canonical_did(did):
             return False
         return did.startswith(_KEY_PREFIX) or did in self._offline or self.base_url is not None
 
@@ -281,6 +284,8 @@ class DidResolver:
         """A reply known without asking the registry, or _MISS."""
         if not isinstance(did, str) or len(did) > MAX_DID_LENGTH or not DID_RE.fullmatch(did):
             return None
+        if not is_canonical_did(did):
+            return None  # never asked about: no answer could match this spelling
         if did in self._offline:
             return _detached(self._offline[did])
         if did.startswith(_KEY_PREFIX):

@@ -25,6 +25,7 @@ from urllib.parse import quote
 import httpx
 from witness_core import nesting
 from witness_core.envelope import KeyInfo
+from witness_core.ids import is_canonical_did
 
 log = logging.getLogger(__name__)
 
@@ -35,6 +36,10 @@ DEFINITIVE = frozenset({400, 404, 410, 414, 422, 431})  # 422: the anchor's "unu
 
 class KeysUnavailable(Exception):
     """The DID resolver could not say which key a kid names; decide nothing for now."""
+
+
+class NonCanonicalDid(Exception):
+    """A did:iota DID not in canonical form: never looked up, the envelope is FORGED."""
 
 
 # Only DID methods we can resolve, with a conservative method-specific-id alphabet.
@@ -147,7 +152,8 @@ class KeyResolver:
 
     async def resolve(self, kid: str) -> KeyInfo | None:
         """The key `kid` names, or None if it names none. Raises KeysUnavailable when the
-        DID resolver cannot answer right now."""
+        DID resolver cannot answer right now, NonCanonicalDid for a did:iota DID not in
+        canonical form (operator-pinned kids aside)."""
         if not isinstance(kid, str):
             return None
         if kid in self._static:
@@ -155,6 +161,8 @@ class KeyResolver:
         did, _, fragment = kid.partition("#")
         if not DID_RE.fullmatch(did):
             return None
+        if not is_canonical_did(did):
+            raise NonCanonicalDid(did)
         if did.startswith("did:key:"):
             pub = did_key_public(did)
             if pub is None or fragment not in ("", did[len("did:key:") :]):

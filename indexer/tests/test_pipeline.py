@@ -742,7 +742,7 @@ async def test_failed_rules_roll_back_the_milestone(store: Store):
 # -- the Task 9 DID resolver -------------------------------------------------------------------
 
 ANCHOR = "http://anchor.test"
-IOTA_DID = "did:iota:testnet:0xabc"
+IOTA_DID = "did:iota:testnet:0x" + "ab" * 32
 IOTA_KEY = Ed25519PrivateKey.from_private_bytes(b"\x05" * 32)
 
 
@@ -777,6 +777,34 @@ async def test_did_resolver_is_asked_at_the_milestone_time(store: Store):
     assert [(await msg(store, chain.block_id(i, 0)))["verdict"] for i in (1, 2)] == [
         "PRODUCER_SIGNED", "REVOKED_KEY"]
     assert (await msg(store, chain.block_id(2, 1)))["verdict"] == "PRODUCER_SIGNED"
+
+
+async def test_non_canonical_did_is_forged_without_a_lookup(store: Store):
+    """An upper-case or short did:iota DID is FORGED "non-canonical DID": the resolver is
+    never asked (the anchor would answer for the canonical spelling, which no reply for this
+    one can match), so the milestone cannot stall on it."""
+    ie = "D:aabbccddeeff"
+    payloads = []
+    for n, did in enumerate(("did:iota:testnet:0x" + "AB" * 32, "did:iota:testnet:0xabc"), 1):
+        env = envelope.seal("trust.score", score(ie, 0.5), iss=did, kid=did + "#sig-1",
+                            sign_key=IOTA_KEY, seq=n, att_mode="producer",
+                            now_ms=1_790_000_000_000 + n, nonce=n.to_bytes(16, "big"))
+        payloads.append(("trust.score", json.dumps(env).encode()))
+    chain = FakeChain()
+    chain.add(payloads)
+    async with respx.mock(assert_all_called=False) as router:
+        route = router.get(url__startswith=ANCHOR).mock(return_value=httpx.Response(503))
+        resolver = DidResolver(ANCHOR)
+        await indexer(FakeSource(chain), store, resolve=resolver, policy=ALLOW_ALL).sync()
+        await resolver.aclose()
+    assert route.call_count == 0
+    assert [(await msg(store, chain.block_id(1, n)))["verdict"] for n in (0, 1)] == [
+        "FORGED", "FORGED"]
+    reasons = {e["payload"]["blockId"]: e["payload"]["reason"]
+               for e in await store.events_after(0, 100) if e["type"] == "message"}
+    for n in (0, 1):
+        assert reasons["0x" + chain.block_id(1, n).hex()] == "non-canonical DID"
+    assert await store.get_cursor() == 1
 
 
 async def test_hostile_did_document_forges_instead_of_stalling(store: Store):

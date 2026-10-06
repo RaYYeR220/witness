@@ -19,6 +19,7 @@ from typing import Any, Protocol, runtime_checkable
 from witness_core import canon, envelope, ids, policy, schema, verdicts
 from witness_core.bundle import valid_through_second
 from witness_core.envelope import EnvelopeCheck, KeyInfo
+from witness_core.ids import NON_CANONICAL_DID, is_canonical_did
 from witness_core.policy import WriterPolicy
 from witness_core.schema import Classified
 
@@ -211,8 +212,10 @@ def signing_kid(d: Decoded) -> str | None:
 
 
 def resolvable(kid: str) -> bool:
-    """False for a kid no registry can know (its DID is longer than MAX_DID_LENGTH)."""
-    return len(kid.split("#", 1)[0]) <= MAX_DID_LENGTH
+    """False for a kid no registry can know: its DID is longer than MAX_DID_LENGTH, or a
+    did:iota DID not in canonical form (never looked up, see ids.is_canonical_did)."""
+    did = kid.split("#", 1)[0]
+    return len(did) <= MAX_DID_LENGTH and is_canonical_did(did)
 
 
 async def resolve_keys(resolver: KeyResolver, decoded: Iterable[Decoded],
@@ -261,6 +264,9 @@ async def judge(store: Store, pol: WriterPolicy, keys: Mapping[str, KeyInfo | No
     except RecursionError:
         return Judgement(verdicts.MALFORMED, None, TOO_DEEP)
     if chk.verdict not in SIGNED:
+        if chk.kid is not None and keys.get(chk.kid, True) is None \
+                and not is_canonical_did(chk.kid.split("#", 1)[0]):
+            return Judgement(verdicts.FORGED, chk, NON_CANONICAL_DID)  # never looked up
         return Judgement(chk.verdict, chk, chk.reason)
     if not policy.allowed(pol, d.tag, chk.iss):
         return Judgement(verdicts.UNAUTHORIZED_WRITER, chk, "issuer not allowed for this tag")

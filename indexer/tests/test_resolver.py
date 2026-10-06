@@ -7,7 +7,7 @@ from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
 from witness_indexer.resolver import DidResolver, ResolverUnavailable, did_key
 
 BASE = "http://anchor.test"
-DID = "did:iota:testnet:0x5e1f"
+DID = "did:iota:testnet:0x" + "5e1f" * 16
 KID = DID + "#sig-1"
 NEW = Ed25519PrivateKey.from_private_bytes(b"\x31" * 32)
 OLD = Ed25519PrivateKey.from_private_bytes(b"\x32" * 32)
@@ -272,8 +272,9 @@ def test_offline_docs_and_unsupported_ids():
     for kid in ("did:web:example.com#k", "not-a-did", "", None):
         assert r.resolve_kid(kid) is None
     # No registry configured: resolution is disabled, the DID is unknown, never an outage.
-    assert r.resolve_kid("did:iota:testnet:0xabc#sig-1") is None
-    assert r.can_resolve(DID) and not r.can_resolve("did:iota:testnet:0xabc")
+    other = "did:iota:testnet:0x" + "ab" * 32
+    assert r.resolve_kid(other + "#sig-1") is None
+    assert r.can_resolve(DID) and not r.can_resolve(other)
     assert not respx.calls
 
 
@@ -311,8 +312,9 @@ async def test_oversized_did_is_unknown_without_asking():
         assert r.resolve_kid(did + "#sig-1") is None
         assert await r.aresolve_kid(did + "#sig-1") is None
         assert r.doc(did) is None and not r.can_resolve(did)
-        assert r.can_resolve("did:iota:" + "a" * (128 - len("did:iota:")))
-        assert not r.can_resolve("did:iota:" + "a" * (129 - len("did:iota:")))
+        # The length limit (did:iota DIDs must also be canonical, see below).
+        assert r.can_resolve("did:key:" + "a" * (128 - len("did:key:")))
+        assert not r.can_resolve("did:key:" + "a" * (129 - len("did:key:")))
         assert route.call_count == 0
 
 
@@ -365,3 +367,25 @@ def test_callers_cannot_change_the_cached_reply():
     assert (again["version"], len(again["keys"])) == ("7", 1)
     assert r.resolve_kid(KID).ed25519_public == pub(NEW)
     assert route.call_count == 1
+
+
+@pytest.mark.parametrize(
+    "did",
+    [
+        "did:iota:testnet:0x" + "5E1F" * 16,  # upper-case hex
+        "did:iota:testnet:0x" + "5e1f" * 15,  # too short
+        "did:iota:testnet:0x" + "5e1f" * 16 + "00",  # too long
+        "did:iota:testnet:" + "5e1f" * 16,  # no 0x
+        "did:iota:Testnet:0x" + "5e1f" * 16,  # network not lower-case
+    ],
+)
+async def test_non_canonical_iota_dids_are_never_looked_up(did):
+    async with respx.mock(assert_all_called=False) as router:
+        route = router.get(url__startswith=BASE).mock(return_value=httpx.Response(503))
+        r = DidResolver(BASE, offline_docs={did: reply(entry(NEW, None), did=did)})
+        assert r.resolve_kid(did + "#sig-1") is None
+        assert await r.aresolve_kid(did + "#sig-1") is None
+        assert r.doc(did) is None and not r.can_resolve(did)
+        assert route.call_count == 0
+    assert r.can_resolve("did:iota:testnet:0x" + "5e1f" * 16)
+    assert r.can_resolve("did:iota:0x" + "5e1f" * 16)  # mainnet DIDs carry no network

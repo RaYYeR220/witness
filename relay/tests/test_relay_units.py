@@ -10,7 +10,13 @@ import respx
 from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
 from witness_core import envelope, policy, verdicts
 from witness_relay.config import RelayConfig
-from witness_relay.keys import KeyResolver, KeysUnavailable, did_key, did_key_public
+from witness_relay.keys import (
+    KeyResolver,
+    KeysUnavailable,
+    NonCanonicalDid,
+    did_key,
+    did_key_public,
+)
 from witness_relay.policy_gate import PolicyGate
 
 
@@ -50,11 +56,13 @@ async def test_resolver_static_keys(tmp_path):
     )
     resolver = KeyResolver.from_files(str(path))
     assert (await resolver.resolve("did:iota:x#sig-1")).ed25519_public == pub
-    assert await resolver.resolve("did:iota:x#kex-1") is None
+    # Not pinned (an X25519 key is no signing key), and not a canonical did:iota DID either.
+    with pytest.raises(NonCanonicalDid):
+        await resolver.resolve("did:iota:x#kex-1")
 
 
 async def test_resolver_caches_resolution():
-    did = "did:iota:testnet:0xabc"
+    did = "did:iota:testnet:0x" + "ab" * 32
     pub = Ed25519PrivateKey.generate().public_key().public_bytes_raw()
     with respx.mock() as router:
         route = router.get(f"http://anchor.test/resolve/{quote(did, safe='')}").mock(
@@ -148,7 +156,7 @@ async def test_resolver_cache_is_bounded():
         async with httpx.AsyncClient() as http:
             resolver = KeyResolver(resolver_url="http://anchor.test", http=http, cache_size=2)
             for n in (1, 2, 3, 1):
-                await resolver.resolve(f"did:iota:testnet:0x{n}#sig-1")
+                await resolver.resolve(f"did:iota:testnet:0x{n:064x}#sig-1")
     # did 1 was evicted by did 3, so it is fetched twice.
     assert route.call_count == 4
 
@@ -162,7 +170,7 @@ async def test_gate_resolves_only_well_formed_envelopes():
             self.asked.append(kid)
 
     key = Ed25519PrivateKey.generate()
-    did = "did:iota:testnet:0xabc"
+    did = "did:iota:testnet:0x" + "ab" * 32
     good = envelope.seal(
         "t", {"a": 1}, iss=did, kid=did + "#sig-1", sign_key=key, seq=1, att_mode="producer"
     )
@@ -211,7 +219,7 @@ async def _resolve_with(body, kid):
 
 
 async def test_resolver_reads_anchor_keys_list():
-    did = "did:iota:testnet:0xabc"
+    did = "did:iota:testnet:0x" + "ab" * 32
     kid = did + "#sig-1"
     pub = Ed25519PrivateKey.generate().public_key().public_bytes_raw()
     x25519 = bytes(range(32))
@@ -225,7 +233,7 @@ async def test_resolver_reads_anchor_keys_list():
 
 
 async def test_resolver_picks_key_valid_now_when_kid_was_replaced():
-    did = "did:iota:testnet:0xabc"
+    did = "did:iota:testnet:0x" + "ab" * 32
     kid = did + "#sig-1"
     old = Ed25519PrivateKey.generate().public_key().public_bytes_raw()
     new = Ed25519PrivateKey.generate().public_key().public_bytes_raw()
@@ -238,7 +246,7 @@ async def test_resolver_picks_key_valid_now_when_kid_was_replaced():
 
 
 async def test_resolver_revoked_only_key_reports_revocation():
-    did = "did:iota:testnet:0xabc"
+    did = "did:iota:testnet:0x" + "ab" * 32
     kid = did + "#sig-1"
     old = Ed25519PrivateKey.generate().public_key().public_bytes_raw()
     info = await _resolve_with(_resolve_body(did, (kid, old, 1_000)), kid)
@@ -246,7 +254,7 @@ async def test_resolver_revoked_only_key_reports_revocation():
 
 
 async def test_resolver_ignores_malformed_revocation_time():
-    did = "did:iota:testnet:0xabc"
+    did = "did:iota:testnet:0x" + "ab" * 32
     kid = did + "#sig-1"
     good = Ed25519PrivateKey.generate().public_key().public_bytes_raw()
     bad = Ed25519PrivateKey.generate().public_key().public_bytes_raw()
@@ -258,7 +266,7 @@ async def test_resolver_ignores_malformed_revocation_time():
 
 
 async def test_resolver_prefers_last_live_entry():
-    did = "did:iota:testnet:0xabc"
+    did = "did:iota:testnet:0x" + "ab" * 32
     kid = did + "#sig-1"
     first = Ed25519PrivateKey.generate().public_key().public_bytes_raw()
     last = Ed25519PrivateKey.generate().public_key().public_bytes_raw()
@@ -266,7 +274,7 @@ async def test_resolver_prefers_last_live_entry():
     assert info.ed25519_public == last
 
 
-DID = "did:iota:testnet:0xabc"
+DID = "did:iota:testnet:0x" + "ab" * 32
 RESOLVE_URL = f"http://anchor.test/resolve/{quote(DID, safe='')}"
 
 
@@ -355,3 +363,23 @@ async def test_resolver_treats_hostile_documents_as_naming_no_key(deep):
             assert await resolver.resolve(DID + "#sig-1") is None
             assert await resolver.resolve(DID + "#sig-1") is None
     assert route.call_count == 1
+
+
+
+async def test_gate_forges_non_canonical_dids_without_a_lookup():
+    key = Ed25519PrivateKey.generate()
+    gate_policy = policy.load({"version": 1})
+    with respx.mock(assert_all_called=False) as router:
+        route = router.get(url__startswith="http://anchor.test/").mock(
+            return_value=httpx.Response(503))
+        async with httpx.AsyncClient() as http:
+            resolver = KeyResolver(resolver_url="http://anchor.test", http=http)
+            gate = PolicyGate(gate_policy, resolver, "did:key:zRelay")
+            for did in ("did:iota:testnet:0x" + "AB" * 32, "did:iota:testnet:0xabc"):
+                env = envelope.seal("t", {"a": 1}, iss=did, kid=did + "#sig-1", sign_key=key,
+                                    seq=1, att_mode="producer")
+                d = await gate.check_envelope("t", env)
+                assert (d.allowed, d.verdict, d.reason) == (
+                    False, verdicts.FORGED, "non-canonical DID")
+                assert d.iss == did
+    assert route.call_count == 0

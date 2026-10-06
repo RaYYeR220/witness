@@ -65,7 +65,7 @@ from witness_core import checkpoint, envelope, merkle, nesting
 from witness_core import verdicts as V
 from witness_core.bundle import snapshot_keys
 from witness_core.envelope import KeyInfo
-from witness_core.ids import to_hex
+from witness_core.ids import NON_CANONICAL_DID, is_canonical_did, to_hex
 from witness_core.policy import TagRule, WriterPolicy
 
 from . import events
@@ -446,6 +446,8 @@ class RulesEngine:
         if offline.verdict != V.FORGED or offline.reason != "signing key not resolvable":
             return offline.reason or offline.verdict  # tag or kid/iss binding broken
         kid, iss = env["kid"], env["iss"]
+        if not is_canonical_did(iss):
+            return f"{NON_CANONICAL_DID}: {iss}"
         doc, unavailable = await self._did_doc(iss)
         if unavailable is not None:
             return f"signature not re-checked: {unavailable}"
