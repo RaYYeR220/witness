@@ -94,7 +94,13 @@ SAMPLES = [
         "self-orchestrator",
         "MyDomain:fa163e32c6ee",
     ),
-    ("audit.report", {"reportHash": "0x" + "cd" * 32}, "audit.report", None),
+    ("audit.report", {"reportHash": "0x" + "cd" * 32, "generatedAt": 1791283600000},
+     "audit.report", None),
+    ("audit.report", {"reportHash": "0x" + "cd" * 32, "generatedAt": 1791283600000,
+                      "range": {"msFrom": 370, "msTo": 373}, "ie": "MyDomain:fa163e5e25ef"},
+     "audit.report", None),
+    ("audit.report", {"reportHash": "0x" + "cd" * 32, "generatedAt": 0, "range": {"msTo": 5}},
+     "audit.report", None),
 ]
 
 
@@ -131,7 +137,23 @@ def test_classify_field_order():
         ("self-orchestrator", {"infrastructureElementId": "MyDomain:aa", "errorCode": True}),
         ("audit.report", {"reportHash": "0x12"}),
         ("witness.anchor", {"checkpoint": {}, "checkpointHash": "0x" + "00" * 32}),
-    ],
+    ] + [("audit.report", body) for body in [
+        {"reportHash": "0x12", "generatedAt": 1},
+        {"reportHash": "0x" + "CD" * 32, "generatedAt": 1},  # hex must be lowercase
+        {"reportHash": "0x" + "cd" * 32},  # generatedAt required
+        {"reportHash": "0x" + "cd" * 32, "generatedAt": -1},
+        {"reportHash": "0x" + "cd" * 32, "generatedAt": 2**53},
+        {"reportHash": "0x" + "cd" * 32, "generatedAt": True},
+        {"reportHash": "0x" + "cd" * 32, "generatedAt": 1.5},
+        {"reportHash": "0x" + "cd" * 32, "generatedAt": 1, "extra": 1},
+        {"reportHash": "0x" + "cd" * 32, "generatedAt": 1, "range": []},
+        {"reportHash": "0x" + "cd" * 32, "generatedAt": 1, "range": {"from": 1}},
+        {"reportHash": "0x" + "cd" * 32, "generatedAt": 1, "range": {"msFrom": -1}},
+        {"reportHash": "0x" + "cd" * 32, "generatedAt": 1, "range": {"msFrom": 2**32}},
+        {"reportHash": "0x" + "cd" * 32, "generatedAt": 1, "range": {"msFrom": 5, "msTo": 4}},
+        {"reportHash": "0x" + "cd" * 32, "generatedAt": 1, "ie": "fa163e5e25ef"},
+        {"reportHash": "0x" + "cd" * 32, "generatedAt": 1, "ie": 7},
+    ]],
 )
 def test_classify_schema_violations(tag, body):
     c = schema.classify(tag, _j(body))

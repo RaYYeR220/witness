@@ -137,8 +137,29 @@ def _witness_anchor(m: dict) -> tuple[bool, str | None]:
     return ok, None
 
 
+_AUDIT_KEYS = frozenset({"reportHash", "generatedAt", "range", "ie"})
+_RANGE_KEYS = frozenset({"msFrom", "msTo"})
+_MAX_MS_INDEX = 0xFFFFFFFF
+
+
 def _audit_report(m: dict) -> tuple[bool, str | None]:
-    return _h32(m.get("reportHash")), None
+    """Closed shape: {reportHash, generatedAt, range?: {msFrom?, msTo?}, ie?}, nothing else.
+    The report itself stays off-chain; this message only names it by hash."""
+    if not set(m) <= _AUDIT_KEYS:
+        return False, None
+    if not _h32(m.get("reportHash")) or not _uint(m.get("generatedAt")):
+        return False, None
+    if "range" in m:
+        rng = m["range"]
+        if not isinstance(rng, dict) or not set(rng) <= _RANGE_KEYS:
+            return False, None
+        if not all(_uint(v) and v <= _MAX_MS_INDEX for v in rng.values()):
+            return False, None
+        if "msFrom" in rng and "msTo" in rng and rng["msFrom"] > rng["msTo"]:
+            return False, None
+    if "ie" in m and not (isinstance(m["ie"], str) and _IE_ID.fullmatch(m["ie"])):
+        return False, None
+    return True, None
 
 
 _CHECKS = {
