@@ -96,6 +96,10 @@ milestones with the on-chain record, never with the mirror.
 the last anchored window are not protected yet.
 
 Only one loop may run per state file: it takes `${ANCHOR_STATE_PATH}.lock` with an exclusive
-create and refuses to start while a live process on the same host holds it (a lock left by a dead
-process is taken over). State writes are flushed (file, then directory where the OS allows it)
+create and refuses to start while a live process on the same host holds it. The lock carries the
+pid, host, boot id and a random per-start token; it is stale when the host rebooted, when its pid is
+ours but its token is not (pid reuse, as in a restarted container), or when its process is gone. A
+stale lock is taken over by renaming it to a unique name and checking the renamed file is still the
+one judged stale (otherwise it is put back), then creating our own with O_EXCL and reading it back,
+so of several contenders exactly one wins. State writes are flushed (file, then directory where the OS allows it)
 before the next step relies on them.

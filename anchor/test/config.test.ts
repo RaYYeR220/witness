@@ -147,6 +147,7 @@ describe("checkpoint settings", () => {
       allowMissingMsgCount: false,
       hornetUrl: null,
       stallTicks: 60,
+      milestoneIntervalMs: 5_000,
       writerAddress: null,
       readCacheMs: 5_000,
       coordinatorKeys: [],
@@ -190,6 +191,17 @@ describe("checkpoint settings", () => {
       coordinatorKeys: ["0x" + "ab".repeat(32), "0x" + "cd".repeat(32)],
       coordinatorThreshold: 2,
     });
+  });
+
+  it("sizes the stall threshold to at least two windows", () => {
+    const ticks = (env: Record<string, string>) => loadConfig(env, "/srv/anchor").checkpoints.stallTicks;
+    // 60 milestones x 5 s at a 10 s poll is 30 ticks per window: the floor of 60 applies.
+    expect(ticks({})).toBe(60);
+    // 600 milestones x 5 s = 300 ticks per window -> 600.
+    expect(ticks({ ANCHOR_EVERY: "600" })).toBe(600);
+    expect(ticks({ ANCHOR_EVERY: "60", ANCHOR_POLL_MS: "1000" })).toBe(600);
+    expect(ticks({ ANCHOR_EVERY: "12", ANCHOR_MILESTONE_INTERVAL_MS: "60000", ANCHOR_POLL_MS: "2000" })).toBe(720);
+    expect(ticks({ ANCHOR_EVERY: "600", ANCHOR_STALL_TICKS: "5" })).toBe(5);
   });
 
   it("refuses a loop without keystore or policy, and out-of-range windows", () => {

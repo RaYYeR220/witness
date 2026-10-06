@@ -67,8 +67,13 @@ export interface CheckpointConfig {
   allowMissingMsgCount: boolean;
   /** HORNET node every milestone id of a window is checked against; required for the loop. */
   hornetUrl: string | null;
-  /** Ticks without a new checkpoint before /healthz reports the loop stalled. */
+  /**
+   * Ticks without a new checkpoint before /healthz reports the loop stalled. Default:
+   * max(60, 2 x the ticks one window takes), so a healthy loop never looks stalled.
+   */
   stallTicks: number;
+  /** Expected time between milestones of the private Tangle (only sizes the stall default). */
+  milestoneIntervalMs: number;
   /** Address whose records the read API accepts (defaults to the loop's wallet). */
   writerAddress: string | null;
   /** How long a checkpoint read from the chain is served again (at most 10 s). */
@@ -319,8 +324,13 @@ function checkpointConfig(env: Env, cwd: string, issues: string[], secretsDir: s
     if (coordinatorKeys.length === 0) issues.push("ANCHOR_COORDINATOR_KEYS is required when ANCHOR_LOOP is on (milestone signatures are checked)");
   }
 
+  const intervalRaw = opt(env, "ANCHOR_MILESTONE_INTERVAL_MS");
+  const milestoneIntervalMs = intervalRaw === undefined ? 5_000 : integer(issues, "ANCHOR_MILESTONE_INTERVAL_MS", intervalRaw, 100, 3_600_000);
   const stallRaw = opt(env, "ANCHOR_STALL_TICKS");
-  const stallTicks = stallRaw === undefined ? 60 : integer(issues, "ANCHOR_STALL_TICKS", stallRaw, 1, 100_000);
+  const stallTicks =
+    stallRaw === undefined
+      ? Math.max(60, Math.ceil((2 * every * milestoneIntervalMs) / pollMs))
+      : integer(issues, "ANCHOR_STALL_TICKS", stallRaw, 1, 100_000);
   const writerRaw = opt(env, "ANCHOR_WRITER_ADDRESS");
   const writerAddress = writerRaw === undefined ? null : objectId(issues, "ANCHOR_WRITER_ADDRESS", writerRaw);
   const readCacheRaw = opt(env, "ANCHOR_CHECKPOINT_CACHE_MS");
@@ -347,6 +357,7 @@ function checkpointConfig(env: Env, cwd: string, issues: string[], secretsDir: s
     allowMissingMsgCount: flag(issues, "ANCHOR_ALLOW_MISSING_MSGCOUNT", opt(env, "ANCHOR_ALLOW_MISSING_MSGCOUNT"), false),
     hornetUrl,
     stallTicks,
+    milestoneIntervalMs,
     writerAddress,
     readCacheMs,
     coordinatorKeys,
