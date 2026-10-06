@@ -1,0 +1,95 @@
+/*
+ * Witness design tokens. Night sky, one warm light.
+ *
+ * void   the sky itself; every surface sits on it
+ * fog    a single cool grey-green ramp for text and hairlines
+ * ember  the only warm colour: your light (cursor, your trace, focus, links you follow)
+ * aurora a check that passed
+ * nova   a check that failed, a forgery
+ *
+ * Verdicts never rely on hue alone: passed is a filled seal, failed a broken
+ * ring with a cross, not evaluated a dotted ring (see StepMark.vue).
+ */
+:root {
+  /* colour */
+  --void: #05100f;
+  --void-raised: #0a1a18;
+  --hair: #1c3330;
+  --hair-strong: #27504d;
+  --fog-400: #6e8f8a;
+  --fog-200: #b7cdc8;
+  --fog-50: #eef6f3;
+  --ember: #f2a35e;
+  --aurora: #7df0c8;
+  --nova: #ff5a6e;
+  --nova-wash: rgba(255, 90, 110, 0.12);
+
+  /* the same colours as r,g,b for canvas drawing */
+  --rgb-fog-50: 238, 246, 243;
+  --rgb-fog-200: 183, 205, 200;
+  --rgb-fog-400: 110, 143, 138;
+  --rgb-ember: 242, 163, 94;
+  --rgb-aurora: 125, 240, 200;
+  --rgb-nova: 255, 90, 110;
+
+  /* semantic */
+  --bg: var(--void);
+  --text: var(--fog-200);
+  --text-strong: var(--fog-50);
+  --text-muted: var(--fog-400);
+  --pass: var(--aurora);
+  --fail: var(--nova);
+  --accent: var(--ember);
+  --focus: var(--ember);
+
+  /* type: one serif for claims, one grotesk for reading and UI, one mono for bytes and ids */
+  --serif: "Instrument Serif", "Iowan Old Style", Georgia, serif;
+  --sans: "Schibsted Grotesk", system-ui, -apple-system, "Segoe UI", sans-serif;
+  --mono: "Spline Sans Mono", ui-monospace, "Cascadia Mono", Consolas, monospace;
+
+  /* type scale (px): 12 13 15 17 20 34 54 86 */
+  --fs-micro: 12px;
+  --fs-small: 13px;
+  --fs-body: 15px;
+  --fs-lead: 17px;
+  --fs-h4: 20px;
+  --fs-h3: 34px;
+  --fs-h2: 54px;
+  --fs-h1: 86px;
+  --lh-body: 1.6;
+  --lh-tight: 0.96;
+
+  /* spacing: 4px base */
+  --sp-1: 4px;
+  --sp-2: 8px;
+  --sp-3: 12px;
+  --sp-4: 16px;
+  --sp-5: 24px;
+  --sp-6: 32px;
+  --sp-7: 48px;
+  --sp-8: 64px;
+  --sp-9: 96px;
+  --sp-10: 144px;
+
+  /* layout */
+  --gut: 48px;
+  --content: 1120px;
+
+  /* radius: pills for actions, small radius for cells, round for marks */
+  --r-cell: 3px;
+  --r-pill: 999px;
+
+  /* motion */
+  --ease-out: cubic-bezier(0.22, 1, 0.36, 1);
+  --t-quick: 160ms;
+  --t-step: 260ms;
+}
+
+@media (max-width: 760px) {
+  :root {
+    --gut: 20px;
+    --fs-h1: 50px;
+    --fs-h2: 40px;
+    --fs-h3: 26px;
+  }
+}
