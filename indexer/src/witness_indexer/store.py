@@ -1018,27 +1018,33 @@ class Store:
         return {r["rule"] for r in rows}
 
     async def trusted_previous_score(self, ie_id: str, *, relayed: bool,
-                                     before: tuple[int, int] | None,
-                                     exclude_block_id: bytes) -> dict | None:
+                                     before: tuple[int, int] | None, exclude_block_id: bytes,
+                                     issuers: list[str] | None = None,
+                                     unsigned: bool = True) -> dict | None:
         """The IE's confirmed trust.score just before position `before` (ms_index, wf_index),
         or its latest when `before` is None, among producer-signed scores, plus (`relayed`)
-        relay-attested ones and unsigned ones a submission names; never one with an UNSIGNED
-        or SHADOW alert. block_id, score, ts, ms_index."""
-        cond, args = "", [ie_id, exclude_block_id, relayed]
+        relay-attested ones and (`unsigned`) unsigned ones a submission names. Signed ones
+        only from `issuers` when given; never one with an UNSIGNED or SHADOW alert.
+        block_id, score, ts, ms_index."""
+        cond = ""
+        args: dict[str, Any] = {"ie": ie_id, "ex": exclude_block_id, "relayed": relayed,
+                                "any": issuers is None, "issuers": issuers or [],
+                                "unsigned": unsigned}
         if before is not None:
-            cond = "AND (ms_index, COALESCE(wf_index, 0)) < (%s, %s)"
-            args += list(before)
+            cond = "AND (ms_index, COALESCE(wf_index, 0)) < (%(ms)s, %(wf)s)"
+            args.update(ms=before[0], wf=before[1])
         return await self._one(
             "SELECT block_id, (json->>'score')::float8 AS score, ts, ms_index FROM messages m "
-            "WHERE ie_id = %s AND kind = 'trust.score' AND block_id <> %s "
+            "WHERE ie_id = %(ie)s AND kind = 'trust.score' AND block_id <> %(ex)s "
             f"AND ms_index IS NOT NULL AND {_SCORE_OK} "
-            "AND (verdict = 'PRODUCER_SIGNED' OR (%s AND (verdict = 'RELAY_ATTESTED' "
-            " OR (verdict = 'UNSIGNED_LEGACY' AND EXISTS (SELECT 1 FROM submissions s "
-            "  WHERE s.block_id = m.block_id))))) "
+            "AND ((verdict = 'PRODUCER_SIGNED' OR (%(relayed)s AND verdict = 'RELAY_ATTESTED')) "
+            "  AND (%(any)s OR iss = ANY(%(issuers)s::text[])) "
+            " OR (%(relayed)s AND %(unsigned)s AND verdict = 'UNSIGNED_LEGACY' "
+            "  AND EXISTS (SELECT 1 FROM submissions s WHERE s.block_id = m.block_id))) "
             "AND NOT EXISTS (SELECT 1 FROM alerts a WHERE a.block_id = m.block_id "
             " AND a.rule IN ('UNSIGNED', 'SHADOW')) "
             f"{cond} ORDER BY ms_index DESC, COALESCE(wf_index, 0) DESC, block_id DESC LIMIT 1",
-            args)
+            args)  # type: ignore[arg-type]
 
     async def alerts_after(self, after_id: int, severities: list[str],
                            limit: int) -> list[dict]:

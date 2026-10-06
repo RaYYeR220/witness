@@ -8,6 +8,7 @@ import uuid
 from urllib.parse import urlsplit
 
 import pytest
+from witness_core import policy as writer_policy
 from witness_core import schema
 from witness_core import verdicts as V
 from witness_core.ids import blake2b256, to_hex
@@ -230,20 +231,23 @@ async def test_forged_and_shadow_blocks_never_close_or_remediate(store, engine):
     assert actions(await feed(store, engine, score(0.4, ms=12))) == ["opened"]
     [inc] = await store.incidents()
     assert inc["severity"] == "high"
+    # the forgery joins through its FORGED alert, as evidence of an attack on X
     forged_recovery = score(0.99, ms=13, verdict=V.FORGED)
-    assert actions(await feed(store, engine, forged_recovery, alerts=("FORGED",))) == [
-        "attached", "updated"]
-    shadow_recovery = score(0.97, ms=14)  # signed, but its SHADOW alert is already known
-    assert actions(await feed(store, engine, shadow_recovery, alerts=("SHADOW",))) == [
-        "attached"]
+    [change] = await feed(store, engine, forged_recovery, alerts=("FORGED",))
+    assert (change["action"], change["role"], change["severity"]) == (
+        "attached", "alert", "critical")
+    # untrusted content is not evidence: a signed score already flagged SHADOW, an unsigned
+    # one written around the relay
+    shadow_recovery = score(0.97, ms=14)
+    assert await feed(store, engine, shadow_recovery, alerts=("SHADOW",)) == []
     unsigned_recovery = score(0.98, ms=15, verdict=V.UNSIGNED_LEGACY)
-    assert actions(await feed(store, engine, unsigned_recovery)) == ["attached"]
+    assert await feed(store, engine, unsigned_recovery) == []
     [inc] = await store.incidents()
     assert inc["status"] == "open" and inc["severity"] == "critical"
     roles = {e["blockId"]: e["role"] for e in (await engine.timeline(inc["id"]))["events"]}
     assert roles[to_hex(forged_recovery.block_id)] == "alert"
-    assert roles[to_hex(shadow_recovery.block_id)] == "alert"
-    assert roles[to_hex(unsigned_recovery.block_id)] == "alert"
+    assert to_hex(shadow_recovery.block_id) not in roles
+    assert to_hex(unsigned_recovery.block_id) not in roles
     assert "remediation" not in roles.values()
 
     real = score(0.93, ms=16)
@@ -257,14 +261,14 @@ async def test_attacker_content_never_reshapes_an_incident(store, engine):
     await feed(store, engine, score(0.4, ms=11))
     [inc] = await store.incidents()
     last = inc["last_event_ms"]
-    # an unsigned score written around the relay is evidence; it does not keep the incident
-    # going, nor count as a lower score
+    # an unsigned score written around the relay is no evidence at all
     bypass = score(0.2, ms=12, verdict=V.UNSIGNED_LEGACY, ts=T0 + 330 + 300)
-    assert actions(await feed(store, engine, bypass)) == ["attached"]
+    assert await feed(store, engine, bypass) == []
     [inc] = await store.incidents()
     assert inc["last_event_ms"] == last and inc["low_score"] == 0.4
     # a forged LLO report naming some component of X: its FORGED alert is an attack in
-    # progress (the incident stays open), the component claim does not join the keys
+    # progress (the incident stays open), the component claim does not join the keys, and
+    # the attack does not move the anchor relayed events are measured from
     forged = llo("Service component failed", ms=13, sc="urn-ngsi-ld-service-ff-component-x",
                  verdict=V.FORGED, ts=T0 + 330 + 500)
     await store_row(store, forged)
@@ -274,8 +278,14 @@ async def test_attacker_content_never_reshapes_an_incident(store, engine):
         "attached", "alert", "critical")
     [inc] = await store.incidents()
     assert inc["last_event_ms"] == (T0 + 830) * 1000 and inc["keys"] == [f"ie:{IE_X}"]
-    assert await engine.periodic(now_ms=last + 1_800_001) == []
-    assert actions(await engine.periodic(now_ms=(T0 + 830) * 1000 + 1_800_001)) == ["closed"]
+    assert inc["anchor_ms"] == last
+    relayed = so_error("restart", ms=14, verdict=V.RELAY_ATTESTED, ts=T0 + 330 + 900)
+    assert actions(await feed(store, engine, relayed)) == ["attached"]
+    [inc] = await store.incidents()
+    # capped at anchor + window (930 s), not its own 1230 s
+    assert inc["last_event_ms"] == (T0 + 930) * 1000
+    assert await engine.periodic(now_ms=(T0 + 830) * 1000 + 1_800_001) == []
+    assert actions(await engine.periodic(now_ms=(T0 + 930) * 1000 + 1_800_001)) == ["closed"]
 
 
 async def test_a_witnessed_attack_on_an_ie_opens_an_incident(store, engine):
@@ -323,7 +333,7 @@ async def test_without_orion_attack_alerts_only_join(store, pub):
     await feed(store, eng, score(0.9, ms=11, ie=IE_Z))
     assert actions(await feed(store, eng, score(0.4, ms=12, ie=IE_Z))) == ["opened"]
     again = score(0.99, ms=13, ie=IE_Z, verdict=V.FORGED)
-    assert actions(await feed(store, eng, again, alerts=("FORGED",))) == ["attached", "updated"]
+    assert actions(await feed(store, eng, again, alerts=("FORGED",))) == ["attached"]
     [inc] = await store.incidents()
     assert inc["severity"] == "critical"
 
@@ -420,6 +430,56 @@ async def test_relayed_triggers_open_and_join_but_never_shape(store, engine):
     assert actions(await feed(store, engine, failed)) == ["attached"]
     x = next(i for i in await store.incidents() if i["ie_id"] == IE_X)
     assert x["keys"] == [f"ie:{IE_X}"]
+
+
+TM = "did:iota:testnet:0x" + "15" * 32
+POLICY = writer_policy.load({
+    "version": 1,
+    "tags": {"trust.score": {"allowed": [TM], "require_signature": True,
+                             "legacy_grace": False}},
+    "default": {"allowed": ["*"], "require_signature": False, "legacy_grace": True},
+})
+
+
+async def test_policy_decides_trust_without_waiting_for_the_rules(store, pub):
+    eng = IncidentEngine(store, FakeOrion({SC: IE_X}), IncidentConfig(), pub, policy=POLICY)
+    await feed(store, eng, dataclasses.replace(score(0.9, ms=10), iss=TM))
+    # unsigned on a tag that requires signatures, sent through the relay, and the rules
+    # have not (or could not) raise UNSIGNED: still not evidence
+    unsigned = score(0.1, ms=11, verdict=V.UNSIGNED_LEGACY)
+    assert await feed(store, eng, unsigned, submitted=True) == []
+    # a producer-signed verdict from a writer the policy does not list (a stale verdict)
+    outsider = dataclasses.replace(score(0.1, ms=12), iss="did:iota:testnet:0xbad")
+    assert await feed(store, eng, outsider) == []
+    # verdicts the engine does not know count for nothing
+    for n, verdict in enumerate((None, "SOMETHING_NEW")):
+        assert await feed(store, eng, score(0.1, ms=13 + n, verdict=verdict)) == []
+    assert await store.incidents() == []
+    # the listed writer's drop is proven
+    drop = dataclasses.replace(score(0.2, ms=15), iss=TM)
+    assert actions(await feed(store, eng, drop)) == ["opened"]
+    [inc] = await store.incidents()
+    assert (inc["baseline_score"], inc["low_score"]) == (0.9, 0.2)
+
+
+async def test_integrity_alerts_and_relayed_context_shape_nothing(store, engine):
+    await feed(store, engine, score(0.9, ms=10))
+    drop = score(0.4, ms=11)
+    assert actions(await feed(store, engine, drop)) == ["opened"]
+    [inc] = await store.incidents()
+    anchor, keys = inc["anchor_ms"], inc["keys"]
+    # relayed context (an LLO "deployed" on a component of X) is not a trigger: it stays out
+    deployed = llo("Service component deployed", ms=12, verdict=V.RELAY_ATTESTED)
+    assert await feed(store, engine, deployed) == []
+    # an integrity alert naming X joins, keeps the incident going, shapes nothing
+    other = so_error("restart", ms=13, verdict=V.UNSIGNED_LEGACY)
+    await store_row(store, other, submitted=True)
+    await store.put_alert(Alert("CONTENT_MISMATCH", "critical", other.block_id, IE_X,
+                                {"reason": "bytes differ"}, other.ts * 1000))
+    assert actions(await engine.periodic(now_ms=other.ts * 1000)) == ["attached"]
+    [inc] = await store.incidents()
+    assert (inc["anchor_ms"], inc["keys"], inc["severity"]) == (anchor, keys, "critical")
+    assert inc["last_event_ms"] == other.ts * 1000 - 500
 
 
 async def test_relayed_traffic_cannot_keep_an_incident_open(store, engine):

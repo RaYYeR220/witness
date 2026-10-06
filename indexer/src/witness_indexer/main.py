@@ -154,8 +154,8 @@ def build_rules(args: argparse.Namespace, store: Store, pol: WriterPolicy
     return RulesEngine(store, orion, resolver, pol, RulesConfig()), resolver, orion
 
 
-def build_incidents(args: argparse.Namespace, store: Store,
-                    orion: OrionClient | None) -> IncidentEngine | None:
+def build_incidents(args: argparse.Namespace, store: Store, orion: OrionClient | None,
+                    pol: WriterPolicy | None = None) -> IncidentEngine | None:
     """The incident engine, or None with --no-incidents."""
     if not args.incidents:
         return None
@@ -165,7 +165,7 @@ def build_incidents(args: argparse.Namespace, store: Store,
     cfg = IncidentConfig(window_ms=int(args.incident_window_s * 1000),
                          quiet_close_ms=int(args.incident_quiet_s * 1000),
                          drop_threshold=args.incident_drop)
-    return IncidentEngine(store, orion, cfg, publisher)
+    return IncidentEngine(store, orion, cfg, publisher, policy=pol)
 
 
 def _now_ms() -> int:
@@ -196,7 +196,7 @@ async def amain(args: argparse.Namespace, *, stop: asyncio.Event | None = None) 
             closers.insert(0, orion.aclose)
         if rules.anchor is not None:
             closers.insert(0, rules.anchor.aclose)
-        incidents = build_incidents(args, store, orion)
+        incidents = build_incidents(args, store, orion, pol)
         if incidents is None:
             await store.set_service_status(ENGINE_STATUS, "disabled")
         else:
