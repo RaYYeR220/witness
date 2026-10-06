@@ -1,0 +1,97 @@
+{
+  "_source": "anchor/test/vectors/make-anchor-envelope.ts (MirrorSigner + mirrorBody, fixed test key)",
+  "tag": "witness.anchor",
+  "kid": "did:iota:testnet:0xa1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1#sig-1",
+  "publicKeyHex": "0x0d7550754e0800a5d237eef5826035766b9b3e5a15868a940ab289958788e3b0",
+  "messages": [
+    {
+      "envelope": {
+        "w": 1,
+        "tag": "witness.anchor",
+        "iss": "did:iota:testnet:0xa1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1",
+        "kid": "did:iota:testnet:0xa1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1#sig-1",
+        "seq": 1,
+        "iat": 1791319028387,
+        "nonce": "Q73c1X16RNwHaA7pORfbOw",
+        "att": {
+          "mode": "producer"
+        },
+        "body": {
+          "seq": 1,
+          "checkpoint": {
+            "v": 1,
+            "kind": "witness.checkpoint",
+            "network": "private_tangle1",
+            "domain": "Domäne-東京   \"q\"",
+            "from": {
+              "index": 3601,
+              "id": "0x40374c9823571d386596a8516df22d898d8f6da13426f90fc7f19a9dc2276520"
+            },
+            "to": {
+              "index": 3612,
+              "id": "0x2b03ced2e0f98dce804eaf5a77a0c9e618f779edcf11b2d6767f19fb9331088a"
+            },
+            "msRoot": "0x3dde229355c0571bb3624168f937f7b1b7981c6b1f03d0f9afc8dcde88a52d47",
+            "msgCount": 37,
+            "policyHash": "0xacf59a2d743eba7c58db62fa7660c4699783f27ff0b7a9a49506155cacd9d0da",
+            "prev": null
+          },
+          "checkpointHash": "0x5188cab9813d74d9a9784cf0698fffce36248f03f0a8c1261adfa14102666d27",
+          "rebased": {
+            "network": "testnet",
+            "trail": "0x7a7a7a7a7a7a7a7a7a7a7a7a7a7a7a7a7a7a7a7a7a7a7a7a7a7a7a7a7a7a7a7a",
+            "record": 4,
+            "tx": "8L3KZB5SN8Dd7UTorJ6sUqC3DFyuatJ6WPvuSQZummtu"
+          }
+        },
+        "sig": "3He8jG7cU_vaHVGsiNjr3rgY00qyuiXnpfwzRU10CgyEJeD7UP9Vd5DND_MiybH-Nl8m0BwCeIIdWVa62N2QBg"
+      },
+      "data": "{\"att\":{\"mode\":\"producer\"},\"body\":{\"checkpoint\":{\"domain\":\"Domäne-東京   \\\"q\\\"\",\"from\":{\"id\":\"0x40374c9823571d386596a8516df22d898d8f6da13426f90fc7f19a9dc2276520\",\"index\":3601},\"kind\":\"witness.checkpoint\",\"msRoot\":\"0x3dde229355c0571bb3624168f937f7b1b7981c6b1f03d0f9afc8dcde88a52d47\",\"msgCount\":37,\"network\":\"private_tangle1\",\"policyHash\":\"0xacf59a2d743eba7c58db62fa7660c4699783f27ff0b7a9a49506155cacd9d0da\",\"prev\":null,\"to\":{\"id\":\"0x2b03ced2e0f98dce804eaf5a77a0c9e618f779edcf11b2d6767f19fb9331088a\",\"index\":3612},\"v\":1},\"checkpointHash\":\"0x5188cab9813d74d9a9784cf0698fffce36248f03f0a8c1261adfa14102666d27\",\"rebased\":{\"network\":\"testnet\",\"record\":4,\"trail\":\"0x7a7a7a7a7a7a7a7a7a7a7a7a7a7a7a7a7a7a7a7a7a7a7a7a7a7a7a7a7a7a7a7a\",\"tx\":\"8L3KZB5SN8Dd7UTorJ6sUqC3DFyuatJ6WPvuSQZummtu\"},\"seq\":1},\"iat\":1791319028387,\"iss\":\"did:iota:testnet:0xa1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1\",\"kid\":\"did:iota:testnet:0xa1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1#sig-1\",\"nonce\":\"Q73c1X16RNwHaA7pORfbOw\",\"seq\":1,\"sig\":\"3He8jG7cU_vaHVGsiNjr3rgY00qyuiXnpfwzRU10CgyEJeD7UP9Vd5DND_MiybH-Nl8m0BwCeIIdWVa62N2QBg\",\"tag\":\"witness.anchor\",\"w\":1}"
+    },
+    {
+      "envelope": {
+        "w": 1,
+        "tag": "witness.anchor",
+        "iss": "did:iota:testnet:0xa1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1",
+        "kid": "did:iota:testnet:0xa1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1#sig-1",
+        "seq": 2,
+        "iat": 1791319028486,
+        "nonce": "4X8lgRJ0TRI3y7I2P5KfPQ",
+        "att": {
+          "mode": "producer"
+        },
+        "body": {
+          "seq": 2,
+          "checkpoint": {
+            "v": 1,
+            "kind": "witness.checkpoint",
+            "network": "private_tangle1",
+            "domain": "Domäne-東京   \"q\"",
+            "from": {
+              "index": 3613,
+              "id": "0x0e11d89ce50ae1dfdff24efc9c5ea6c36631ed9ffaf601f20c12a2ea3c136145"
+            },
+            "to": {
+              "index": 3624,
+              "id": "0xf4efd98a374294811b2ebc24e48d3c73c50f8318bf91c8fc379f52b045eba63d"
+            },
+            "msRoot": "0xbc355f186b380d23bbc3d73a8f92307c2619aab0129060bcc3b684eabd4e281d",
+            "msgCount": 0,
+            "policyHash": "0xacf59a2d743eba7c58db62fa7660c4699783f27ff0b7a9a49506155cacd9d0da",
+            "prev": "0x5188cab9813d74d9a9784cf0698fffce36248f03f0a8c1261adfa14102666d27"
+          },
+          "checkpointHash": "0x5ecac8909b28d5457f9154dc07b71279b021be99f4425eef40330178dc1a6b20",
+          "rebased": {
+            "network": "testnet",
+            "trail": "0x7a7a7a7a7a7a7a7a7a7a7a7a7a7a7a7a7a7a7a7a7a7a7a7a7a7a7a7a7a7a7a7a",
+            "record": 5,
+            "tx": "5SpNx1Rcix5XB6doa3w4bHYme7PqrMXcunLWHfUaNwrX"
+          }
+        },
+        "prev": "0x0101010101010101010101010101010101010101010101010101010101010101",
+        "sig": "pbA8l0xnr6Bkk9pN2MfHKSTOIln3-_928NbS-hyGg_61ghizwPfk_AyzShodkeywdg4CAYIurMG3bJpqWAR8Dw"
+      },
+      "data": "{\"att\":{\"mode\":\"producer\"},\"body\":{\"checkpoint\":{\"domain\":\"Domäne-東京   \\\"q\\\"\",\"from\":{\"id\":\"0x0e11d89ce50ae1dfdff24efc9c5ea6c36631ed9ffaf601f20c12a2ea3c136145\",\"index\":3613},\"kind\":\"witness.checkpoint\",\"msRoot\":\"0xbc355f186b380d23bbc3d73a8f92307c2619aab0129060bcc3b684eabd4e281d\",\"msgCount\":0,\"network\":\"private_tangle1\",\"policyHash\":\"0xacf59a2d743eba7c58db62fa7660c4699783f27ff0b7a9a49506155cacd9d0da\",\"prev\":\"0x5188cab9813d74d9a9784cf0698fffce36248f03f0a8c1261adfa14102666d27\",\"to\":{\"id\":\"0xf4efd98a374294811b2ebc24e48d3c73c50f8318bf91c8fc379f52b045eba63d\",\"index\":3624},\"v\":1},\"checkpointHash\":\"0x5ecac8909b28d5457f9154dc07b71279b021be99f4425eef40330178dc1a6b20\",\"rebased\":{\"network\":\"testnet\",\"record\":5,\"trail\":\"0x7a7a7a7a7a7a7a7a7a7a7a7a7a7a7a7a7a7a7a7a7a7a7a7a7a7a7a7a7a7a7a7a\",\"tx\":\"5SpNx1Rcix5XB6doa3w4bHYme7PqrMXcunLWHfUaNwrX\"},\"seq\":2},\"iat\":1791319028486,\"iss\":\"did:iota:testnet:0xa1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1\",\"kid\":\"did:iota:testnet:0xa1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1#sig-1\",\"nonce\":\"4X8lgRJ0TRI3y7I2P5KfPQ\",\"prev\":\"0x0101010101010101010101010101010101010101010101010101010101010101\",\"seq\":2,\"sig\":\"pbA8l0xnr6Bkk9pN2MfHKSTOIln3-_928NbS-hyGg_61ghizwPfk_AyzShodkeywdg4CAYIurMG3bJpqWAR8Dw\",\"tag\":\"witness.anchor\",\"w\":1}"
+    }
+  ]
+}
