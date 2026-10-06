@@ -438,7 +438,8 @@ async def test_live_validate(store):
 @needs_stack
 async def test_live_validate_recorded_upload(store):
     """Checks (c) and (d) against the real node for the upload captured when the stack was
-    first started; works even while no new milestones are being issued."""
+    first started; works even while no new milestones are being issued. Skipped on a Tangle
+    that was recreated since the capture, where that block does not exist."""
     vec = json.loads((VECTORS / "legacy_upload_response.json").read_text())
     request = vec["request"]
     block_hex = json.loads(json.loads(vec["bodyUtf8"])["return_payload"])["blockId"]
@@ -448,6 +449,9 @@ async def test_live_validate_recorded_upload(store):
     hornet = HornetRest(LIVE_HORNET)
     v = Validator(store, hornet, ValidatorConfig(timeout_s=10))
     try:
+        if await hornet.block_metadata(bid) is None:
+            pytest.skip(f"captured block {block_hex[:18]}... is not on this Tangle (recreated "
+                        "since the vectors were captured)")
         record = rec("vector-ok", bid, data, tag=request["tag"], message=request["message"])
         assert await handle_record(store, v, record, source="http")
         assert await v.validate_once(bid, "vector-ok") == "CONTENT_VERIFIED"
