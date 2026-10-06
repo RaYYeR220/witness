@@ -82,10 +82,12 @@ def test_demo_policy_matches_identities(key):
     ts = policy["tags"]["trust.score"]
     assert ts["allowed"] == [dids["trust-manager"]]
     assert ts["require_signature"] is True and ts["legacy_grace"] is False
-    for tag in ("LLO-K8s", "LLO-Docker", "self-orchestrator"):
+    for tag in ("LLO-K8s", "LLO-Docker", "self-orchestrator", "self-security"):
         rule = policy["tags"][tag]
         assert dids["relay"] in rule["allowed"] and rule["legacy_grace"] is True
         assert rule["require_signature"] is False
+    # self-security has no identity of its own: only the relay may attest its notifications
+    assert policy["tags"]["self-security"]["allowed"] == [dids["relay"]]
     from witness_core import policy as policy_mod
 
     loaded = policy_mod.load(policy)

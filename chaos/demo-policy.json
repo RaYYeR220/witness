@@ -32,6 +32,13 @@
       "require_signature": false,
       "legacy_grace": true
     },
+    "self-security": {
+      "allowed": [
+        "did:iota:testnet:0xe6cf1bf1e06f82d7956585085306fc23daee082cc75120459f7d39bb152f0459"
+      ],
+      "require_signature": false,
+      "legacy_grace": true
+    },
     "audit.report": {
       "allowed": [
         "did:iota:testnet:0x6b9a693ebf2ac6fb771a75d25b1284ba75aeb0ae16618eaf5d41d24828a6f7a2",
