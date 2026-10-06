@@ -22,7 +22,54 @@ def row(n: int, **kw) -> MessageRow:
 async def test_migrate_idempotent(store: Store):
     await store.migrate()
     await store.migrate()
-    assert await store.applied_versions() == [1]
+    assert await store.applied_versions() == [1, 2]
+
+
+async def test_service_status_in_stats(store: Store):
+    assert "orion" not in await store.stats()
+    await store.set_service_status("orion", "unreachable", detail="refused", at_ms=5)
+    await store.set_service_status("orion", "ok", at_ms=6)
+    await store.set_service_status("anchor", "unreachable", at_ms=7)
+    st = await store.stats()
+    assert (st["orion"], st["anchor"]) == ("ok", "unreachable")
+    assert (await store.service_status())["orion"] == {"status": "ok", "detail": None, "at_ms": 6}
+    with pytest.raises(ValueError):
+        await store.set_service_status("messages", "ok")
+
+
+async def test_rule_queries(store: Store):
+    ok = ["PRODUCER_SIGNED"]
+    for n, (seq, prev, verdict) in enumerate(
+            [(1, None, "PRODUCER_SIGNED"), (2, bid(1), "PRODUCER_SIGNED"), (3, bid(1), "FORGED"),
+             (4, bid(2), "PRODUCER_SIGNED")], start=1):
+        await store.put_message(row(n, iss="did:x", seq=seq, prev=prev, verdict=verdict,
+                                    kind="trust.score", json={"score": n / 10, "id": "D:1"},
+                                    ie_id="D:1", ms_index=n, wf_index=0, ts=100 * n))
+    assert (await store.chain_head("did:x", 4, ok, bid(4)))["block_id"] == bid(2)
+    assert await store.chain_head("did:x", 1, ok, bid(1)) is None
+    assert [r["block_id"] for r in await store.chain_siblings("did:x", bid(1), ok, bid(2))] == []
+    assert [r["block_id"] for r in
+            await store.chain_siblings("did:x", bid(1), ok + ["FORGED"], bid(2))] == [bid(3)]
+    prev = await store.previous_score("D:1", ok, (4, 0), bid(4))
+    assert (prev["block_id"], prev["score"]) == (bid(2), 0.2)
+    assert (await store.previous_score("D:1", ok, None, bid(9)))["block_id"] == bid(4)
+    assert [(r["ie_id"], r["score"]) for r in await store.latest_scores(ok)] == [("D:1", 0.4)]
+    # a score that is not a number in [0, 1] is never read as one
+    await store.put_message(row(5, iss="did:x", seq=5, verdict="PRODUCER_SIGNED",
+                                kind="trust.score", json={"score": "high", "id": "D:1"},
+                                ie_id="D:1", ms_index=5, wf_index=0, ts=500))
+    await store.put_message(row(6, iss="did:x", seq=6, verdict="PRODUCER_SIGNED",
+                                kind="trust.score", json={"score": 7, "id": "D:1"},
+                                ie_id="D:1", ms_index=6, wf_index=0, ts=600))
+    assert [r["score"] for r in await store.latest_scores(ok)] == [0.4]
+    assert await store.missing_messages([bid(1), bid(77), bid(2)]) == [bid(77)]
+    assert await store.missing_messages([]) == []
+    assert await store.latest_milestone_ts() is None
+    assert await store.first_submission_ms() is None
+    assert not await store.has_alert("SHADOW", block_id=bid(1))
+    await store.put_alert(Alert("SHADOW", "high", bid(1), None, {}, 1))
+    assert await store.has_alert("SHADOW", block_id=bid(1))
+    assert not await store.has_alert("SHADOW", ie_id="D:1")
 
 
 async def test_reprocess_milestone_idempotent(store: Store):

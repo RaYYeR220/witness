@@ -45,6 +45,11 @@ COUNTED_TABLES = (
     "events", "submissions", "validations", "content_checks", "lifecycle", "incidents",
 )
 
+# A trust.score body whose score is a JSON number in [0, 1]; CASE keeps the cast from ever
+# seeing a non-number.
+_SCORE_OK = ("CASE WHEN jsonb_typeof(json->'score') = 'number' "
+             "THEN (json->>'score')::numeric END BETWEEN 0 AND 1")
+
 FLOW_KEYS = {
     "issuer": "iss",
     "ie": "ie_id",
@@ -639,6 +644,115 @@ class Store:
             f"ORDER BY ts DESC, block_id LIMIT 500", args)
         return (top["seq"] if top else None), {r["nonce"] for r in rows}
 
+    # -- rule queries -----------------------------------------------------------------------
+    # `verdicts` arguments name the verdicts whose messages a rule trusts; the rules engine
+    # decides which those are.
+
+    async def chain_head(self, iss: str, before_seq: int, verdicts: list[str],
+                         exclude_block_id: bytes) -> dict | None:
+        """The issuer's message with the highest seq below `before_seq` (block_id, seq)."""
+        return await self._one(
+            "SELECT block_id, seq FROM messages WHERE iss = %s AND verdict = ANY(%s::text[]) "
+            "AND seq < %s AND block_id <> %s ORDER BY seq DESC, ts DESC, block_id LIMIT 1",
+            (iss, verdicts, before_seq, exclude_block_id))
+
+    async def chain_siblings(self, iss: str, prev: bytes, verdicts: list[str],
+                             exclude_block_id: bytes) -> list[dict]:
+        """Other messages of the issuer that name the same `prev` (block_id, seq)."""
+        return await self._fetch(
+            "SELECT block_id, seq FROM messages WHERE iss = %s AND prev = %s "
+            "AND verdict = ANY(%s::text[]) AND block_id <> %s ORDER BY seq, block_id LIMIT 20",
+            (iss, prev, verdicts, exclude_block_id))
+
+    async def previous_score(self, ie_id: str, verdicts: list[str],
+                             before: tuple[int, int] | None,
+                             exclude_block_id: bytes) -> dict | None:
+        """The IE's trust.score confirmed just before position `before` (ms_index, wf_index),
+        or its latest confirmed one when `before` is None: block_id, score, ts, ms_index."""
+        cond, args = "", [ie_id, verdicts, exclude_block_id]
+        if before is not None:
+            cond = "AND (ms_index, COALESCE(wf_index, 0)) < (%s, %s)"
+            args += list(before)
+        return await self._one(
+            "SELECT block_id, (json->>'score')::float8 AS score, ts, ms_index FROM messages "
+            "WHERE ie_id = %s AND kind = 'trust.score' AND verdict = ANY(%s::text[]) "
+            f"AND block_id <> %s AND ms_index IS NOT NULL AND {_SCORE_OK} "
+            f"{cond} ORDER BY ms_index DESC, COALESCE(wf_index, 0) DESC, block_id DESC LIMIT 1",
+            args)
+
+    async def latest_scores(self, verdicts: list[str]) -> list[dict]:
+        """Per IE, its latest confirmed trust.score: ie_id, block_id, score, ts, ms_index."""
+        return await self._fetch(
+            "SELECT DISTINCT ON (ie_id) ie_id, block_id, (json->>'score')::float8 AS score, ts, "
+            "ms_index FROM messages WHERE kind = 'trust.score' AND ie_id IS NOT NULL "
+            f"AND verdict = ANY(%s::text[]) AND ms_index IS NOT NULL AND {_SCORE_OK} "
+            "ORDER BY ie_id, ms_index DESC, COALESCE(wf_index, 0) DESC, block_id DESC",
+            (verdicts,))
+
+    async def security_events(self, ie_id: str, tags: list[str], verdicts: list[str],
+                              from_ts: int, to_ts: int, limit: int = 5) -> list[dict]:
+        """Messages with one of `tags` about the IE between two milestone times (seconds)."""
+        return await self._fetch(
+            "SELECT block_id, tag, ts, verdict FROM messages WHERE ie_id = %s "
+            "AND tag = ANY(%s::text[]) AND verdict = ANY(%s::text[]) AND ts BETWEEN %s AND %s "
+            "ORDER BY ts DESC, block_id LIMIT %s",
+            (ie_id, tags, verdicts, from_ts, to_ts, limit))
+
+    async def shadow_candidates(self, since_ms: int, until_ms: int, exempt_tags: list[str],
+                                limit: int) -> list[dict]:
+        """Confirmed messages in [since_ms, until_ms] (confirmation time) that no submission
+        names and that carry no SHADOW alert yet, oldest first."""
+        return await self._fetch(
+            "SELECT * FROM (SELECT block_id, tag, iss, ie_id, verdict, ms_index, "
+            "COALESCE(confirmed_at_ms, ts * 1000) AS confirmed_ms FROM messages m "
+            "WHERE ms_index IS NOT NULL AND (tag IS NULL OR NOT tag = ANY(%s::text[])) "
+            "AND NOT EXISTS (SELECT 1 FROM submissions s WHERE s.block_id = m.block_id) "
+            "AND NOT EXISTS (SELECT 1 FROM alerts a WHERE a.rule = 'SHADOW' "
+            "AND a.block_id = m.block_id)) c "
+            "WHERE confirmed_ms BETWEEN %s AND %s ORDER BY confirmed_ms, block_id LIMIT %s",
+            (exempt_tags, since_ms, until_ms, limit))
+
+    async def first_submission_ms(self) -> int | None:
+        row = await self._one("SELECT min(received_at_ms) AS t FROM submissions")
+        return row["t"] if row else None
+
+    async def missing_messages(self, block_ids: list[bytes]) -> list[bytes]:
+        """The ids, in the given order, that have no row in `messages`."""
+        rows = await self._fetch(
+            "SELECT block_id FROM messages WHERE block_id = ANY(%s::bytea[])", (block_ids,))
+        known = {bytes(r["block_id"]) for r in rows}
+        return [b for b in block_ids if b not in known]
+
+    async def latest_milestone_ts(self) -> int | None:
+        row = await self._one("SELECT ts FROM milestones ORDER BY idx DESC LIMIT 1")
+        return row["ts"] if row else None
+
+    async def has_alert(self, rule: str, *, block_id: bytes | None = None,
+                        ie_id: str | None = None) -> bool:
+        row = await self._one(
+            "SELECT 1 AS x FROM alerts WHERE rule = %s "
+            "AND (%s::bytea IS NULL OR block_id = %s::bytea) "
+            "AND (%s::text IS NULL OR ie_id = %s::text) LIMIT 1",
+            (rule, block_id, block_id, ie_id, ie_id))
+        return row is not None
+
+    # -- service health ---------------------------------------------------------------------
+
+    async def set_service_status(self, name: str, status: str, *, detail: str | None = None,
+                                 at_ms: int | None = None) -> None:
+        if name in COUNTED_TABLES or name == "cursor":
+            raise ValueError(f"service name {name!r} collides with a stats key")
+        await self._fetch(
+            "INSERT INTO service_status (name, status, detail, at_ms) VALUES (%s,%s,%s,%s) "
+            "ON CONFLICT (name) DO UPDATE SET status = excluded.status, "
+            "detail = excluded.detail, at_ms = excluded.at_ms RETURNING name",
+            (name, status, detail, _now_ms() if at_ms is None else at_ms))
+
+    async def service_status(self) -> dict[str, dict]:
+        rows = await self._fetch("SELECT name, status, detail, at_ms FROM service_status")
+        return {r["name"]: {"status": r["status"], "detail": r["detail"], "at_ms": r["at_ms"]}
+                for r in rows}
+
     # -- flows ------------------------------------------------------------------------------
 
     async def flows(self, by: Literal["issuer", "ie", "service", "corr"],
@@ -682,6 +796,9 @@ class Store:
             f"SELECT '{t}' AS t, count(*) AS n FROM {t}" for t in COUNTED_TABLES)
         out = {r["t"]: r["n"] for r in await self._fetch(parts)}
         out["cursor"] = await self.get_cursor()
+        # Service health as last observed, e.g. out["orion"] == "unreachable".
+        for name, s in (await self.service_status()).items():
+            out[name] = s["status"]
         return out
 
     # -- incidents --------------------------------------------------------------------------
