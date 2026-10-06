@@ -270,7 +270,7 @@ DID = "did:iota:testnet:0xabc"
 RESOLVE_URL = f"http://anchor.test/resolve/{quote(DID, safe='')}"
 
 
-@pytest.mark.parametrize("status", [400, 404, 410, 414, 431])
+@pytest.mark.parametrize("status", [400, 404, 410, 414, 422, 431])
 async def test_resolver_caches_definitive_refusals(status):
     with respx.mock() as router:
         route = router.get(RESOLVE_URL).mock(return_value=httpx.Response(status))
@@ -328,3 +328,30 @@ async def test_gate_lets_resolver_outages_through():
     gate = PolicyGate(policy.load({"version": 1}), DownResolver(), "did:key:zRelay")
     with pytest.raises(KeysUnavailable):
         await gate.check_envelope("t", env)
+
+
+
+def _deep(levels: int) -> object:
+    v: object = "leaf"
+    for _ in range(levels):
+        v = {"n": v}
+    return v
+
+
+@pytest.mark.parametrize(
+    "deep",
+    [
+        lambda pub: httpx.Response(200, json={
+            **_resolve_body(DID, (DID + "#sig-1", pub, None)), "x": _deep(600)}),
+        lambda pub: httpx.Response(200, content=b'{"doc":' + b"[" * 2500 + b"]" * 2500 + b"}"),
+    ],
+)
+async def test_resolver_treats_hostile_documents_as_naming_no_key(deep):
+    pub = Ed25519PrivateKey.generate().public_key().public_bytes_raw()
+    with respx.mock() as router:
+        route = router.get(RESOLVE_URL).mock(return_value=deep(pub))
+        async with httpx.AsyncClient() as http:
+            resolver = KeyResolver(resolver_url="http://anchor.test", http=http)
+            assert await resolver.resolve(DID + "#sig-1") is None
+            assert await resolver.resolve(DID + "#sig-1") is None
+    assert route.call_count == 1

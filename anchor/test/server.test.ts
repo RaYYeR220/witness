@@ -84,6 +84,25 @@ describe("GET /resolve/:did", () => {
     for (const k of body.keys) expect(Object.keys(k).sort()).toEqual(["kid", "publicKeyHex", "revokedAtMs", "type"]);
   });
 
+  it("answers a document nested past 64 levels as unusable (422), cached like a 404", async () => {
+    let deep: unknown = "leaf";
+    for (let i = 0; i < 600; i++) deep = { n: deep };
+    const s = await start({ resolve: async (did) => (s.calls.push(did), { ...resolved, doc: { ...resolved.doc, deep } }) });
+    for (let i = 0; i < 2; i++) {
+      const { status, body } = await s.get(`/resolve/${DID}`);
+      expect(status).toBe(422);
+      expect(body).toEqual({ error: "DID document unusable: nested deeper than 64 levels" });
+    }
+    expect(s.calls).toEqual([DID]);
+  });
+
+  it("still serves a document at the limit (reply 0, doc 1, then 63 more levels)", async () => {
+    let edge: unknown = "leaf";
+    for (let i = 0; i < 62; i++) edge = { n: edge };
+    const t = await start({ resolve: async () => ({ ...resolved, doc: { ...resolved.doc, edge } }) });
+    expect((await t.get(`/resolve/${DID}`)).status).toBe(200);
+  });
+
   it("accepts a percent-encoded DID", async () => {
     const s = await start();
     expect((await s.get(`/resolve/${encodeURIComponent(DID)}`)).status).toBe(200);

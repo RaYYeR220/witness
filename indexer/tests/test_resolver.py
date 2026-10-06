@@ -277,7 +277,7 @@ def test_offline_docs_and_unsupported_ids():
     assert not respx.calls
 
 
-@pytest.mark.parametrize("status", [400, 404, 410, 414, 431])
+@pytest.mark.parametrize("status", [400, 404, 410, 414, 422, 431])
 @respx.mock
 def test_definitive_refusals_are_answers(status):
     route = respx.get(URL).mock(return_value=httpx.Response(status))
@@ -314,3 +314,54 @@ async def test_oversized_did_is_unknown_without_asking():
         assert r.can_resolve("did:iota:" + "a" * (128 - len("did:iota:")))
         assert not r.can_resolve("did:iota:" + "a" * (129 - len("did:iota:")))
         assert route.call_count == 0
+
+
+def _nested(levels: int) -> dict:
+    v: object = "leaf"
+    for _ in range(levels):
+        v = {"n": v}
+    return v  # type: ignore[return-value]
+
+
+@pytest.mark.parametrize(
+    "response",
+    [
+        # Past nesting.MAX_DOC_DEPTH (64): copy.deepcopy alone would recurse ~1800 frames.
+        httpx.Response(200, json={**reply(entry(NEW, None)), "doc": {"id": DID, "x": _nested(600)}}),
+        # Past the JSON cap itself.
+        httpx.Response(200, content=b'{"doc":' + b"[" * 2500 + b"]" * 2500 + b"}"),
+    ],
+)
+@respx.mock
+def test_hostile_documents_are_unusable_answers_not_outages(response):
+    route = respx.get(URL).mock(return_value=response)
+    r, clock = clocked()
+    assert r.resolve_kid(KID) is None
+    assert r.doc(DID) is None
+    assert r.status == "ok"
+    assert route.call_count == 1  # cached like "no such DID"
+    clock.t += 6
+    r.resolve_kid(KID)
+    assert route.call_count == 2  # with the short TTL of a negative answer
+
+
+@respx.mock
+def test_document_at_the_depth_limit_still_resolves():
+    doc = reply(entry(NEW, None))
+    doc["doc"]["x"] = _nested(62)  # reply 0, doc 1, x 2, leaf at 64
+    respx.get(URL).mock(return_value=httpx.Response(200, json=doc))
+    assert DidResolver(BASE).resolve_kid(KID).ed25519_public == pub(NEW)
+
+
+@respx.mock
+def test_callers_cannot_change_the_cached_reply():
+    route = respx.get(URL).mock(return_value=httpx.Response(200, json=reply(entry(NEW, None))))
+    r, _ = clocked()
+    first = r.doc(DID)
+    first["keys"][0]["publicKeyHex"] = pub(OLD).hex()
+    first["keys"].append({"kid": "#evil"})
+    first["version"] = "x"
+    again = r.doc(DID)
+    assert (again["version"], len(again["keys"])) == ("7", 1)
+    assert r.resolve_kid(KID).ed25519_public == pub(NEW)
+    assert route.call_count == 1

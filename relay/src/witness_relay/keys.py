@@ -4,8 +4,9 @@ Three sources, tried in order: a static file of public JWKs (operator-pinned key
 optionally marked revoked), `did:key` (self-describing, offline), and the anchor
 service's DID resolver (`GET {resolver_url}/resolve/{did}`), cached for a minute.
 
-Only answers about the DID are cached: a document of that DID, or a definitive refusal
-(DEFINITIVE: "no such DID"). Anything else (connection error, timeout, 5xx, 408, 429, an
+Only answers about the DID are cached: a document of that DID, a definitive refusal
+(DEFINITIVE: "no such DID"), or a document too deep to use (past nesting.MAX_DOC_DEPTH or
+the JSON cap), which names no key. Anything else (connection error, timeout, 5xx, 408, 429, an
 auth or proxy refusal, a reply that is not a document of the DID) raises KeysUnavailable
 and caches nothing, so the request is refused as temporary instead of FORGED.
 """
@@ -22,13 +23,14 @@ from typing import Any
 from urllib.parse import quote
 
 import httpx
+from witness_core import nesting
 from witness_core.envelope import KeyInfo
 
 log = logging.getLogger(__name__)
 
 # Statuses that answer "no such DID" (or "this id can never resolve"). Any other non-200
 # says nothing about the DID: an outage or an auth failure must not read as "no key".
-DEFINITIVE = frozenset({400, 404, 410, 414, 431})
+DEFINITIVE = frozenset({400, 404, 410, 414, 422, 431})  # 422: the anchor's "unusable"
 
 
 class KeysUnavailable(Exception):
@@ -178,11 +180,16 @@ class KeyResolver:
             value = None  # the registry has no such DID: an answer, cached like a document
         elif resp.status_code == 200:
             try:
-                value = resp.json()
+                value = nesting.loads(resp.content)
+            except nesting.JsonTooDeep:
+                value = None  # unusable document: names no key, cached like "no such DID"
             except ValueError as exc:
                 raise KeysUnavailable("DID resolver sent no JSON") from exc
-            if not _is_answer(value, did):
-                raise KeysUnavailable("DID resolver reply is not a document of the DID")
+            else:
+                if not _is_answer(value, did):
+                    raise KeysUnavailable("DID resolver reply is not a document of the DID")
+                if nesting.value_too_deep(value, nesting.MAX_DOC_DEPTH):
+                    value = None  # unusable document, as above
         else:
             log.warning("DID resolution failed for %s: HTTP %s", did, resp.status_code)
             raise KeysUnavailable(f"DID resolver answered HTTP {resp.status_code}")

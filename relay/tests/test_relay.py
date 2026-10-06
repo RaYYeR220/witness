@@ -508,6 +508,29 @@ async def test_bodies_nested_too_deep_are_refused(make_cfg, hornet, relay):
     assert hornet.route.call_count == 0
 
 
+async def test_hostile_did_document_is_refused_not_retried(make_cfg, hornet, relay):
+    """A DID document nested 600 levels deep names no usable key: FORGED (403), not 503."""
+    did = "did:iota:testnet:0x" + "ab" * 32
+    key = Ed25519PrivateKey.generate()
+    env = envelope.seal("free", {"a": 1}, iss=did, kid=did + "#sig-1", sign_key=key, seq=1,
+                        att_mode="producer")
+    deep: object = "leaf"
+    for _ in range(600):
+        deep = {"n": deep}
+    doc = {"doc": {"id": did, "x": deep}, "version": 1, "historyComplete": True,
+           "keys": [{"kid": "#sig-1", "type": "Ed25519", "revokedAtMs": None,
+                     "publicKeyHex": key.public_key().public_bytes_raw().hex()}]}
+    route = hornet.router.get(f"http://anchor.test/resolve/{quote(did, safe='')}").mock(
+        return_value=httpx.Response(200, json=doc))
+    async with relay(make_cfg(resolver_url="http://anchor.test")) as client:
+        for _ in range(2):
+            resp = await client.post("/upload", params=UPLOAD,
+                                     json={"tag": "free", "message": env})
+            assert resp.status_code == 403, resp.text
+            assert resp.json()["verdict"] == verdicts.FORGED
+    assert route.call_count == 1 and hornet.route.call_count == 0
+
+
 async def test_resolver_outage_is_a_temporary_refusal(make_cfg, hornet, relay):
     """A DID resolver that cannot answer (here 401, then 503) refuses with 503 and caches
     nothing; once it answers, the same envelope goes through."""

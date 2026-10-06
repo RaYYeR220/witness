@@ -779,6 +779,26 @@ async def test_did_resolver_is_asked_at_the_milestone_time(store: Store):
     assert (await msg(store, chain.block_id(2, 1)))["verdict"] == "PRODUCER_SIGNED"
 
 
+async def test_hostile_did_document_forges_instead_of_stalling(store: Store):
+    """A did:iota document nested 600 levels deep is unusable: its signer is FORGED and
+    the milestone is indexed, never stuck on the resolver."""
+    chain = FakeChain()
+    chain.add([("trust.score", iota_signed(1))])
+    deep: object = "leaf"
+    for _ in range(600):
+        deep = {"n": deep}
+    doc = did_reply(None)
+    doc["doc"]["x"] = deep
+    url = f"{ANCHOR}/resolve/{quote(IOTA_DID, safe='')}"
+    async with respx.mock() as router:
+        router.get(url).mock(return_value=httpx.Response(200, json=doc))
+        resolver = DidResolver(ANCHOR)
+        await indexer(FakeSource(chain), store, resolve=resolver, policy=ALLOW_ALL).sync()
+        await resolver.aclose()
+    assert (await msg(store, chain.block_id(1, 0)))["verdict"] == "FORGED"
+    assert await store.get_cursor() == 1
+
+
 @pytest.mark.parametrize("failure", [httpx.ConnectError("refused"), httpx.Response(503),
                                      httpx.Response(429), httpx.ReadTimeout("slow"),
                                      httpx.Response(401), httpx.Response(403),

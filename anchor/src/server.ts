@@ -5,6 +5,7 @@ import { DidNotFoundError, InvalidDidError, resolvedKeys, type PublicIdentity, t
 import { parseDid, type DidDocumentJson } from "./didcodec.js";
 import { log } from "./log.js";
 import type { LoopHealth, LoopStatus, TickResult } from "./loop.js";
+import { MAX_DOC_DEPTH, valueTooDeep } from "./untrusted.js";
 
 export interface ServerDeps {
   network: string;
@@ -79,7 +80,12 @@ export function createAnchorServer(deps: ServerDeps): http.Server {
     const p = (async (): Promise<Reply> => {
       let reply: Reply;
       try {
-        reply = { status: 200, body: toResolveResponse(await deps.resolve(did)) };
+        const body = toResolveResponse(await deps.resolve(did));
+        // A hostile document must not be served for clients to walk: answered as unusable,
+        // a definitive refusal clients cache like "no such DID".
+        reply = valueTooDeep(body, MAX_DOC_DEPTH)
+          ? { status: 422, body: { error: `DID document unusable: nested deeper than ${MAX_DOC_DEPTH} levels` } }
+          : { status: 200, body };
       } catch (err) {
         if (err instanceof InvalidDidError) return { status: 400, body: { error: err.message } };
         if (err instanceof DidNotFoundError) reply = { status: 404, body: { error: err.message } };

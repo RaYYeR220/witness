@@ -25,6 +25,11 @@ MAX_JSON_DEPTH = 2500
 # Deepest value the canonicalizer accepts (the top value is at depth 0). Leaves rfc8785
 # about 500 frames of headroom for its caller's stack.
 MAX_JCS_DEPTH = 500
+# Deepest value in a DID resolve reply (`{doc, version, keys}`, the reply itself at depth 0).
+# Real documents are a few levels deep; anyone can publish a did:iota document, so deeper
+# ones are refused as unusable everywhere (anchor resolver 422, indexer, relay) instead of
+# being walked or copied.
+MAX_DOC_DEPTH = 64
 
 
 def text_too_deep(text: str, limit: int = MAX_JSON_DEPTH) -> bool:

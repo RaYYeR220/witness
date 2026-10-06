@@ -10,7 +10,10 @@ milestone timestamps have second precision, so a key revoked anywhere in that se
 as revoked, as in `witness_core.bundle.valid_through_second`.
 
 Answers are cached per DID, including "no such DID": a definitive refusal (DEFINITIVE: 400,
-404, 410, 414, 431) says the registry has no such DID or will never serve this one. How
+404, 410, 414, 422, 431) says the registry has no such DID or will never serve this one. A
+document nested deeper than `nesting.MAX_DOC_DEPTH` (or past the JSON cap) is unusable: an
+answer too, cached like "no such DID", so its signers are FORGED and no milestone stalls on
+it. How
 long an answer is reused depends on what it is and on the time asked about, so revocations
 near the live tip are seen promptly:
 
@@ -33,7 +36,6 @@ MAX_DID_LENGTH are unknown without asking anyone.
 
 from __future__ import annotations
 
-import copy
 import re
 import threading
 import time
@@ -42,6 +44,7 @@ from collections.abc import Callable
 from urllib.parse import quote
 
 import httpx
+from witness_core import nesting
 from witness_core.bundle import second_end_ms, snapshot_resolver
 from witness_core.envelope import KeyInfo
 
@@ -133,10 +136,23 @@ def _pick(reply: dict | None, kid: str, at_ms: int | None) -> KeyInfo | None:
 
 
 _MISS = object()
+
+
+def _detached(reply: dict | None) -> dict | None:
+    """A reply callers may change without touching the cache: the top level and the key
+    entries are copied, the document itself is shared (callers only read it). Never a deep
+    copy, which a hostile document could make recurse past the interpreter's limit."""
+    if reply is None:
+        return None
+    out = dict(reply)
+    if isinstance(out.get("keys"), list):
+        out["keys"] = [dict(k) if isinstance(k, dict) else k for k in out["keys"]]
+    return out
+
 # Statuses that answer "no such DID" (or "this id can never resolve"). Anything else that is
 # not a 200 says nothing about the DID: an auth or proxy failure (401, 403, 407) must not turn
 # every did:iota signer into FORGED.
-DEFINITIVE = frozenset({400, 404, 410, 414, 431})
+DEFINITIVE = frozenset({400, 404, 410, 414, 422, 431})  # 422: the anchor's "unusable"
 # at_ms this close to the fetch, or later, asks about the live tip. Wide enough that a node
 # whose clock (milestone timestamps) runs behind ours still counts as the tip.
 LIVE_WINDOW_MS = 30_000
@@ -266,14 +282,14 @@ class DidResolver:
         if not isinstance(did, str) or len(did) > MAX_DID_LENGTH or not DID_RE.fullmatch(did):
             return None
         if did in self._offline:
-            return copy.deepcopy(self._offline[did])
+            return _detached(self._offline[did])
         if did.startswith(_KEY_PREFIX):
             return _did_key_reply(did)
         with self._lock:
             hit = self._cache.get(did)
             if hit is not None and self._fresh(hit, at_ms):
                 self._cache.move_to_end(did)
-                return copy.deepcopy(hit.value)
+                return _detached(hit.value)
         if self.base_url is None:
             return None  # resolution disabled: the DID is unknown here, not unreachable
         return _MISS
@@ -284,13 +300,18 @@ class DidResolver:
             value = None  # the registry says it has no such DID (or refuses this one for good)
         elif code == 200:
             try:
-                value = resp.json()
+                value = nesting.loads(resp.content)
+            except nesting.JsonTooDeep:
+                value = None  # unusable document: an answer, cached like "no such DID"
             except ValueError as exc:
                 self.status = "unreachable"
                 raise ResolverUnavailable(f"resolver sent no JSON for {did}") from exc
-            if not _is_answer(value, did):
-                self.status = "unreachable"
-                raise ResolverUnavailable(f"resolver reply is not a document of {did}")
+            else:
+                if not _is_answer(value, did):
+                    self.status = "unreachable"
+                    raise ResolverUnavailable(f"resolver reply is not a document of {did}")
+                if nesting.value_too_deep(value, nesting.MAX_DOC_DEPTH):
+                    value = None  # unusable document, as above
         else:
             self.status = "unreachable"
             raise ResolverUnavailable(f"resolver answered HTTP {resp.status_code} for {did}")
@@ -302,4 +323,4 @@ class DidResolver:
             self._cache.move_to_end(did)
             while len(self._cache) > self._cache_size:
                 self._cache.popitem(last=False)
-        return copy.deepcopy(value)
+        return _detached(value)
