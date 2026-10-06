@@ -65,6 +65,11 @@ export interface CheckpointConfig {
   httpTimeoutMs: number;
   /** Development only (HORNET stub): commit msgCount 0 when the source does not report it. */
   allowMissingMsgCount: boolean;
+  /** HORNET node every milestone id of a window is checked against; required for the loop. */
+  hornetUrl: string | null;
+  /** Pinned coordinator public keys (lowercase 0x hex) and signature threshold. */
+  coordinatorKeys: string[];
+  coordinatorThreshold: number;
 }
 
 interface NetworkDefaults {
@@ -292,6 +297,22 @@ function checkpointConfig(env: Env, cwd: string, issues: string[], secretsDir: s
   const tangleNetwork = opt(env, "ANCHOR_NETWORK_NAME") ?? DEFAULT_TANGLE_NETWORK;
   if (tangleNetwork.length > 64) issues.push("ANCHOR_NETWORK_NAME must be at most 64 characters");
 
+  const hornetRaw = opt(env, "ANCHOR_HORNET_URL");
+  const hornetUrl = hornetRaw === undefined ? null : httpUrl(issues, "ANCHOR_HORNET_URL", hornetRaw);
+  const coordinatorKeys = (opt(env, "ANCHOR_COORDINATOR_KEYS") ?? "")
+    .split(",")
+    .map((k) => k.trim().toLowerCase())
+    .filter(Boolean);
+  if (coordinatorKeys.some((k) => !OBJECT_ID.test(k))) issues.push("ANCHOR_COORDINATOR_KEYS must be 0x-prefixed 32-byte hex keys, comma-separated");
+  const thresholdRaw = opt(env, "ANCHOR_COORDINATOR_THRESHOLD");
+  const coordinatorThreshold =
+    thresholdRaw === undefined ? coordinatorKeys.length : integer(issues, "ANCHOR_COORDINATOR_THRESHOLD", thresholdRaw, 1, Math.max(coordinatorKeys.length, 1));
+  if (loop) {
+    // The anchor never takes milestone ids from the indexer on trust: it re-derives them from the node.
+    if (hornetUrl === null) issues.push("ANCHOR_HORNET_URL is required when ANCHOR_LOOP is on (every milestone id is checked against the node)");
+    if (coordinatorKeys.length === 0) issues.push("ANCHOR_COORDINATOR_KEYS is required when ANCHOR_LOOP is on (milestone signatures are checked)");
+  }
+
   const policyRaw = opt(env, "ANCHOR_POLICY_PATH");
   if (loop && !policyRaw) issues.push("ANCHOR_POLICY_PATH is required when ANCHOR_LOOP is on (checkpoints commit to the writer policy hash)");
   const stateRaw = opt(env, "ANCHOR_STATE_PATH");
@@ -311,6 +332,9 @@ function checkpointConfig(env: Env, cwd: string, issues: string[], secretsDir: s
     pollMs,
     httpTimeoutMs,
     allowMissingMsgCount: flag(issues, "ANCHOR_ALLOW_MISSING_MSGCOUNT", opt(env, "ANCHOR_ALLOW_MISSING_MSGCOUNT"), false),
+    hornetUrl,
+    coordinatorKeys,
+    coordinatorThreshold,
   };
 }
 

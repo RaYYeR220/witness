@@ -4,6 +4,8 @@ import os from "node:os";
 import path from "node:path";
 import { b64urlDecode, blake2b256, fromHex, jcsBytes, toHex, verifyEnvelope, type Envelope, type KeyInfo } from "@witness/verify";
 import { checkpointRecordData, checkpointRecordMetadata, type MilestoneSource } from "../src/checkpoint.js";
+import type { Window } from "../src/checkpoint.js";
+import type { WindowVerifier } from "../src/hornet.js";
 import { MirrorSigner, RelayError, type UploadOutcome } from "../src/mirror.js";
 import type { Checkpoint } from "../src/checkpoint.js";
 import type { LoopTrail } from "../src/loop.js";
@@ -197,6 +199,16 @@ export class FakeRelay {
 
   async findReceipt(iss: string, tag: string, seq: number): Promise<string | null> {
     return this.posted.find((p) => p.tag === tag && p.env.iss === iss && p.env.seq === seq)?.blockId ?? null;
+  }
+}
+
+/** Window verifier stand-in: passes unless `fail` is set; records what it was asked. */
+export class FakeVerifier implements WindowVerifier {
+  fail: Error | null = null;
+  calls: { window: Window; ids: number; prevId: string | null }[] = [];
+  async verifyWindow(window: Window, ids: readonly Uint8Array[], prevId: Uint8Array | null): Promise<void> {
+    this.calls.push({ window, ids: ids.length, prevId: prevId ? toHex(prevId) : null });
+    if (this.fail) throw this.fail;
   }
 }
 

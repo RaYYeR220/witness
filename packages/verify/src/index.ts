@@ -79,6 +79,7 @@ export {
 export {
   BUNDLE_VERSION,
   DidSnapshotError,
+  pinnedSignatures,
   snapshotResolver,
   STEP_NAMES,
   UNRESOLVED_SIGNER,

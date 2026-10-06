@@ -46,6 +46,22 @@ lag), the date is the **earliest** time the removal could have happened, never a
 response then carries `historyComplete: false`. A key replaced under the same id counts as
 revoked at the replacement time. A deactivated document revokes all of its keys.
 
+## Trust boundary of a checkpoint
+
+What the anchor trusts when it builds a checkpoint: the HORNET node at `ANCHOR_HORNET_URL` and the
+pinned coordinator keys and threshold (`ANCHOR_COORDINATOR_KEYS`, `ANCHOR_COORDINATOR_THRESHOLD`).
+What it does not trust: the indexer database and the witness-api in front of it. The API only
+proposes a window (the milestone ids from..to and the message count). Before anything is
+written, every milestone of the window is read from HORNET as raw bytes, its id is recomputed
+(BLAKE2b-256 of the essence, with @witness/verify), and the anchor requires the same index and id,
+at least `threshold` valid signatures by distinct pinned coordinator keys, and an unbroken
+previous-milestone link back to the last anchored milestone. Any disagreement refuses the window,
+logs an error and turns `/healthz` to `degraded` (503) until a window verifies again. A HORNET
+that cannot be reached also refuses the window, without the alarm.
+
+`msgCount` is not re-derived from the node (that would need the full cones); it is the
+indexer's count, committed as reported.
+
 ## Checkpoints
 
 Each checkpoint is one trail record. Its data is the checkpoint's JCS text (the exact bytes its

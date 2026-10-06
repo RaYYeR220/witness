@@ -6,7 +6,8 @@ import { CheckpointReader } from "../src/checkpoint-api.js";
 import { AnchorLoop } from "../src/loop.js";
 import { bearerMatches, createAnchorServer, type ServerDeps } from "../src/server.js";
 import { StateStore } from "../src/state.js";
-import { FakeRelay, FakeTangle, FakeTrail, POLICY_HASH, TRAIL, WRITER, cleanupDirs, makeSigner, tmpDir } from "./helpers.js";
+import { MilestoneMismatch } from "../src/hornet.js";
+import { FakeRelay, FakeTangle, FakeTrail, FakeVerifier, POLICY_HASH, TRAIL, WRITER, cleanupDirs, makeSigner, tmpDir } from "./helpers.js";
 
 const TOKEN = "an-admin-token-of-some-length";
 let server: http.Server | null = null;
@@ -23,11 +24,13 @@ async function start(opts: { latest?: number; adminToken?: string | null; withLo
   const { signer, keyInfo } = makeSigner();
   const relay = new FakeRelay([keyInfo]);
   const store = new StateStore(path.join(tmpDir(), "anchor-state.json"));
+  const verifier = new FakeVerifier();
   const loop = new AnchorLoop({
     network: "testnet",
     writer: WRITER,
     trail,
     source: tangle,
+    verifier,
     relay,
     signer,
     store,
@@ -56,7 +59,7 @@ async function start(opts: { latest?: number; adminToken?: string | null; withLo
   };
   const run = (token: string | null = TOKEN) =>
     call("/checkpoints/run", { method: "POST", headers: token ? { authorization: `Bearer ${token}` } : {} });
-  return { trail, tangle, relay, store, loop, call, run };
+  return { trail, tangle, relay, store, loop, verifier, call, run };
 }
 
 describe("POST /checkpoints/run", () => {
@@ -173,6 +176,18 @@ describe("GET /checkpoints", () => {
     expect(r.body.chain).toBeNull();
     expect(r.body.chainError).toMatch(/rpc down/);
     expect(r.body.checkpoints).toHaveLength(1);
+  });
+});
+
+describe("GET /healthz", () => {
+  it("turns degraded (503) when the loop refused a window the node disagrees with", async () => {
+    const s = await start();
+    expect(await s.call("/healthz")).toEqual({ status: 200, body: { status: "ok", network: "testnet" } });
+    s.verifier.fail = new MilestoneMismatch("ids differ");
+    await s.run();
+    const h = await s.call("/healthz");
+    expect(h.status).toBe(503);
+    expect(h.body).toMatchObject({ status: "degraded", reason: expect.stringMatching(/verification/) });
   });
 });
 

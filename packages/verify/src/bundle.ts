@@ -24,6 +24,7 @@ import {
   parseMilestoneEssence,
   PUBKEY_LEN,
   SIG_LEN,
+  type Ed25519Sig,
   type MilestoneEssence,
 } from "./codec.js";
 import { ed25519Verify } from "./ed25519.js";
@@ -282,6 +283,20 @@ function stepInclusion(b: JsonObject): Outcome {
   return [false, `Merkle path does not reach inclusionMerkleRoot ${toHex(root)}`];
 }
 
+/**
+ * The distinct pinned coordinator keys (lowercase 0x hex) that validly signed milestone id `mid`:
+ * the core of step 3, shared with services that check milestones outside a bundle.
+ */
+export function pinnedSignatures(mid: Uint8Array, signatures: readonly Ed25519Sig[], trusted: ReadonlySet<string>): Set<string> {
+  const valid = new Set<string>();
+  for (const { publicKey, signature } of signatures) {
+    const key = toHex(publicKey);
+    if (!trusted.has(key) || valid.has(key)) continue;
+    if (ed25519Verify(publicKey, signature, mid)) valid.add(key);
+  }
+  return valid;
+}
+
 function stepSignatures(b: JsonObject, cfg: PinnedConfig): Outcome {
   const threshold = cfg.threshold;
   if (typeof threshold !== "number" || !Number.isInteger(threshold) || threshold < 1) {
@@ -302,15 +317,14 @@ function stepSignatures(b: JsonObject, cfg: PinnedConfig): Outcome {
   }
   const sigs = get(ms, "signatures");
   if (!Array.isArray(sigs)) throw new Fail("milestone.signatures is missing or not a list");
-  const valid = new Set<string>();
-  sigs.forEach((item, i) => {
+  const parsed = sigs.map((item, i) => {
     const entry = obj(item, `milestone.signatures[${i}]`);
-    const pk = hex(get(entry, "pk"), `milestone.signatures[${i}].pk`, PUBKEY_LEN);
-    const sig = hex(get(entry, "sig"), `milestone.signatures[${i}].sig`, SIG_LEN);
-    const key = toHex(pk);
-    if (!cfg.trusted.has(key) || valid.has(key)) return;
-    if (ed25519Verify(pk, sig, mid)) valid.add(key);
+    return {
+      publicKey: hex(get(entry, "pk"), `milestone.signatures[${i}].pk`, PUBKEY_LEN),
+      signature: hex(get(entry, "sig"), `milestone.signatures[${i}].sig`, SIG_LEN),
+    };
   });
+  const valid = pinnedSignatures(mid, parsed, cfg.trusted);
   const summary = `${valid.size} valid signature(s) by pinned keys, threshold ${threshold}`;
   return [valid.size >= threshold, `milestone ${essence.index} ${toHex(mid)}: ${summary}`];
 }

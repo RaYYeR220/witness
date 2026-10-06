@@ -4,6 +4,7 @@ import { AnchorWallet, ChainMismatchError, assertChain, createIotaClient, prefer
 import { ConfigError, loadConfig } from "./config.js";
 import { DidService, type PublicIdentity } from "./did.js";
 import { readJsonIfExists } from "./fsutil.js";
+import { HornetClient, HornetWindowVerifier } from "./hornet.js";
 import { log } from "./log.js";
 import { AnchorLoop } from "./loop.js";
 import { MirrorSigner, RelayClient } from "./mirror.js";
@@ -44,6 +45,10 @@ async function main(): Promise<void> {
       writer: wallet.address,
       trail,
       source: new ApiMilestoneSource(cp.apiUrl, cp.httpTimeoutMs),
+      verifier: new HornetWindowVerifier(new HornetClient(cp.hornetUrl!, cp.httpTimeoutMs), {
+        keys: new Set(cp.coordinatorKeys),
+        threshold: cp.coordinatorThreshold,
+      }),
       relay: new RelayClient(cp.relayUrl, cp.relayNode, cp.httpTimeoutMs),
       signer: MirrorSigner.load(cfg.secretsDir, cp.identity, ids as { identities?: PublicIdentity[] } | null),
       store,

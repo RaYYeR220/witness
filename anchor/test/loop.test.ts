@@ -5,7 +5,8 @@ import { buildNextCheckpoint, checkpointHashHex } from "../src/checkpoint.js";
 import { AnchorLoop, type LoopDeps } from "../src/loop.js";
 import { ANCHOR_TAG } from "../src/mirror.js";
 import { StateStore, type AnchorState } from "../src/state.js";
-import { ANCHOR_DID, FakeRelay, FakeTangle, FakeTrail, POLICY_HASH, TRAIL, WRITER, cleanupDirs, makeSigner, mid, tmpDir } from "./helpers.js";
+import { HornetError, MilestoneMismatch } from "../src/hornet.js";
+import { ANCHOR_DID, FakeRelay, FakeTangle, FakeTrail, FakeVerifier, POLICY_HASH, TRAIL, WRITER, cleanupDirs, makeSigner, mid, tmpDir } from "./helpers.js";
 
 afterEach(cleanupDirs);
 
@@ -17,11 +18,13 @@ function setup(over: Partial<LoopDeps> = {}, latest = 24) {
   const { signer, keyInfo } = makeSigner();
   const relay = new FakeRelay([keyInfo]);
   const store = new StateStore(path.join(tmpDir(), "data", "anchor-state.json"));
+  const verifier = new FakeVerifier();
   const deps: LoopDeps = {
     network: "testnet",
     writer: WRITER,
     trail,
     source: tangle,
+    verifier,
     relay,
     signer,
     store,
@@ -31,7 +34,7 @@ function setup(over: Partial<LoopDeps> = {}, latest = 24) {
     pollMs: 60_000,
     ...over,
   };
-  return { deps, trail, tangle, relay, store, loop: new AnchorLoop(deps), restart: () => new AnchorLoop(deps) };
+  return { deps, trail, tangle, relay, store, verifier, loop: new AnchorLoop(deps), restart: () => new AnchorLoop(deps) };
 }
 
 describe("AnchorLoop", () => {
@@ -96,6 +99,36 @@ describe("AnchorLoop", () => {
     expect(b!.seq).toBe(2);
     expect(relay.posted.map((p) => p.env.seq)).toEqual([1, 2]);
     expect(relay.posted[1]!.env.prev).toBe(relay.posted[0]!.blockId);
+  });
+
+  it("checks every window against the node before anchoring, chained to the previous checkpoint", async () => {
+    const { loop, verifier, store } = setup({}, 24);
+    await loop.runOnce();
+    await loop.runOnce();
+    const [a] = store.load()!.checkpoints;
+    expect(verifier.calls).toEqual([
+      { window: { from: 1, to: 12 }, ids: 12, prevId: null },
+      { window: { from: 13, to: 24 }, ids: 12, prevId: a!.checkpoint.to.id },
+    ]);
+  });
+
+  it("refuses to anchor and reports degraded health when the node disagrees", async () => {
+    const { loop, verifier, trail } = setup({}, 24);
+    verifier.fail = new MilestoneMismatch("milestone 3 is 0xaa on the node, the milestone source says 0xbb");
+    expect(await loop.runOnce()).toMatchObject({ status: "error", stage: "verify" });
+    expect(trail.appends).toBe(0);
+    expect(loop.health()).toEqual({ status: "degraded", reason: expect.stringMatching(/1\.\.12 failed verification/) });
+    verifier.fail = null;
+    expect(await loop.runOnce()).toMatchObject({ status: "anchored", seq: 1 });
+    expect(loop.health()).toEqual({ status: "ok", reason: null });
+  });
+
+  it("does not anchor while the node cannot be asked, without raising the alarm", async () => {
+    const { loop, verifier, trail } = setup({}, 12);
+    verifier.fail = new HornetError("HORNET unreachable: ECONNREFUSED");
+    expect(await loop.runOnce()).toMatchObject({ status: "error", stage: "verify" });
+    expect(trail.appends).toBe(0);
+    expect(loop.health().status).toBe("ok");
   });
 
   it("joins a running tick instead of starting a second one", async () => {

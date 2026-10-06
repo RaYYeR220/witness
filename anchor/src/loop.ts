@@ -8,6 +8,8 @@ import {
   type MilestoneSource,
   type Window,
 } from "./checkpoint.js";
+import { fromHex } from "@witness/verify";
+import { MilestoneMismatch, type WindowVerifier } from "./hornet.js";
 import { log } from "./log.js";
 import { postMirror, type MirrorSigner, type RelayClient } from "./mirror.js";
 import { chainProblem, emptyState, type AnchorState, type CheckpointEntry, type StateStore } from "./state.js";
@@ -23,6 +25,8 @@ export interface LoopDeps {
   writer: string;
   trail: LoopTrail;
   source: MilestoneSource;
+  /** Checks every milestone id of a window against the node and the coordinator keys. */
+  verifier: WindowVerifier;
   relay: Pick<RelayClient, "upload" | "findReceipt">;
   signer: MirrorSigner;
   store: StateStore;
@@ -48,12 +52,17 @@ export type TickResult =
       mirrorError?: string;
     }
   | { status: "waiting"; window: Window; reason: string; cause: "incomplete" | "no-msgcount" }
-  | { status: "error"; stage: "trail" | "state" | "pending" | "source" | "append"; error: string };
+  | { status: "error"; stage: "trail" | "state" | "pending" | "source" | "verify" | "append"; error: string };
 
 export interface LoopStatus {
   running: boolean;
   lastRunAt: string | null;
   lastResult: TickResult | null;
+}
+
+export interface LoopHealth {
+  status: "ok" | "degraded";
+  reason: string | null;
 }
 
 function message(err: unknown): string {
@@ -93,6 +102,8 @@ export class AnchorLoop {
   #lastRunAt: string | null = null;
   #lastResult: TickResult | null = null;
   #warnedWindow: number | null = null;
+  /** Set when the milestone source disagreed with the node; cleared by the next anchored window. */
+  #alarm: string | null = null;
 
   constructor(deps: LoopDeps) {
     this.#d = deps;
@@ -100,6 +111,10 @@ export class AnchorLoop {
 
   status(): LoopStatus {
     return { running: this.#running !== null, lastRunAt: this.#lastRunAt, lastResult: this.#lastResult };
+  }
+
+  health(): LoopHealth {
+    return this.#alarm ? { status: "degraded", reason: this.#alarm } : { status: "ok", reason: null };
   }
 
   /** Runs one tick now; joins the tick already running instead of starting a second one. */
@@ -186,6 +201,20 @@ export class AnchorLoop {
       return next;
     }
 
+    try {
+      await d.verifier.verifyWindow(next.window, next.milestoneIds, last ? fromHex(last.checkpoint.to.id) : null);
+    } catch (err) {
+      if (err instanceof MilestoneMismatch) {
+        this.#alarm = `milestones ${next.window.from}..${next.window.to} failed verification against the node`;
+        log.error("REFUSING to anchor: the milestone source disagrees with the node", {
+          from: next.window.from,
+          to: next.window.to,
+          error: err,
+        });
+      }
+      return { status: "error", stage: "verify", error: message(err) };
+    }
+
     const seq = (last?.seq ?? 0) + 1;
     const { checkpoint, checkpointHash } = next;
     const st = state;
@@ -206,6 +235,7 @@ export class AnchorLoop {
     state.checkpoints.push(entry);
     state.pending = null;
     d.store.save(state);
+    this.#alarm = null;
     log.info("checkpoint anchored", { seq, from: checkpoint.from.index, to: checkpoint.to.index, record: entry.record, tx: entry.tx, checkpointHash });
 
     await this.#mirrorBacklog(state);

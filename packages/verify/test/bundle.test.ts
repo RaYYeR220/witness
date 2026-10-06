@@ -436,3 +436,20 @@ describe("hostile input never escapes as an exception", () => {
     },
   );
 });
+
+describe("pinnedSignatures", () => {
+  it("counts each pinned key once and ignores unpinned or invalid signatures", async () => {
+    const { ed25519 } = await import("@noble/curves/ed25519");
+    const { pinnedSignatures, toHex } = await import("../src/index.js");
+    const a = new Uint8Array(32).fill(1);
+    const b = new Uint8Array(32).fill(2);
+    const c = new Uint8Array(32).fill(3);
+    const mid = new Uint8Array(32).fill(9);
+    const sig = (sk: Uint8Array) => ({ publicKey: ed25519.getPublicKey(sk), signature: ed25519.sign(mid, sk) });
+    const pinned = new Set([toHex(ed25519.getPublicKey(a)), toHex(ed25519.getPublicKey(b))]);
+    const forged = { ...sig(b), signature: new Uint8Array(64) };
+    const valid = pinnedSignatures(mid, [sig(a), sig(a), forged, sig(c)], pinned);
+    expect([...valid]).toEqual([toHex(ed25519.getPublicKey(a))]);
+    expect(pinnedSignatures(mid, [sig(a), sig(b)], pinned).size).toBe(2);
+  });
+});

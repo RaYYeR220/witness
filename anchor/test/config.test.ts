@@ -145,6 +145,9 @@ describe("checkpoint settings", () => {
       pollMs: 10_000,
       httpTimeoutMs: 10_000,
       allowMissingMsgCount: false,
+      hornetUrl: null,
+      coordinatorKeys: [],
+      coordinatorThreshold: 0,
     });
     expect(loadConfig({ SECRETS_DIR: "/data/secrets" }, "/srv/anchor").checkpoints.statePath).toBe(path.resolve("/data", "data", "anchor-state.json"));
   });
@@ -156,6 +159,8 @@ describe("checkpoint settings", () => {
         ANCHOR_KEYSTORE_PATH: "/keys/iota.keystore",
         ANCHOR_ADDRESS: ADDR,
         ANCHOR_POLICY_PATH: "deploy/policy.json",
+        ANCHOR_HORNET_URL: "http://hornet:14265",
+        ANCHOR_COORDINATOR_KEYS: `0x${"AB".repeat(32)}, 0x${"cd".repeat(32)}`,
         ANCHOR_API_URL: "http://api:7200/",
         ANCHOR_RELAY_URL: "http://relay:5555",
         ANCHOR_EVERY: "12",
@@ -178,11 +183,23 @@ describe("checkpoint settings", () => {
       policyPath: path.resolve("/srv/anchor", "deploy/policy.json"),
       statePath: path.resolve("/srv/anchor", "state/a.json"),
       pollMs: 2000,
+      hornetUrl: "http://hornet:14265",
+      coordinatorKeys: ["0x" + "ab".repeat(32), "0x" + "cd".repeat(32)],
+      coordinatorThreshold: 2,
     });
   });
 
   it("refuses a loop without keystore or policy, and out-of-range windows", () => {
-    expect(issuesOf({ ANCHOR_LOOP: "on" })).toEqual([expect.stringContaining("ANCHOR_KEYSTORE_PATH"), expect.stringContaining("ANCHOR_POLICY_PATH")]);
+    expect(issuesOf({ ANCHOR_LOOP: "on" })).toEqual([
+      expect.stringContaining("ANCHOR_KEYSTORE_PATH"),
+      expect.stringContaining("ANCHOR_HORNET_URL"),
+      expect.stringContaining("ANCHOR_COORDINATOR_KEYS"),
+      expect.stringContaining("ANCHOR_POLICY_PATH"),
+    ]);
+    expect(issuesOf({ ANCHOR_COORDINATOR_KEYS: "0x12" })).toEqual([expect.stringContaining("ANCHOR_COORDINATOR_KEYS")]);
+    expect(issuesOf({ ANCHOR_COORDINATOR_KEYS: `0x${"ab".repeat(32)}`, ANCHOR_COORDINATOR_THRESHOLD: "2" })).toEqual([
+      expect.stringContaining("ANCHOR_COORDINATOR_THRESHOLD"),
+    ]);
     expect(issuesOf({ ANCHOR_LOOP: "maybe" })).toEqual([expect.stringContaining("ANCHOR_LOOP")]);
     expect(issuesOf({ ANCHOR_EVERY: "0" })).toEqual([expect.stringContaining("ANCHOR_EVERY")]);
     expect(issuesOf({ ANCHOR_EVERY: "10001" })).toEqual([expect.stringContaining("ANCHOR_EVERY")]);

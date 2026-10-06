@@ -4,7 +4,7 @@ import { ChainReadError, CheckpointNotFound, type CheckpointReader } from "./che
 import { DidNotFoundError, InvalidDidError, resolvedKeys, type PublicIdentity, type ResolvedDid, type ResolvedKey } from "./did.js";
 import { parseDid, type DidDocumentJson } from "./didcodec.js";
 import { log } from "./log.js";
-import type { LoopStatus, TickResult } from "./loop.js";
+import type { LoopHealth, LoopStatus, TickResult } from "./loop.js";
 
 export interface ServerDeps {
   network: string;
@@ -17,7 +17,7 @@ export interface ServerDeps {
   /** Checkpoint read API; `/checkpoints*` answers 503 without it. */
   checkpoints?: Pick<CheckpointReader, "get" | "list"> | null;
   /** The anchoring loop, when this instance writes checkpoints. */
-  loop?: { runOnce(): Promise<TickResult>; status(): LoopStatus } | null;
+  loop?: { runOnce(): Promise<TickResult>; status(): LoopStatus; health(): LoopHealth } | null;
   /** Bearer token for admin endpoints; null disables them. */
   adminToken?: string | null;
 }
@@ -133,7 +133,11 @@ export function createAnchorServer(deps: ServerDeps): http.Server {
     const p = url.pathname;
     if (p === "/checkpoints" || p.startsWith("/checkpoints/")) return checkpointRoute(req, p, url);
     if (req.method !== "GET") return { status: 405, body: { error: "method not allowed" } };
-    if (p === "/healthz") return { status: 200, body: { status: "ok", network: deps.network } };
+    if (p === "/healthz") {
+      const h = deps.loop?.health();
+      if (h && h.status !== "ok") return { status: 503, body: { status: h.status, network: deps.network, reason: h.reason } };
+      return { status: 200, body: { status: "ok", network: deps.network } };
+    }
     if (p === "/identities") {
       const file = deps.identities();
       return { status: 200, body: { network: deps.network, identities: file?.identities ?? [], previous: file?.previous ?? [] } };
