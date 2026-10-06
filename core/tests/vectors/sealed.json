@@ -19,38 +19,6 @@
       }
     }
   ],
-  "jwe": {
-    "ciphertext": "LoVmWfFAwzYQ_l6SVeDAB2r5J4k6gjMqeZJjd7XYFhee5aaFFno",
-    "iv": "llaiZ9s5jGTDZi2I",
-    "protected": "eyJlbmMiOiAiQTI1NkdDTSJ9",
-    "recipients": [
-      {
-        "encrypted_key": "Y_kDk440t8mE9dC0xLZPKsJUQrTCKi-toi5G8rYsaEIPqVNTmtxlTw",
-        "header": {
-          "alg": "ECDH-ES+A256KW",
-          "epk": {
-            "crv": "X25519",
-            "kty": "OKP",
-            "x": "OaLqVPnnZ_6eVrIug49lQSNtbi0b8EOjd2SxVKn1RHY"
-          },
-          "kid": "a#k"
-        }
-      },
-      {
-        "encrypted_key": "Btd7XOmZm_aTeWlHUQ8FlLMoaTFdP_oawb2ozh5UX-Kk0Xcpk6_SGQ",
-        "header": {
-          "alg": "ECDH-ES+A256KW",
-          "epk": {
-            "crv": "X25519",
-            "kty": "OKP",
-            "x": "zmh8FBlcLOtOrbOnZvi-_LXv2VyXge2lHpuYsPSqKFQ"
-          },
-          "kid": "b#k"
-        }
-      }
-    ],
-    "tag": "jtM1D97Hr0S_m6LAk2ha9A"
-  },
   "body": {
     "score": 0.745,
     "id": "D:x",
@@ -80,6 +48,7 @@
       "token": "_EUCGEalFSqLSR_09Y3ozmvtwqNmFm44uXytEvqY2zQ"
     }
   ],
+  "commitment_salt_len": 16,
   "commitments": [
     {
       "value": 0.42,
@@ -100,6 +69,126 @@
       },
       "salt_hex": "000102030405060708090a0b0c0d0e0f",
       "commitment": "XroLhDSMRtiaN7KU0PHLRwv5uUBNkRIC_GsBuWm7evQ"
+    }
+  ],
+  "jwe": {
+    "ciphertext": "ZgdpjcMGFs9HgQKLXJxFoZPK16Z_YrlkSSUhnRr1-f66sbhEhRY",
+    "iv": "5h3VpGwsCZ7tX638",
+    "protected": "eyJlbmMiOiAiQTI1NkdDTSJ9",
+    "recipients": [
+      {
+        "encrypted_key": "tvuLXKWffsDrwG91I3xF7u3CWeeogbkruafmsTCKUZ9u95MtW--BLg",
+        "header": {
+          "alg": "ECDH-ES+A256KW",
+          "epk": {
+            "crv": "X25519",
+            "kty": "OKP",
+            "x": "fIUPCt9MfxyIGCfoP-wwONF_AsjiYDOeTJGALl2ZaDA"
+          },
+          "kid": "a#k"
+        }
+      },
+      {
+        "encrypted_key": "HcRoDia7Ktnx-0UEIwwEXPWVN8NhWC4RF3PS7yUlzNfX3BF6aKkWmA",
+        "header": {
+          "alg": "ECDH-ES+A256KW",
+          "epk": {
+            "crv": "X25519",
+            "kty": "OKP",
+            "x": "acwf1G6bptH2RYTkZz92cdhFttZkA7QZmX0L2z_-qiI"
+          },
+          "kid": "b#k"
+        }
+      }
+    ],
+    "tag": "eN6GzrqLWHDXPLSZaX2VUw"
+  },
+  "negative": [
+    {
+      "name": "non_recipient",
+      "kid": "c#k",
+      "private_jwk": {
+        "kty": "OKP",
+        "crv": "X25519",
+        "x": "Xf7dO2vUf2-ijuFdlp1bsOpTd01Ii9r53xxuASSz7yI",
+        "d": "AwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwM"
+      },
+      "jwe": {
+        "ciphertext": "ZgdpjcMGFs9HgQKLXJxFoZPK16Z_YrlkSSUhnRr1-f66sbhEhRY",
+        "iv": "5h3VpGwsCZ7tX638",
+        "protected": "eyJlbmMiOiAiQTI1NkdDTSJ9",
+        "recipients": [
+          {
+            "encrypted_key": "tvuLXKWffsDrwG91I3xF7u3CWeeogbkruafmsTCKUZ9u95MtW--BLg",
+            "header": {
+              "alg": "ECDH-ES+A256KW",
+              "epk": {
+                "crv": "X25519",
+                "kty": "OKP",
+                "x": "fIUPCt9MfxyIGCfoP-wwONF_AsjiYDOeTJGALl2ZaDA"
+              },
+              "kid": "a#k"
+            }
+          },
+          {
+            "encrypted_key": "HcRoDia7Ktnx-0UEIwwEXPWVN8NhWC4RF3PS7yUlzNfX3BF6aKkWmA",
+            "header": {
+              "alg": "ECDH-ES+A256KW",
+              "epk": {
+                "crv": "X25519",
+                "kty": "OKP",
+                "x": "acwf1G6bptH2RYTkZz92cdhFttZkA7QZmX0L2z_-qiI"
+              },
+              "kid": "b#k"
+            }
+          }
+        ],
+        "tag": "eN6GzrqLWHDXPLSZaX2VUw"
+      },
+      "error": "NotARecipient"
+    },
+    {
+      "name": "tampered_ciphertext",
+      "kid": "a#k",
+      "private_jwk": {
+        "kty": "OKP",
+        "crv": "X25519",
+        "x": "pOCSkrZRwni5dyxWn1-puxPZBrRqtoyd-dwrRAn4ogk",
+        "d": "AQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQE"
+      },
+      "jwe": {
+        "ciphertext": "ZwdpjcMGFs9HgQKLXJxFoZPK16Z_YrlkSSUhnRr1-f66sbhEhRY",
+        "iv": "5h3VpGwsCZ7tX638",
+        "protected": "eyJlbmMiOiAiQTI1NkdDTSJ9",
+        "recipients": [
+          {
+            "encrypted_key": "tvuLXKWffsDrwG91I3xF7u3CWeeogbkruafmsTCKUZ9u95MtW--BLg",
+            "header": {
+              "alg": "ECDH-ES+A256KW",
+              "epk": {
+                "crv": "X25519",
+                "kty": "OKP",
+                "x": "fIUPCt9MfxyIGCfoP-wwONF_AsjiYDOeTJGALl2ZaDA"
+              },
+              "kid": "a#k"
+            }
+          },
+          {
+            "encrypted_key": "HcRoDia7Ktnx-0UEIwwEXPWVN8NhWC4RF3PS7yUlzNfX3BF6aKkWmA",
+            "header": {
+              "alg": "ECDH-ES+A256KW",
+              "epk": {
+                "crv": "X25519",
+                "kty": "OKP",
+                "x": "acwf1G6bptH2RYTkZz92cdhFttZkA7QZmX0L2z_-qiI"
+              },
+              "kid": "b#k"
+            }
+          }
+        ],
+        "tag": "eN6GzrqLWHDXPLSZaX2VUw"
+      },
+      "error": "DecryptError"
     }
   ]
 }

@@ -47,7 +47,30 @@ def encrypt_body(body: dict, recipients: list[Recipient]) -> dict:
     return json.loads(token.serialize())
 
 
+_ALG = "ECDH-ES+A256KW"
+_ENC = "A256GCM"
+_RECIPIENT_HEADER_KEYS = {"alg", "kid", "epk"}
+
+
+def _check_pinned(jwe: dict, header: dict) -> None:
+    """Only the one algorithm suite `encrypt_body` produces is accepted."""
+    try:
+        protected = json.loads(
+            base64.urlsafe_b64decode(jwe["protected"] + "=" * (-len(jwe["protected"]) % 4))
+        )
+    except Exception as exc:
+        raise DecryptError("invalid protected header") from exc
+    if protected != {"enc": _ENC}:
+        raise DecryptError("unsupported protected header")
+    if jwe.get("unprotected") or jwe.get("header"):
+        raise DecryptError("unexpected shared header")
+    if header.get("alg") != _ALG or set(header) - _RECIPIENT_HEADER_KEYS:
+        raise DecryptError("unsupported recipient header")
+
+
 def decrypt_body(jwe: dict, kid: str, x25519_private: X25519PrivateKey) -> dict:
+    if not isinstance(jwe, dict):
+        raise DecryptError("not a general JWE")
     entries = jwe.get("recipients")
     if not isinstance(entries, list):
         raise DecryptError("not a general JWE")
@@ -58,6 +81,7 @@ def decrypt_body(jwe: dict, kid: str, x25519_private: X25519PrivateKey) -> dict:
     ]
     if not mine:
         raise NotARecipient(kid)
+    _check_pinned(jwe, mine[0]["header"])
     key = jwk.JWK(
         kty="OKP",
         crv="X25519",
@@ -79,5 +103,9 @@ def decrypt_body(jwe: dict, kid: str, x25519_private: X25519PrivateKey) -> dict:
 
 
 def blind_token(search_key: bytes, kind: Literal["ie", "tag"], value: str) -> str:
+    if kind not in ("ie", "tag"):
+        raise ValueError("kind must be 'ie' or 'tag'")
+    if not search_key:
+        raise ValueError("search_key must not be empty")
     mac = hmac.new(search_key, f"{kind}:{value}".encode(), hashlib.sha256)
     return _b64(mac.digest())
