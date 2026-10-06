@@ -1,0 +1,276 @@
+# Pre-registered answer key for the Witness fault-injection evaluation.
+#
+# Committed before any attack is run. Every class names the attack function in
+# attacks.py (`inject`), the channel it travels through, and exactly one expected
+# observation:
+#   verdict: <V>             the verdict the explorer stores on the injected block
+#   alert: <RULE>            an alert of that rule (and `severity`) for the injected
+#                            block / IE; raised by the rules engine or the validator
+#   ladder: {step, ok}       offline bundle: that ladder step must come out `ok: false`
+#   ladder_overall: INVALID  offline bundle: the ladder as a whole must be INVALID
+# Verdict and alert strings are the ones the code emits (witness_core.verdicts,
+# witness_indexer.rules.SEVERITY, witness_indexer.validator). `timeout_s` is how long
+# the runner waits after the injection before scoring the trial a miss.
+#
+# Writer policy for the run: chaos/demo-policy.json (trust.score is signed by the
+# trust-manager DID only). The run holds three signing identities: `producer` (the
+# sandbox trust-manager key, allowed on trust.score), `outsider` (a resolvable DID
+# the policy does not list) and `revoked` (a DID whose signing key was revoked
+# before the run). Envelope attacks (A01-A05, A12, A13, A15) go straight to HORNET,
+# because the relay's own policy gate would refuse them; the SHADOW alert such a
+# block also raises is expected and is not scored against the class.
+
+version: 1
+network: testnet
+policy: demo-policy.json
+trials_per_class: 20
+
+classes:
+  - id: A01
+    name: FORGED_SIGNATURE
+    description: >-
+      A trust.score envelope names the trust-manager DID and key, but its signature
+      is made with an attacker key.
+    inject: a01_forged_signature
+    channel: hornet-direct
+    expect: {verdict: FORGED}
+    trials: 20
+    timeout_s: 15
+
+  - id: A02
+    name: CROSS_TAG_REPLAY
+    description: >-
+      A genuine, valid trust.score envelope is lifted and published verbatim under a
+      different block tag.
+    inject: a02_cross_tag_replay
+    channel: hornet-direct
+    expect: {verdict: FORGED}
+    trials: 20
+    timeout_s: 15
+
+  - id: A03
+    name: SEQ_REPLAY
+    description: >-
+      The trust-manager key signs a second envelope that reuses a (iss, seq) pair
+      already used by an earlier block, with a fresh nonce.
+    inject: a03_seq_replay
+    channel: hornet-direct
+    expect: {verdict: REPLAY}
+    trials: 20
+    timeout_s: 15
+
+  - id: A04
+    name: UNAUTHORIZED_WRITER
+    description: >-
+      A correctly signed trust.score envelope from a resolvable DID that the writer
+      policy does not list for that tag.
+    inject: a04_unauthorized_writer
+    channel: hornet-direct
+    expect: {verdict: UNAUTHORIZED_WRITER}
+    trials: 20
+    timeout_s: 15
+
+  - id: A05
+    name: REVOKED_KEY
+    description: >-
+      A trust.score envelope signed with a key that the DID revoked before the block
+      was confirmed.
+    inject: a05_revoked_key
+    channel: hornet-direct
+    expect: {verdict: REVOKED_KEY}
+    trials: 20
+    timeout_s: 15
+
+  - id: A06
+    name: ORION_DRIFT
+    description: >-
+      The attacker overwrites an Infrastructure Element's trustScore in Orion so it
+      no longer matches the latest score on the ledger.
+    inject: a06_orion_drift
+    channel: orion
+    expect: {alert: DRIFT, severity: medium}
+    trials: 20
+    timeout_s: 240
+
+  - id: A07
+    name: BLOCK_BYTE_FLIP
+    description: >-
+      One byte of the raw block inside a valid proof bundle is flipped.
+    inject: a07_block_byte_flip
+    channel: bundle-offline
+    expect:
+      ladder: {step: block_hash, ok: false}
+    trials: 20
+    timeout_s: 5
+
+  - id: A08
+    name: BAD_MERKLE_PATH
+    description: >-
+      A sibling hash in the bundle's inclusion path is replaced, so the path no
+      longer reaches the milestone's inclusionMerkleRoot.
+    inject: a08_bad_merkle_path
+    channel: bundle-offline
+    expect:
+      ladder: {step: inclusion, ok: false}
+    trials: 20
+    timeout_s: 5
+
+  - id: A09
+    name: SAMPLE_KEY_FORGED_MILESTONE
+    description: >-
+      A fake tagged block and a fake milestone with the real milestone's index are
+      signed with the organisers' public sample coordinator keys. Steps 1-3 pass;
+      the anchor record is the only thing that exposes it.
+    inject: a09_sample_key_forged_milestone
+    channel: bundle-offline
+    expect:
+      ladder: {step: anchor, ok: false}
+    trials: 20
+    timeout_s: 5
+
+  - id: A10
+    name: ANCHOR_MISMATCH
+    description: >-
+      A valid bundle carries a doctored anchor checkpoint that is internally
+      consistent but hashes differently from the record on IOTA Rebased.
+    inject: a10_anchor_mismatch
+    channel: bundle-offline
+    expect:
+      ladder: {step: anchor, ok: false}
+    trials: 20
+    timeout_s: 5
+
+  - id: A11
+    name: SEALED_WITHOUT_KEY
+    description: >-
+      A sealed (encrypted) audit.report is posted through the relay and then read by
+      a party without the recipient key: the signature still verifies, the plaintext
+      stays unreadable, and the blind-index token finds it only with the search key.
+    inject: a11_sealed_without_key
+    channel: relay
+    expect: {verdict: RELAY_ATTESTED}
+    trials: 20
+    timeout_s: 15
+
+  - id: A12
+    name: UNKNOWN_IE
+    description: >-
+      A validly signed trust.score about an Infrastructure Element id that Orion has
+      never heard of.
+    inject: a12_unknown_ie
+    channel: hornet-direct
+    expect: {alert: UNKNOWN_IE, severity: low}
+    trials: 20
+    timeout_s: 30
+
+  - id: A13
+    name: SCORE_JUMP
+    description: >-
+      A validly signed trust.score moves an IE's score by more than the jump
+      threshold with no security event for that IE in the preceding window.
+    inject: a13_score_jump
+    channel: hornet-direct
+    expect: {alert: ANOMALY, severity: medium}
+    trials: 20
+    timeout_s: 30
+
+  - id: A14
+    name: STALE_IE
+    description: >-
+      An IE gets one signed score and then no further ones, so its ledger score goes
+      stale.
+    inject: a14_stale_ie
+    channel: hornet-direct
+    expect: {alert: STALE, severity: low}
+    trials: 20
+    timeout_s: 240
+
+  - id: A15
+    name: MALFORMED_PAYLOAD
+    description: >-
+      A validly signed trust.score whose body breaks the schema (score outside
+      [0, 1], id not a Trust Manager id).
+    inject: a15_malformed_payload
+    channel: hornet-direct
+    expect: {verdict: MALFORMED}
+    trials: 20
+    timeout_s: 15
+
+  - id: A16
+    name: CONTENT_MISMATCH
+    description: >-
+      The relay's forwarded submission record carries different bytes than the block
+      it reports on the Tangle.
+    inject: a16_content_mismatch
+    channel: relay
+    expect: {alert: CONTENT_MISMATCH, severity: critical}
+    trials: 20
+    timeout_s: 30
+
+  - id: A17
+    name: SHADOW
+    description: >-
+      A tagged block is posted straight to HORNET, bypassing the Messages API, so no
+      submission record ever names it.
+    inject: a17_shadow
+    channel: hornet-direct
+    expect: {alert: SHADOW, severity: high}
+    trials: 20
+    timeout_s: 90
+
+  - id: A18
+    name: ORPHANED
+    description: >-
+      A submission record names a block id that never existed on the Tangle.
+    inject: a18_orphaned
+    channel: relay
+    expect: {alert: ORPHANED, severity: high}
+    trials: 20
+    timeout_s: 120
+
+  - id: A19
+    name: DB_TAMPER
+    description: >-
+      The attacker rewrites the stored content of an already verified message in the
+      explorer's own database.
+    inject: a19_db_tamper
+    channel: db
+    expect: {alert: DB_TAMPER, severity: critical}
+    trials: 20
+    timeout_s: 120
+
+  - id: A20
+    name: CHAIN_GAP
+    description: >-
+      One message of a signed prev-linked chain is dropped: the next message points
+      at a block the explorer never saw.
+    inject: a20_chain_gap
+    channel: relay
+    expect: {alert: CHAIN_GAP, severity: medium}
+    trials: 20
+    timeout_s: 30
+
+# Genuine traffic: nothing here may raise an alert or a verdict outside `verdicts`.
+traps:
+  duration_min: 30
+  min_messages: 500
+  profile:
+    - tag: trust.score
+      source: trust-manager, signed with its own DID key, each message carrying `prev` of its previous block (producer-signed chain)
+      via: relay
+      verdict: PRODUCER_SIGNED
+    - tag: LLO-K8s
+      source: llo-k8s legacy upload, no signature
+      via: relay
+      verdict: RELAY_ATTESTED
+    - tag: LLO-Docker
+      source: llo-k8s legacy upload, no signature
+      via: relay
+      verdict: RELAY_ATTESTED
+    - tag: self-orchestrator
+      source: self-orchestrator legacy upload, no signature; the tag is on the relay's passthrough list
+      via: relay
+      verdict: UNSIGNED_LEGACY
+  expect:
+    alerts: 0
+    verdicts: [PRODUCER_SIGNED, RELAY_ATTESTED, UNSIGNED_LEGACY]
