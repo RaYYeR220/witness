@@ -1,0 +1,522 @@
+"""The twenty attacks of the answer key, one function each.
+
+Every attack is `async def aNN_*(ctx) -> InjectionRecord`. The `build_*` helpers hold
+the exact bytes, requests and SQL an attack sends and are pure, so tests can check
+them without any service. Offline attacks (A07-A10) run completely here; the others
+refuse to send anything unless `ctx.live is True`, which only the runner sets.
+"""
+
+from __future__ import annotations
+
+import json
+import random
+import time
+import uuid
+from collections.abc import Callable
+from dataclasses import dataclass, field
+from importlib import resources
+from typing import Any
+
+import httpx
+import yaml
+from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
+from witness_core import bundle, canon, envelope
+from witness_core.bundle import VerifierConfig
+from witness_core.ids import blake2b256, to_hex
+
+from . import forge
+
+TRUST_TAG = "trust.score"
+SEALED_TAG = "audit.report"
+FOREIGN_TAG = "LLO-K8s"
+HORNET_BLOCKS = "/api/core/v2/blocks"
+ORION_ENTITIES = "/ngsi-ld/v1/entities"
+IE_URN = "urn:ngsi-ld:InfrastructureElement:"
+
+
+class LiveDisabled(RuntimeError):
+    """An attack that sends traffic was called while `ctx.live` is not True."""
+
+
+@dataclass(frozen=True)
+class Identity:
+    """A signing identity: DID, key id and the private key."""
+
+    iss: str
+    kid: str
+    key: Ed25519PrivateKey
+
+
+@dataclass
+class AttackContext:
+    # Endpoints.
+    hornet_url: str = "http://127.0.0.1:14265"
+    relay_url: str = "http://127.0.0.1:8080"
+    relay_node: str = "default"
+    relay_token: str | None = None
+    ingest_url: str = "http://127.0.0.1:8000/ingest"
+    ingest_token: str | None = None
+    orion_url: str = "http://127.0.0.1:1026"
+    db_dsn: str | None = None
+    # Identities of the run.
+    producer: Identity | None = None  # allowed on trust.score
+    outsider: Identity | None = None  # resolvable, not in the policy
+    revoked: Identity | None = None  # key revoked before the run
+    attacker_key: Ed25519PrivateKey = field(default_factory=Ed25519PrivateKey.generate)
+    # Infrastructure Elements the run may write about.
+    ie_id: str = "ChaosDomain:aabbccddeeff"
+    stale_ie_id: str = "ChaosDomain:112233445566"
+    baseline_score: float = 0.5
+    # Offline classes.
+    real_bundle: dict | None = None
+    sample_private_keys: list[bytes] = field(default_factory=list)
+    verifier: VerifierConfig | None = None
+    anchor_fetch: Callable[[dict], dict | None] | None = None
+    # Plumbing.
+    http: httpx.AsyncClient | None = None
+    rng: random.Random = field(default_factory=random.Random)
+    clock_ms: Callable[[], int] = field(default=lambda: int(time.time() * 1000))
+    live: bool = False
+    _seq: dict[str, int] = field(default_factory=dict, repr=False)
+
+    def next_seq(self, iss: str) -> int:
+        """Strictly increasing per issuer, starting above any seq of an earlier run."""
+        if iss not in self._seq:
+            self._seq[iss] = self.clock_ms()
+        self._seq[iss] += 1
+        return self._seq[iss]
+
+    def require_live(self) -> None:
+        if self.live is not True:
+            raise LiveDisabled("this attack sends traffic; the runner must set ctx.live = True")
+
+    def need(self, name: str) -> Any:
+        value = getattr(self, name)
+        if value is None:
+            raise ValueError(f"AttackContext.{name} is required for this attack")
+        return value
+
+
+@dataclass(frozen=True)
+class InjectionRecord:
+    id: str
+    block_id: str | None
+    ie_id: str | None
+    expected: dict
+    injected_at_ms: int
+    detail: dict
+
+
+def answer_key() -> dict:
+    text = resources.files("witness_chaos").joinpath("answer_key.yaml").read_text("utf-8")
+    return yaml.safe_load(text)
+
+
+def expected_for(class_id: str) -> dict:
+    for c in answer_key()["classes"]:
+        if c["id"] == class_id:
+            return dict(c["expect"])
+    raise KeyError(class_id)
+
+
+def _record(ctx: AttackContext, cid: str, block_id: str | None, ie_id: str | None,
+            detail: dict, at_ms: int | None = None) -> InjectionRecord:
+    return InjectionRecord(cid, block_id, ie_id, expected_for(cid),
+                           ctx.clock_ms() if at_ms is None else at_ms, detail)
+
+
+# ------------------------------------------------------------------ builders: envelopes
+
+
+def score_body(ie_id: str, score: float) -> dict:
+    return {"id": ie_id, "score": score}
+
+
+def seal_as(ident: Identity, ctx: AttackContext, body: dict, *, tag: str = TRUST_TAG,
+            seq: int | None = None, sign_key: Ed25519PrivateKey | None = None,
+            prev: str | None = None) -> dict:
+    return envelope.seal(
+        tag, body, iss=ident.iss, kid=ident.kid, sign_key=sign_key or ident.key,
+        seq=ctx.next_seq(ident.iss) if seq is None else seq, att_mode="producer",
+        now_ms=ctx.clock_ms(), prev=prev)
+
+
+def env_bytes(env: dict) -> bytes:
+    return canon.jcs(env)
+
+
+def hornet_request(tag: str, data: bytes) -> tuple[str, dict]:
+    """Path and JSON body of a direct tagged-data submission to HORNET."""
+    return HORNET_BLOCKS, {
+        "protocolVersion": 2,
+        "payload": {"type": 5, "tag": "0x" + tag.encode().hex(), "data": "0x" + data.hex()},
+    }
+
+
+def build_a01(ctx: AttackContext) -> tuple[str, bytes]:
+    """Trust-manager iss/kid, signature made with the attacker's key."""
+    p = ctx.need("producer")
+    env = seal_as(p, ctx, score_body(ctx.ie_id, ctx.baseline_score), sign_key=ctx.attacker_key)
+    return TRUST_TAG, env_bytes(env)
+
+
+def build_a02(ctx: AttackContext) -> tuple[str, bytes]:
+    """A valid trust.score envelope, published under another block tag."""
+    p = ctx.need("producer")
+    env = seal_as(p, ctx, score_body(ctx.ie_id, ctx.baseline_score))
+    return FOREIGN_TAG, env_bytes(env)
+
+
+def build_a03(ctx: AttackContext) -> tuple[tuple[str, bytes], tuple[str, bytes]]:
+    """(original, replay): same (iss, seq), different nonce and bytes."""
+    p = ctx.need("producer")
+    seq = ctx.next_seq(p.iss)
+    body = score_body(ctx.ie_id, ctx.baseline_score)
+    first = seal_as(p, ctx, body, seq=seq)
+    again = seal_as(p, ctx, body, seq=seq)
+    return (TRUST_TAG, env_bytes(first)), (TRUST_TAG, env_bytes(again))
+
+
+def build_a04(ctx: AttackContext) -> tuple[str, bytes]:
+    o = ctx.need("outsider")
+    return TRUST_TAG, env_bytes(seal_as(o, ctx, score_body(ctx.ie_id, ctx.baseline_score)))
+
+
+def build_a05(ctx: AttackContext) -> tuple[str, bytes]:
+    r = ctx.need("revoked")
+    return TRUST_TAG, env_bytes(seal_as(r, ctx, score_body(ctx.ie_id, ctx.baseline_score)))
+
+
+def random_ie_id(rng: random.Random, domain: str = "ChaosDomain") -> str:
+    return f"{domain}:{rng.getrandbits(48):012x}"
+
+
+def build_a12(ctx: AttackContext) -> tuple[str, bytes, str]:
+    """Signed score about an IE Orion does not have. Returns (tag, data, ie_id)."""
+    p = ctx.need("producer")
+    ie = random_ie_id(ctx.rng)
+    return TRUST_TAG, env_bytes(seal_as(p, ctx, score_body(ie, 0.5))), ie
+
+
+def build_a13(ctx: AttackContext) -> list[tuple[str, bytes]]:
+    """Two scores for one IE, 0.9 then 0.1: a jump of 0.8 with no security event."""
+    p = ctx.need("producer")
+    return [(TRUST_TAG, env_bytes(seal_as(p, ctx, score_body(ctx.ie_id, s))))
+            for s in (0.9, 0.1)]
+
+
+def build_a14(ctx: AttackContext) -> tuple[str, bytes]:
+    p = ctx.need("producer")
+    return TRUST_TAG, env_bytes(seal_as(p, ctx, score_body(ctx.stale_ie_id, 0.5)))
+
+
+def build_a15(ctx: AttackContext) -> tuple[str, bytes]:
+    """Validly signed, schema-breaking body: score out of range, id not an IE id."""
+    p = ctx.need("producer")
+    return TRUST_TAG, env_bytes(seal_as(p, ctx, {"id": "not-an-ie-id", "score": 7}))
+
+
+def build_a17(ctx: AttackContext) -> tuple[str, bytes]:
+    """A fully valid score, posted to HORNET so no submission record exists for it."""
+    p = ctx.need("producer")
+    return TRUST_TAG, env_bytes(seal_as(p, ctx, score_body(ctx.ie_id, ctx.baseline_score)))
+
+
+def build_a20(ctx: AttackContext) -> tuple[dict, dict, str]:
+    """(m1, m3, missing_prev): m3's `prev` names the block of a dropped m2.
+
+    m2 is never sent, so the id in `prev` belongs to no block on the Tangle.
+    """
+    p = ctx.need("producer")
+    seq = ctx.next_seq(p.iss)
+    m1 = seal_as(p, ctx, score_body(ctx.ie_id, ctx.baseline_score), seq=seq)
+    m2 = seal_as(p, ctx, score_body(ctx.ie_id, ctx.baseline_score), seq=ctx.next_seq(p.iss))
+    missing = to_hex(blake2b256(env_bytes(m2)))
+    m3 = seal_as(p, ctx, score_body(ctx.ie_id, ctx.baseline_score),
+                 seq=ctx.next_seq(p.iss), prev=missing)
+    return m1, m3, missing
+
+
+# ------------------------------------------------------------------ builders: relay/ingest/orion/db
+
+
+def relay_upload(ctx: AttackContext, tag: str, message: Any) -> tuple[str, dict, dict]:
+    """URL, JSON body and headers of a Messages API upload."""
+    headers = {"Content-Type": "application/json"}
+    if ctx.relay_token:
+        headers["Authorization"] = f"Bearer {ctx.relay_token}"
+    return (f"{ctx.relay_url.rstrip('/')}/upload?node={ctx.relay_node}",
+            {"tag": tag, "message": message}, headers)
+
+
+def submission_record(tag: str, message: Any, data: bytes | None, block_id: str | None,
+                      *, now_ms: int, hornet_status: int | None = 201) -> dict:
+    """A relay submission record in the format `/ingest` and MQTT carry."""
+    return {
+        "subId": str(uuid.uuid4()),
+        "receivedAtMs": now_ms,
+        "tag": tag,
+        "message": message,
+        "dataHex": None if data is None else "0x" + data.hex(),
+        "blockId": block_id,
+        "hornetStatus": hornet_status,
+        "relay": {"verdict": None, "iss": None, "seq": None},
+    }
+
+
+def build_a16_record(block_id: str, tag: str, sent: bytes, now_ms: int) -> dict:
+    """Record for a real block whose `dataHex` is not what is on the Tangle."""
+    altered = bytearray(sent)
+    altered[len(altered) // 2] ^= 0x01
+    return submission_record(tag, json.loads(sent), bytes(altered), block_id, now_ms=now_ms)
+
+
+def build_a18_record(ctx: AttackContext) -> dict:
+    """Record naming a block id that was never created."""
+    data = env_bytes(seal_as(ctx.need("producer"), ctx,
+                             score_body(ctx.ie_id, ctx.baseline_score)))
+    ghost = to_hex(ctx.rng.randbytes(32))
+    return submission_record(TRUST_TAG, json.loads(data), data, ghost, now_ms=ctx.clock_ms())
+
+
+def orion_patch(ctx: AttackContext, ie_id: str, ledger_score: float) -> tuple[str, dict]:
+    """URL and body overwriting trustScore with a value far from the ledger's."""
+    wrong = 0.05 if ledger_score > 0.5 else 0.95
+    url = f"{ctx.orion_url.rstrip('/')}{ORION_ENTITIES}/{IE_URN}{ie_id}/attrs/trustScore"
+    return url, {"type": "Property", "value": wrong}
+
+
+VICTIM_SQL = (
+    "SELECT block_id FROM messages WHERE tag = %s AND data IS NOT NULL "
+    "AND confirmed_at_ms IS NOT NULL ORDER BY random() LIMIT 1"
+)
+TAMPER_SQL = (
+    "UPDATE messages SET data = set_byte(data, 0, get_byte(data, 0) # 1) WHERE block_id = %s"
+)
+
+
+# ------------------------------------------------------------------ live helpers
+
+
+async def _client(ctx: AttackContext) -> tuple[httpx.AsyncClient, bool]:
+    if ctx.http is not None:
+        return ctx.http, False
+    return httpx.AsyncClient(timeout=10.0), True
+
+
+async def _post_hornet(ctx: AttackContext, tag: str, data: bytes) -> str:
+    ctx.require_live()
+    path, body = hornet_request(tag, data)
+    client, own = await _client(ctx)
+    try:
+        resp = await client.post(ctx.hornet_url.rstrip("/") + path, json=body)
+        resp.raise_for_status()
+        return resp.json()["blockId"]
+    finally:
+        if own:
+            await client.aclose()
+
+
+async def _post_relay(ctx: AttackContext, tag: str, message: Any) -> dict:
+    ctx.require_live()
+    url, body, headers = relay_upload(ctx, tag, message)
+    client, own = await _client(ctx)
+    try:
+        resp = await client.post(url, json=body, headers=headers)
+        resp.raise_for_status()
+        return resp.json()
+    finally:
+        if own:
+            await client.aclose()
+
+
+async def _post_ingest(ctx: AttackContext, record: dict) -> None:
+    ctx.require_live()
+    headers = {"Authorization": f"Bearer {ctx.ingest_token}"} if ctx.ingest_token else {}
+    client, own = await _client(ctx)
+    try:
+        resp = await client.post(ctx.ingest_url, json=record, headers=headers)
+        resp.raise_for_status()
+    finally:
+        if own:
+            await client.aclose()
+
+
+async def _direct(ctx: AttackContext, cid: str, tag: str, data: bytes,
+                  ie_id: str | None = None, detail: dict | None = None) -> InjectionRecord:
+    ctx.require_live()
+    at = ctx.clock_ms()
+    bid = await _post_hornet(ctx, tag, data)
+    return _record(ctx, cid, bid, ie_id or ctx.ie_id, {"tag": tag, **(detail or {})}, at)
+
+
+# ------------------------------------------------------------------ live attacks
+
+
+async def a01_forged_signature(ctx: AttackContext) -> InjectionRecord:
+    tag, data = build_a01(ctx)
+    return await _direct(ctx, "A01", tag, data)
+
+
+async def a02_cross_tag_replay(ctx: AttackContext) -> InjectionRecord:
+    tag, data = build_a02(ctx)
+    return await _direct(ctx, "A02", tag, data, detail={"envelopeTag": TRUST_TAG})
+
+
+async def a03_seq_replay(ctx: AttackContext) -> InjectionRecord:
+    ctx.require_live()
+    (t1, d1), (t2, d2) = build_a03(ctx)
+    first = await _post_hornet(ctx, t1, d1)
+    rec = await _direct(ctx, "A03", t2, d2, detail={"originalBlockId": first})
+    return rec
+
+
+async def a04_unauthorized_writer(ctx: AttackContext) -> InjectionRecord:
+    tag, data = build_a04(ctx)
+    return await _direct(ctx, "A04", tag, data)
+
+
+async def a05_revoked_key(ctx: AttackContext) -> InjectionRecord:
+    tag, data = build_a05(ctx)
+    return await _direct(ctx, "A05", tag, data)
+
+
+async def a06_orion_drift(ctx: AttackContext) -> InjectionRecord:
+    ctx.require_live()
+    url, body = orion_patch(ctx, ctx.ie_id, ctx.baseline_score)
+    at = ctx.clock_ms()
+    client, own = await _client(ctx)
+    try:
+        resp = await client.patch(url, json=body)
+        resp.raise_for_status()
+    finally:
+        if own:
+            await client.aclose()
+    return _record(ctx, "A06", None, ctx.ie_id, {"orionValue": body["value"]}, at)
+
+
+async def a11_sealed_without_key(ctx: AttackContext) -> InjectionRecord:
+    ctx.require_live()
+    at = ctx.clock_ms()
+    message = {"reportId": str(uuid.uuid4()), "secret": ctx.rng.getrandbits(64)}
+    reply = await _post_relay(ctx, SEALED_TAG, message)
+    bid = (reply.get("witness") or {}).get("blockId")
+    return _record(ctx, "A11", bid, None,
+                   {"tag": SEALED_TAG, "plaintext": message,
+                    "check": "no plaintext without the recipient key"}, at)
+
+
+async def a12_unknown_ie(ctx: AttackContext) -> InjectionRecord:
+    tag, data, ie = build_a12(ctx)
+    return await _direct(ctx, "A12", tag, data, ie_id=ie)
+
+
+async def a13_score_jump(ctx: AttackContext) -> InjectionRecord:
+    ctx.require_live()
+    first, second = build_a13(ctx)
+    await _post_hornet(ctx, *first)
+    return await _direct(ctx, "A13", *second, detail={"from": 0.9, "to": 0.1})
+
+
+async def a14_stale_ie(ctx: AttackContext) -> InjectionRecord:
+    tag, data = build_a14(ctx)
+    return await _direct(ctx, "A14", tag, data, ie_id=ctx.stale_ie_id)
+
+
+async def a15_malformed_payload(ctx: AttackContext) -> InjectionRecord:
+    tag, data = build_a15(ctx)
+    return await _direct(ctx, "A15", tag, data)
+
+
+async def a16_content_mismatch(ctx: AttackContext) -> InjectionRecord:
+    ctx.require_live()
+    tag, data = build_a17(ctx)
+    at = ctx.clock_ms()
+    bid = await _post_hornet(ctx, tag, data)
+    await _post_ingest(ctx, build_a16_record(bid, tag, data, at))
+    return _record(ctx, "A16", bid, ctx.ie_id, {"tag": tag}, at)
+
+
+async def a17_shadow(ctx: AttackContext) -> InjectionRecord:
+    tag, data = build_a17(ctx)
+    return await _direct(ctx, "A17", tag, data)
+
+
+async def a18_orphaned(ctx: AttackContext) -> InjectionRecord:
+    ctx.require_live()
+    record = build_a18_record(ctx)
+    at = ctx.clock_ms()
+    await _post_ingest(ctx, record)
+    return _record(ctx, "A18", record["blockId"], ctx.ie_id, {"subId": record["subId"]}, at)
+
+
+async def a19_db_tamper(ctx: AttackContext) -> InjectionRecord:
+    ctx.require_live()
+    import psycopg
+
+    dsn = ctx.need("db_dsn")
+    async with await psycopg.AsyncConnection.connect(dsn, autocommit=True) as conn:
+        cur = await conn.execute(VICTIM_SQL, (TRUST_TAG,))
+        row = await cur.fetchone()
+        if row is None:
+            raise RuntimeError("no confirmed trust.score row to tamper with")
+        at = ctx.clock_ms()
+        await conn.execute(TAMPER_SQL, (row[0],))
+    return _record(ctx, "A19", to_hex(bytes(row[0])), None, {"sql": TAMPER_SQL}, at)
+
+
+async def a20_chain_gap(ctx: AttackContext) -> InjectionRecord:
+    ctx.require_live()
+    m1, m3, missing = build_a20(ctx)
+    await _post_relay(ctx, TRUST_TAG, m1)
+    at = ctx.clock_ms()
+    reply = await _post_relay(ctx, TRUST_TAG, m3)
+    bid = (reply.get("witness") or {}).get("blockId")
+    return _record(ctx, "A20", bid, ctx.ie_id, {"missingPrev": missing}, at)
+
+
+# ------------------------------------------------------------------ offline attacks
+
+
+def _ladder_detail(ctx: AttackContext, b: dict) -> dict:
+    cfg = ctx.need("verifier")
+    fetch = ctx.anchor_fetch or forge_fetch(ctx)
+    ladder = bundle.verify(b, cfg, fetch)
+    return {
+        "overall": ladder.overall,
+        "steps": {s.name: s.ok for s in ladder.steps},
+        "details": {s.name: s.detail for s in ladder.steps},
+    }
+
+
+def forge_fetch(ctx: AttackContext) -> Callable[[dict], dict | None]:
+    """Fetcher serving the genuine record of the run's real bundle."""
+    record = forge.real_anchor_record(ctx.need("real_bundle"))
+    return lambda _anchor: record
+
+
+def _offline(ctx: AttackContext, cid: str, b: dict) -> InjectionRecord:
+    at = ctx.clock_ms()
+    detail = _ladder_detail(ctx, b)
+    detail["bundle"] = b
+    return _record(ctx, cid, b["block"]["id"], None, detail, at)
+
+
+async def a07_block_byte_flip(ctx: AttackContext) -> InjectionRecord:
+    b = forge.tamper_bundle(ctx.need("real_bundle"), "byte_flip", ctx.rng)
+    return _offline(ctx, "A07", b)
+
+
+async def a08_bad_merkle_path(ctx: AttackContext) -> InjectionRecord:
+    b = forge.tamper_bundle(ctx.need("real_bundle"), "merkle_path", ctx.rng)
+    return _offline(ctx, "A08", b)
+
+
+async def a09_sample_key_forged_milestone(ctx: AttackContext) -> InjectionRecord:
+    b = forge.forge_milestone_bundle(ctx.need("real_bundle"), ctx.sample_private_keys)
+    return _offline(ctx, "A09", b)
+
+
+async def a10_anchor_mismatch(ctx: AttackContext) -> InjectionRecord:
+    b = forge.tamper_bundle(ctx.need("real_bundle"), "checkpoint", ctx.rng)
+    return _offline(ctx, "A10", b)
