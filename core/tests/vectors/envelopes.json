@@ -1,5 +1,5 @@
 {
-  "description": "witness/v1 envelope vectors. verify(envelope, block_tag) using the ed25519 public key (hex) registered for envelope.kid.",
+  "description": "witness/v1 envelope vectors. verify(envelope, block_tag) using the ed25519 public key (hex) registered for envelope.kid. signing_input is the exact JCS text covered by the signature (envelope without sig), null if not canonicalizable. float_seq carries seq as the JSON float 7.0 and must be MALFORMED.",
   "cases": [
     {
       "name": "valid_producer",
@@ -22,6 +22,7 @@
       },
       "public_key_hex": "8a88e3dd7409f195fd52db2d3cba5d72ca6709bf1d94121bf3748801b40f6f5c",
       "block_tag": "trust.score",
+      "signing_input": "{\"att\":{\"mode\":\"producer\"},\"body\":{\"id\":\"D:x\",\"score\":0.745},\"iat\":1700000000000,\"iss\":\"did:iota:testnet:0xabc\",\"kid\":\"did:iota:testnet:0xabc#sig-1\",\"nonce\":\"AAECAwQFBgcICQoLDA0ODw\",\"seq\":7,\"tag\":\"trust.score\",\"w\":1}",
       "expected_verdict": "PRODUCER_SIGNED"
     },
     {
@@ -46,6 +47,7 @@
       },
       "public_key_hex": "8a88e3dd7409f195fd52db2d3cba5d72ca6709bf1d94121bf3748801b40f6f5c",
       "block_tag": "trust.score",
+      "signing_input": "{\"att\":{\"mode\":\"relay\",\"sub\":\"svc\"},\"body\":{\"id\":\"D:x\",\"score\":0.745},\"iat\":1700000000000,\"iss\":\"did:iota:testnet:0xabc\",\"kid\":\"did:iota:testnet:0xabc#sig-1\",\"nonce\":\"AAECAwQFBgcICQoLDA0ODw\",\"seq\":8,\"tag\":\"trust.score\",\"w\":1}",
       "expected_verdict": "RELAY_ATTESTED"
     },
     {
@@ -71,6 +73,7 @@
       },
       "public_key_hex": "8a88e3dd7409f195fd52db2d3cba5d72ca6709bf1d94121bf3748801b40f6f5c",
       "block_tag": "trust.score",
+      "signing_input": "{\"att\":{\"mode\":\"producer\"},\"body\":{\"id\":\"D:x\",\"score\":0.745},\"corr\":\"req-1\",\"iat\":1700000000000,\"iss\":\"did:iota:testnet:0xabc\",\"kid\":\"did:iota:testnet:0xabc#sig-1\",\"nonce\":\"AAECAwQFBgcICQoLDA0ODw\",\"prev\":\"0x1111111111111111111111111111111111111111111111111111111111111111\",\"seq\":9,\"tag\":\"trust.score\",\"w\":1}",
       "expected_verdict": "PRODUCER_SIGNED"
     },
     {
@@ -94,6 +97,7 @@
       },
       "public_key_hex": "8a88e3dd7409f195fd52db2d3cba5d72ca6709bf1d94121bf3748801b40f6f5c",
       "block_tag": "trust.score",
+      "signing_input": "{\"att\":{\"mode\":\"producer\"},\"body\":{\"id\":\"D:x\",\"score\":0.1},\"iat\":1700000000000,\"iss\":\"did:iota:testnet:0xabc\",\"kid\":\"did:iota:testnet:0xabc#sig-1\",\"nonce\":\"AAECAwQFBgcICQoLDA0ODw\",\"seq\":7,\"tag\":\"trust.score\",\"w\":1}",
       "expected_verdict": "FORGED"
     },
     {
@@ -117,6 +121,7 @@
       },
       "public_key_hex": "8a88e3dd7409f195fd52db2d3cba5d72ca6709bf1d94121bf3748801b40f6f5c",
       "block_tag": "LLO-K8s",
+      "signing_input": "{\"att\":{\"mode\":\"producer\"},\"body\":{\"id\":\"D:x\",\"score\":0.745},\"iat\":1700000000000,\"iss\":\"did:iota:testnet:0xabc\",\"kid\":\"did:iota:testnet:0xabc#sig-1\",\"nonce\":\"AAECAwQFBgcICQoLDA0ODw\",\"seq\":7,\"tag\":\"trust.score\",\"w\":1}",
       "expected_verdict": "FORGED"
     },
     {
@@ -142,6 +147,7 @@
       },
       "public_key_hex": "8a88e3dd7409f195fd52db2d3cba5d72ca6709bf1d94121bf3748801b40f6f5c",
       "block_tag": "trust.score",
+      "signing_input": "{\"att\":{\"mode\":\"producer\"},\"body\":{\"id\":\"D:x\",\"score\":0.745},\"corr\":\"req-1\",\"iat\":1700000000000,\"iss\":\"did:iota:testnet:0xabc\",\"kid\":\"did:iota:testnet:0xabc#sig-1\",\"nonce\":\"AAECAwQFBgcICQoLDA0ODw\",\"prev\":\"0x2222222222222222222222222222222222222222222222222222222222222222\",\"seq\":9,\"tag\":\"trust.score\",\"w\":1}",
       "expected_verdict": "FORGED"
     },
     {
@@ -167,7 +173,299 @@
       },
       "public_key_hex": "8a88e3dd7409f195fd52db2d3cba5d72ca6709bf1d94121bf3748801b40f6f5c",
       "block_tag": "trust.score",
+      "signing_input": "{\"att\":{\"mode\":\"producer\"},\"body\":{\"id\":\"D:x\",\"score\":0.745},\"corr\":\"req-2\",\"iat\":1700000000000,\"iss\":\"did:iota:testnet:0xabc\",\"kid\":\"did:iota:testnet:0xabc#sig-1\",\"nonce\":\"AAECAwQFBgcICQoLDA0ODw\",\"prev\":\"0x1111111111111111111111111111111111111111111111111111111111111111\",\"seq\":9,\"tag\":\"trust.score\",\"w\":1}",
       "expected_verdict": "FORGED"
+    },
+    {
+      "name": "retagged",
+      "envelope": {
+        "w": 1,
+        "tag": "LLO-K8s",
+        "iss": "did:iota:testnet:0xabc",
+        "kid": "did:iota:testnet:0xabc#sig-1",
+        "seq": 7,
+        "iat": 1700000000000,
+        "nonce": "AAECAwQFBgcICQoLDA0ODw",
+        "att": {
+          "mode": "producer"
+        },
+        "body": {
+          "score": 0.745,
+          "id": "D:x"
+        },
+        "sig": "mv_WWb__QRVl8wuN92QhlNjChzQBzWkm_B-EvrWtC_wGt8kjRD1Twwi6RYA9hsyKutGnAzuIXs9bt3BtHJ8ECA"
+      },
+      "public_key_hex": "8a88e3dd7409f195fd52db2d3cba5d72ca6709bf1d94121bf3748801b40f6f5c",
+      "block_tag": "LLO-K8s",
+      "signing_input": "{\"att\":{\"mode\":\"producer\"},\"body\":{\"id\":\"D:x\",\"score\":0.745},\"iat\":1700000000000,\"iss\":\"did:iota:testnet:0xabc\",\"kid\":\"did:iota:testnet:0xabc#sig-1\",\"nonce\":\"AAECAwQFBgcICQoLDA0ODw\",\"seq\":7,\"tag\":\"LLO-K8s\",\"w\":1}",
+      "expected_verdict": "FORGED"
+    },
+    {
+      "name": "att_mode_flipped",
+      "envelope": {
+        "w": 1,
+        "tag": "trust.score",
+        "iss": "did:iota:testnet:0xabc",
+        "kid": "did:iota:testnet:0xabc#sig-1",
+        "seq": 7,
+        "iat": 1700000000000,
+        "nonce": "AAECAwQFBgcICQoLDA0ODw",
+        "att": {
+          "mode": "relay",
+          "sub": "svc"
+        },
+        "body": {
+          "score": 0.745,
+          "id": "D:x"
+        },
+        "sig": "mv_WWb__QRVl8wuN92QhlNjChzQBzWkm_B-EvrWtC_wGt8kjRD1Twwi6RYA9hsyKutGnAzuIXs9bt3BtHJ8ECA"
+      },
+      "public_key_hex": "8a88e3dd7409f195fd52db2d3cba5d72ca6709bf1d94121bf3748801b40f6f5c",
+      "block_tag": "trust.score",
+      "signing_input": "{\"att\":{\"mode\":\"relay\",\"sub\":\"svc\"},\"body\":{\"id\":\"D:x\",\"score\":0.745},\"iat\":1700000000000,\"iss\":\"did:iota:testnet:0xabc\",\"kid\":\"did:iota:testnet:0xabc#sig-1\",\"nonce\":\"AAECAwQFBgcICQoLDA0ODw\",\"seq\":7,\"tag\":\"trust.score\",\"w\":1}",
+      "expected_verdict": "FORGED"
+    },
+    {
+      "name": "tampered_seq",
+      "envelope": {
+        "w": 1,
+        "tag": "trust.score",
+        "iss": "did:iota:testnet:0xabc",
+        "kid": "did:iota:testnet:0xabc#sig-1",
+        "seq": 8,
+        "iat": 1700000000000,
+        "nonce": "AAECAwQFBgcICQoLDA0ODw",
+        "att": {
+          "mode": "producer"
+        },
+        "body": {
+          "score": 0.745,
+          "id": "D:x"
+        },
+        "sig": "mv_WWb__QRVl8wuN92QhlNjChzQBzWkm_B-EvrWtC_wGt8kjRD1Twwi6RYA9hsyKutGnAzuIXs9bt3BtHJ8ECA"
+      },
+      "public_key_hex": "8a88e3dd7409f195fd52db2d3cba5d72ca6709bf1d94121bf3748801b40f6f5c",
+      "block_tag": "trust.score",
+      "signing_input": "{\"att\":{\"mode\":\"producer\"},\"body\":{\"id\":\"D:x\",\"score\":0.745},\"iat\":1700000000000,\"iss\":\"did:iota:testnet:0xabc\",\"kid\":\"did:iota:testnet:0xabc#sig-1\",\"nonce\":\"AAECAwQFBgcICQoLDA0ODw\",\"seq\":8,\"tag\":\"trust.score\",\"w\":1}",
+      "expected_verdict": "FORGED"
+    },
+    {
+      "name": "tampered_iat",
+      "envelope": {
+        "w": 1,
+        "tag": "trust.score",
+        "iss": "did:iota:testnet:0xabc",
+        "kid": "did:iota:testnet:0xabc#sig-1",
+        "seq": 7,
+        "iat": 1700000000001,
+        "nonce": "AAECAwQFBgcICQoLDA0ODw",
+        "att": {
+          "mode": "producer"
+        },
+        "body": {
+          "score": 0.745,
+          "id": "D:x"
+        },
+        "sig": "mv_WWb__QRVl8wuN92QhlNjChzQBzWkm_B-EvrWtC_wGt8kjRD1Twwi6RYA9hsyKutGnAzuIXs9bt3BtHJ8ECA"
+      },
+      "public_key_hex": "8a88e3dd7409f195fd52db2d3cba5d72ca6709bf1d94121bf3748801b40f6f5c",
+      "block_tag": "trust.score",
+      "signing_input": "{\"att\":{\"mode\":\"producer\"},\"body\":{\"id\":\"D:x\",\"score\":0.745},\"iat\":1700000000001,\"iss\":\"did:iota:testnet:0xabc\",\"kid\":\"did:iota:testnet:0xabc#sig-1\",\"nonce\":\"AAECAwQFBgcICQoLDA0ODw\",\"seq\":7,\"tag\":\"trust.score\",\"w\":1}",
+      "expected_verdict": "FORGED"
+    },
+    {
+      "name": "tampered_nonce",
+      "envelope": {
+        "w": 1,
+        "tag": "trust.score",
+        "iss": "did:iota:testnet:0xabc",
+        "kid": "did:iota:testnet:0xabc#sig-1",
+        "seq": 7,
+        "iat": 1700000000000,
+        "nonce": "AQIDBAUGBwgJCgsMDQ4PEA",
+        "att": {
+          "mode": "producer"
+        },
+        "body": {
+          "score": 0.745,
+          "id": "D:x"
+        },
+        "sig": "mv_WWb__QRVl8wuN92QhlNjChzQBzWkm_B-EvrWtC_wGt8kjRD1Twwi6RYA9hsyKutGnAzuIXs9bt3BtHJ8ECA"
+      },
+      "public_key_hex": "8a88e3dd7409f195fd52db2d3cba5d72ca6709bf1d94121bf3748801b40f6f5c",
+      "block_tag": "trust.score",
+      "signing_input": "{\"att\":{\"mode\":\"producer\"},\"body\":{\"id\":\"D:x\",\"score\":0.745},\"iat\":1700000000000,\"iss\":\"did:iota:testnet:0xabc\",\"kid\":\"did:iota:testnet:0xabc#sig-1\",\"nonce\":\"AQIDBAUGBwgJCgsMDQ4PEA\",\"seq\":7,\"tag\":\"trust.score\",\"w\":1}",
+      "expected_verdict": "FORGED"
+    },
+    {
+      "name": "missing_sig",
+      "envelope": {
+        "w": 1,
+        "tag": "trust.score",
+        "iss": "did:iota:testnet:0xabc",
+        "kid": "did:iota:testnet:0xabc#sig-1",
+        "seq": 7,
+        "iat": 1700000000000,
+        "nonce": "AAECAwQFBgcICQoLDA0ODw",
+        "att": {
+          "mode": "producer"
+        },
+        "body": {
+          "score": 0.745,
+          "id": "D:x"
+        }
+      },
+      "public_key_hex": "8a88e3dd7409f195fd52db2d3cba5d72ca6709bf1d94121bf3748801b40f6f5c",
+      "block_tag": "trust.score",
+      "signing_input": "{\"att\":{\"mode\":\"producer\"},\"body\":{\"id\":\"D:x\",\"score\":0.745},\"iat\":1700000000000,\"iss\":\"did:iota:testnet:0xabc\",\"kid\":\"did:iota:testnet:0xabc#sig-1\",\"nonce\":\"AAECAwQFBgcICQoLDA0ODw\",\"seq\":7,\"tag\":\"trust.score\",\"w\":1}",
+      "expected_verdict": "MALFORMED"
+    },
+    {
+      "name": "string_seq",
+      "envelope": {
+        "w": 1,
+        "tag": "trust.score",
+        "iss": "did:iota:testnet:0xabc",
+        "kid": "did:iota:testnet:0xabc#sig-1",
+        "seq": "7",
+        "iat": 1700000000000,
+        "nonce": "AAECAwQFBgcICQoLDA0ODw",
+        "att": {
+          "mode": "producer"
+        },
+        "body": {
+          "score": 0.745,
+          "id": "D:x"
+        },
+        "sig": "mv_WWb__QRVl8wuN92QhlNjChzQBzWkm_B-EvrWtC_wGt8kjRD1Twwi6RYA9hsyKutGnAzuIXs9bt3BtHJ8ECA"
+      },
+      "public_key_hex": "8a88e3dd7409f195fd52db2d3cba5d72ca6709bf1d94121bf3748801b40f6f5c",
+      "block_tag": "trust.score",
+      "signing_input": "{\"att\":{\"mode\":\"producer\"},\"body\":{\"id\":\"D:x\",\"score\":0.745},\"iat\":1700000000000,\"iss\":\"did:iota:testnet:0xabc\",\"kid\":\"did:iota:testnet:0xabc#sig-1\",\"nonce\":\"AAECAwQFBgcICQoLDA0ODw\",\"seq\":\"7\",\"tag\":\"trust.score\",\"w\":1}",
+      "expected_verdict": "MALFORMED"
+    },
+    {
+      "name": "float_seq",
+      "envelope": {
+        "w": 1,
+        "tag": "trust.score",
+        "iss": "did:iota:testnet:0xabc",
+        "kid": "did:iota:testnet:0xabc#sig-1",
+        "seq": 7.0,
+        "iat": 1700000000000,
+        "nonce": "AAECAwQFBgcICQoLDA0ODw",
+        "att": {
+          "mode": "producer"
+        },
+        "body": {
+          "score": 0.745,
+          "id": "D:x"
+        },
+        "sig": "mv_WWb__QRVl8wuN92QhlNjChzQBzWkm_B-EvrWtC_wGt8kjRD1Twwi6RYA9hsyKutGnAzuIXs9bt3BtHJ8ECA"
+      },
+      "public_key_hex": "8a88e3dd7409f195fd52db2d3cba5d72ca6709bf1d94121bf3748801b40f6f5c",
+      "block_tag": "trust.score",
+      "signing_input": "{\"att\":{\"mode\":\"producer\"},\"body\":{\"id\":\"D:x\",\"score\":0.745},\"iat\":1700000000000,\"iss\":\"did:iota:testnet:0xabc\",\"kid\":\"did:iota:testnet:0xabc#sig-1\",\"nonce\":\"AAECAwQFBgcICQoLDA0ODw\",\"seq\":7,\"tag\":\"trust.score\",\"w\":1}",
+      "expected_verdict": "MALFORMED"
+    },
+    {
+      "name": "w_2",
+      "envelope": {
+        "w": 2,
+        "tag": "trust.score",
+        "iss": "did:iota:testnet:0xabc",
+        "kid": "did:iota:testnet:0xabc#sig-1",
+        "seq": 7,
+        "iat": 1700000000000,
+        "nonce": "AAECAwQFBgcICQoLDA0ODw",
+        "att": {
+          "mode": "producer"
+        },
+        "body": {
+          "score": 0.745,
+          "id": "D:x"
+        },
+        "sig": "mv_WWb__QRVl8wuN92QhlNjChzQBzWkm_B-EvrWtC_wGt8kjRD1Twwi6RYA9hsyKutGnAzuIXs9bt3BtHJ8ECA"
+      },
+      "public_key_hex": "8a88e3dd7409f195fd52db2d3cba5d72ca6709bf1d94121bf3748801b40f6f5c",
+      "block_tag": "trust.score",
+      "signing_input": "{\"att\":{\"mode\":\"producer\"},\"body\":{\"id\":\"D:x\",\"score\":0.745},\"iat\":1700000000000,\"iss\":\"did:iota:testnet:0xabc\",\"kid\":\"did:iota:testnet:0xabc#sig-1\",\"nonce\":\"AAECAwQFBgcICQoLDA0ODw\",\"seq\":7,\"tag\":\"trust.score\",\"w\":2}",
+      "expected_verdict": "MALFORMED"
+    },
+    {
+      "name": "padded_sig",
+      "envelope": {
+        "w": 1,
+        "tag": "trust.score",
+        "iss": "did:iota:testnet:0xabc",
+        "kid": "did:iota:testnet:0xabc#sig-1",
+        "seq": 7,
+        "iat": 1700000000000,
+        "nonce": "AAECAwQFBgcICQoLDA0ODw",
+        "att": {
+          "mode": "producer"
+        },
+        "body": {
+          "score": 0.745,
+          "id": "D:x"
+        },
+        "sig": "mv_WWb__QRVl8wuN92QhlNjChzQBzWkm_B-EvrWtC_wGt8kjRD1Twwi6RYA9hsyKutGnAzuIXs9bt3BtHJ8ECA="
+      },
+      "public_key_hex": "8a88e3dd7409f195fd52db2d3cba5d72ca6709bf1d94121bf3748801b40f6f5c",
+      "block_tag": "trust.score",
+      "signing_input": "{\"att\":{\"mode\":\"producer\"},\"body\":{\"id\":\"D:x\",\"score\":0.745},\"iat\":1700000000000,\"iss\":\"did:iota:testnet:0xabc\",\"kid\":\"did:iota:testnet:0xabc#sig-1\",\"nonce\":\"AAECAwQFBgcICQoLDA0ODw\",\"seq\":7,\"tag\":\"trust.score\",\"w\":1}",
+      "expected_verdict": "MALFORMED"
+    },
+    {
+      "name": "noncanonical_sig",
+      "envelope": {
+        "w": 1,
+        "tag": "trust.score",
+        "iss": "did:iota:testnet:0xabc",
+        "kid": "did:iota:testnet:0xabc#sig-1",
+        "seq": 7,
+        "iat": 1700000000000,
+        "nonce": "AAECAwQFBgcICQoLDA0ODw",
+        "att": {
+          "mode": "producer"
+        },
+        "body": {
+          "score": 0.745,
+          "id": "D:x"
+        },
+        "sig": "mv_WWb__QRVl8wuN92QhlNjChzQBzWkm_B-EvrWtC_wGt8kjRD1Twwi6RYA9hsyKutGnAzuIXs9bt3BtHJ8ECB"
+      },
+      "public_key_hex": "8a88e3dd7409f195fd52db2d3cba5d72ca6709bf1d94121bf3748801b40f6f5c",
+      "block_tag": "trust.score",
+      "signing_input": "{\"att\":{\"mode\":\"producer\"},\"body\":{\"id\":\"D:x\",\"score\":0.745},\"iat\":1700000000000,\"iss\":\"did:iota:testnet:0xabc\",\"kid\":\"did:iota:testnet:0xabc#sig-1\",\"nonce\":\"AAECAwQFBgcICQoLDA0ODw\",\"seq\":7,\"tag\":\"trust.score\",\"w\":1}",
+      "expected_verdict": "MALFORMED"
+    },
+    {
+      "name": "body_and_enc",
+      "envelope": {
+        "w": 1,
+        "tag": "trust.score",
+        "iss": "did:iota:testnet:0xabc",
+        "kid": "did:iota:testnet:0xabc#sig-1",
+        "seq": 7,
+        "iat": 1700000000000,
+        "nonce": "AAECAwQFBgcICQoLDA0ODw",
+        "att": {
+          "mode": "producer"
+        },
+        "body": {
+          "score": 0.745,
+          "id": "D:x"
+        },
+        "sig": "mv_WWb__QRVl8wuN92QhlNjChzQBzWkm_B-EvrWtC_wGt8kjRD1Twwi6RYA9hsyKutGnAzuIXs9bt3BtHJ8ECA",
+        "enc": {
+          "alg": "x"
+        }
+      },
+      "public_key_hex": "8a88e3dd7409f195fd52db2d3cba5d72ca6709bf1d94121bf3748801b40f6f5c",
+      "block_tag": "trust.score",
+      "signing_input": "{\"att\":{\"mode\":\"producer\"},\"body\":{\"id\":\"D:x\",\"score\":0.745},\"enc\":{\"alg\":\"x\"},\"iat\":1700000000000,\"iss\":\"did:iota:testnet:0xabc\",\"kid\":\"did:iota:testnet:0xabc#sig-1\",\"nonce\":\"AAECAwQFBgcICQoLDA0ODw\",\"seq\":7,\"tag\":\"trust.score\",\"w\":1}",
+      "expected_verdict": "MALFORMED"
     }
   ]
 }
