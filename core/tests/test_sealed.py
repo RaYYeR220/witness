@@ -47,6 +47,14 @@ def test_roundtrip_two_recipients():
     assert sealed.decrypt_body(jwe, "b#k", B) == BODY
 
 
+def test_single_recipient_stays_general_serialization():
+    # jwcrypto flattens a one-recipient JWE; the format promises the general form.
+    jwe = sealed.encrypt_body(BODY, [_rcpt("a#k", A)])
+    assert "header" not in jwe and "encrypted_key" not in jwe
+    assert [r["header"]["kid"] for r in jwe["recipients"]] == ["a#k"]
+    assert sealed.decrypt_body(jwe, "a#k", A) == BODY
+
+
 def test_jwe_header_shape():
     jwe = _jwe()
     prot = json.loads(base64.urlsafe_b64decode(jwe["protected"] + "=="))

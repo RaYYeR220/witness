@@ -44,7 +44,13 @@ def encrypt_body(body: dict, recipients: list[Recipient]) -> dict:
         token.add_recipient(
             key, json.dumps({"alg": "ECDH-ES+A256KW", "kid": r.kid})
         )
-    return json.loads(token.serialize())
+    out = json.loads(token.serialize())
+    if "recipients" not in out:
+        # jwcrypto emits the flattened form for a single recipient; keep it general.
+        out["recipients"] = [
+            {k: out.pop(k) for k in ("header", "encrypted_key") if k in out}
+        ]
+    return out
 
 
 _ALG = "ECDH-ES+A256KW"
