@@ -15,7 +15,7 @@
 import { ed25519 } from "@noble/curves/ed25519";
 import { sha512 } from "@noble/hashes/sha2";
 
-import { bytesEqual, concatBytes, isBytes } from "./bytes.js";
+import { bytesEqual, concatBytes, isBytes, toHex } from "./bytes.js";
 
 /** Order of the prime-order subgroup. */
 const L = 2n ** 252n + 27742317777372353535851937790883648493n;
@@ -28,16 +28,26 @@ function numberLE(bytes: Uint8Array): bigint {
 
 type Point = InstanceType<typeof ed25519.Point>;
 
+/** Decoded keys by hex (null: weak). The same few keys sign every message. */
+const decoded = new Map<string, Point | null>();
+const DECODED_MAX = 1024;
+
 /** The point of a strictly encoded key that is not of small order, else null. */
 function strongPoint(publicKey: unknown): Point | null {
   if (!isBytes(publicKey, 32)) return null;
-  let A: Point;
+  const id = toHex(publicKey);
+  const hit = decoded.get(id);
+  if (hit !== undefined) return hit;
+  let A: Point | null;
   try {
     A = ed25519.Point.fromBytes(publicKey, false);
+    if (A.double().double().double().equals(ed25519.Point.ZERO)) A = null;
   } catch {
-    return null;
+    A = null;
   }
-  return A.double().double().double().equals(ed25519.Point.ZERO) ? null : A;
+  if (decoded.size >= DECODED_MAX) decoded.delete(decoded.keys().next().value!);
+  decoded.set(id, A);
+  return A;
 }
 
 /** True for a key that must not verify anything (Python `ed25519.is_weak_public_key`). */

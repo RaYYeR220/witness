@@ -75,4 +75,18 @@ describe("ed25519Verify follows OpenSSL", () => {
     const mixed = P.fromHex(pk).add(P.fromHex(ED25519_TORSION_SUBGROUP[1]!)).toBytes();
     expect(isWeakPublicKey(mixed)).toBe(false);
   });
+
+  it("memoizes by key bytes, so a buffer changed after a lookup is judged afresh", () => {
+    const pk = ed25519.getPublicKey(new Uint8Array(32).fill(11));
+    const sig = ed25519.sign(utf8("m"), new Uint8Array(32).fill(11));
+    for (let i = 0; i < 3; i++) expect(ed25519Verify(pk, sig, utf8("m"))).toBe(true);
+    const buf = Uint8Array.from(pk);
+    expect(isWeakPublicKey(buf)).toBe(false);
+    buf.set(IDENTITY);
+    expect(isWeakPublicKey(buf)).toBe(true);
+    expect(ed25519Verify(buf, concatBytes(IDENTITY, le(0n)), utf8("m"))).toBe(false);
+    // More distinct keys than the memo holds: answers stay right after eviction.
+    for (let n = 0; n < 1100; n++) expect(isWeakPublicKey(le(BigInt(n) * 7919n + 3n))).toBe(isWeakPublicKey(le(BigInt(n) * 7919n + 3n)));
+    expect(ed25519Verify(pk, sig, utf8("m"))).toBe(true);
+  });
 });

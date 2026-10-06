@@ -15,6 +15,8 @@ The TypeScript port (`packages/verify/src/ed25519.ts`) applies the same rule.
 
 from __future__ import annotations
 
+from functools import lru_cache
+
 from cryptography.exceptions import InvalidSignature
 from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PublicKey
 
@@ -62,7 +64,14 @@ def _add(a: Point, b: Point) -> Point:
 def is_weak_public_key(public_key: object) -> bool:
     """True for a key that must not verify anything: not a strict 32-byte encoding of a
     curve point, or a point of small order (one of the 8 torsion points, identity
-    included)."""
+    included). Memoized: the same few keys sign every message."""
+    if not isinstance(public_key, (bytes, bytearray)) or len(public_key) != 32:
+        return True
+    return _weak(bytes(public_key))
+
+
+@lru_cache(maxsize=1024)
+def _weak(public_key: bytes) -> bool:
     point = _decode(public_key)
     if point is None:
         return True

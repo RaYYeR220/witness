@@ -58,3 +58,13 @@ def test_torsion_component_is_not_small_order():
     x, y = ed25519._add(a, t)
     mixed = (y | (x & 1) << 255).to_bytes(32, "little")
     assert not ed25519.is_weak_public_key(mixed)
+
+
+def test_the_check_is_memoized_by_key_bytes():
+    public = bytearray(Ed25519PrivateKey.generate().public_key().public_bytes_raw())
+    before = ed25519._weak.cache_info().hits
+    assert not ed25519.is_weak_public_key(public)
+    assert not ed25519.is_weak_public_key(bytes(public))
+    assert ed25519._weak.cache_info().hits == before + 1
+    public[:] = IDENTITY  # a mutable buffer changed after a lookup is judged afresh
+    assert ed25519.is_weak_public_key(public)
