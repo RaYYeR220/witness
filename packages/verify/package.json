@@ -1,17 +1,30 @@
 {
   "name": "@witness/verify",
   "version": "0.1.0",
+  "description": "Offline verifier for Witness proof bundles, envelopes and sealed payloads (browser and Node)",
   "license": "Apache-2.0",
   "type": "module",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
   "exports": { ".": { "types": "./dist/index.d.ts", "import": "./dist/index.js" } },
-  "scripts": { "build": "tsc -p tsconfig.json", "test": "vitest run" },
+  "bin": { "witness-verify": "dist/cli.js" },
+  "files": ["dist"],
+  "sideEffects": false,
+  "scripts": {
+    "build": "tsc -p tsconfig.json && tsc -p tsconfig.cli.json",
+    "typecheck": "tsc -p tsconfig.json --noEmit && tsc -p tsconfig.cli.json --noEmit",
+    "test": "vitest run"
+  },
   "dependencies": {
     "@noble/curves": "^1.6.0",
     "@noble/hashes": "^1.5.0",
     "canonicalize": "^2.0.0",
     "jose": "^5.9.0"
   },
-  "devDependencies": { "typescript": "^5.6.0", "vitest": "^2.1.0", "jsdom": "^25.0.0" }
+  "devDependencies": {
+    "@types/node": "^22.7.0",
+    "jsdom": "^25.0.0",
+    "typescript": "^5.6.0",
+    "vitest": "^2.1.0"
+  }
 }
