@@ -8,10 +8,12 @@ from witness_core import verdicts as V
 from witness_core.ids import blake2b256, to_hex
 from witness_indexer import events
 from witness_indexer.incidents import IncidentConfig, IncidentEngine
+from witness_indexer.pipeline import ALLOW_ALL
 from witness_indexer.store import Alert, MessageRow, Submission
 
 IE = "MyDomain:fa163e5e25ef"
 T0 = 1_791_280_000  # seconds
+WRITER = "did:iota:testnet:0x" + "77" * 32
 _blocks = itertools.count(1)
 
 
@@ -21,7 +23,7 @@ def score(value: float, *, ms: int, verdict: str = V.PRODUCER_SIGNED) -> Message
     return MessageRow(
         block_id=blake2b256(data + next(_blocks).to_bytes(8, "big")), tag="trust.score",
         kind=c.kind, data=data, json=c.json, ie_id=c.ie_id, verdict=verdict, ms_index=ms,
-        wf_index=0, ts=T0 + 30 * ms)
+        wf_index=0, ts=T0 + 30 * ms, iss=None if verdict == V.UNSIGNED_LEGACY else WRITER)
 
 
 async def raise_alert(store, a: Alert) -> None:
@@ -38,7 +40,7 @@ def hx(b: bytes) -> str:
 
 
 async def test_engine_incident_through_the_api(client, store):
-    engine = IncidentEngine(store, None, IncidentConfig())
+    engine = IncidentEngine(store, None, IncidentConfig(), policy=ALLOW_ALL)
     base, drop = score(0.9, ms=10), score(0.4, ms=11)
     forged, recovered = score(0.99, ms=12, verdict=V.FORGED), score(0.95, ms=13)
     await store.put_submission(Submission(
@@ -84,7 +86,7 @@ async def test_engine_incident_through_the_api(client, store):
 
 async def test_ledger_incident_without_an_indexed_message(client, store):
     # ORPHANED: the relay submitted a block the Tangle never confirmed; no message row exists
-    engine = IncidentEngine(store, None, IncidentConfig())
+    engine = IncidentEngine(store, None, IncidentConfig(), policy=ALLOW_ALL)
     bid = blake2b256(b"never confirmed")
     await store.put_submission(Submission(sub_id="sub-o", source="http",
                                           received_at_ms=T0 * 1000, tag="trust.score",

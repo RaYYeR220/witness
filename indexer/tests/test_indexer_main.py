@@ -177,26 +177,29 @@ def test_incident_engine_wiring(monkeypatch):
     assert (a.incidents, a.alerts_mqtt, a.incident_window_s, a.incident_quiet_s,
             a.incident_drop) == (True, None, 600.0, 1800.0, 0.2)
     store, orion = object(), object()
-    eng = cli.build_incidents(a, store, orion)
+    eng = cli.build_incidents(a, store, orion, ALLOW_ALL)
+    assert eng.policy is ALLOW_ALL
     assert isinstance(eng, IncidentEngine) and eng.publisher is None and eng.orion is orion
     assert (eng.cfg.window_ms, eng.cfg.quiet_close_ms, eng.cfg.drop_threshold) == (
         600_000, 1_800_000, 0.2)
     # alerts go to the submission broker unless told otherwise
     eng = cli.build_incidents(cli.parse_args([*base, "--mqtt", "mqtt://broker:1883",
                                               "--incident-window-s", "60",
-                                              "--incident-drop", "0.3"]), store, None)
+                                              "--incident-drop", "0.3"]),
+                              store, None, ALLOW_ALL)
     assert isinstance(eng.publisher, MqttAlertPublisher)
     assert eng.publisher._params["hostname"] == "broker"
     assert eng.publisher._params["identifier"] == "witness-indexer-alerts-s1"
     assert (eng.cfg.window_ms, eng.cfg.drop_threshold) == (60_000, 0.3)
     eng = cli.build_incidents(cli.parse_args([*base, "--mqtt", "mqtt://broker:1883",
-                                              "--alerts-mqtt", ""]), store, None)
+                                              "--alerts-mqtt", ""]), store, None, ALLOW_ALL)
     assert eng.publisher is None
     monkeypatch.setenv("WITNESS_ALERTS_MQTT", "mqtt://alerts:1884")
-    eng = cli.build_incidents(cli.parse_args(base), store, None)
+    eng = cli.build_incidents(cli.parse_args(base), store, None, ALLOW_ALL)
     assert (eng.publisher._params["hostname"], eng.publisher._params["port"]) == (
         "alerts", 1884)
-    assert cli.build_incidents(cli.parse_args([*base, "--no-incidents"]), store, None) is None
+    off = cli.parse_args([*base, "--no-incidents"])
+    assert cli.build_incidents(off, store, None, ALLOW_ALL) is None
     rules = object()
     assert CorrelatedRules(rules, eng).rules is rules
 

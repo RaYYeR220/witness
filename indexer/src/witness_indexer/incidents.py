@@ -58,8 +58,9 @@ Trust: every block is judged at one of three levels.
   one window past its anchor, and an alert on a block already in an incident moves it only
   as far as that block's own trust level allows (none for evidence-only blocks).
 
-The policy check is the engine's own (from the writer policy the indexer was started with),
-not only the rules' UNSIGNED alert, so a rules failure cannot promote an unsigned write.
+The policy check is the engine's own (the writer policy the indexer was started with is a
+required argument), not only the rules' UNSIGNED alert, so a rules failure cannot promote an
+unsigned write.
 A SHADOW alert found after the fact (R14 runs 30 s after confirmation) takes back what the
 block did: its event becomes `alert` evidence, an incident it closed reopens, and the
 recovery target is recomputed from the proven drops that remain.
@@ -335,10 +336,11 @@ def _change(action: str, inc: dict, *, block_id: bytes | None = None, role: str 
 class IncidentEngine:
     def __init__(self, store: Store, orion: OrionClient | None = None,
                  cfg: IncidentConfig | None = None, publisher: AlertPublisher | None = None, *,
-                 policy: WriterPolicy | None = None,
-                 now_ms: Callable[[], int] | None = None) -> None:
-        """`policy` is the writer policy the indexer judges with; without it only the verdict
-        and the UNSIGNED / SHADOW alerts decide a block's trust level."""
+                 policy: WriterPolicy, now_ms: Callable[[], int] | None = None) -> None:
+        """`policy` is the writer policy the indexer judges with (required: a block's trust
+        level is never decided without it)."""
+        if not isinstance(policy, WriterPolicy):
+            raise TypeError("IncidentEngine needs the indexer's WriterPolicy")
         self.store = store
         self.orion = orion
         self.policy = policy
@@ -499,14 +501,13 @@ class IncidentEngine:
         UNTRUSTED."""
         if verdict not in (V.PRODUCER_SIGNED, V.RELAY_ATTESTED, V.UNSIGNED_LEGACY):
             return UNTRUSTED
-        if self.policy is not None:
-            if verdict == V.UNSIGNED_LEGACY:
-                rule = self.policy.tags.get(tag or "", self.policy.default)
-                if rule.require_signature and not rule.legacy_grace:
-                    return UNTRUSTED
-            elif not (isinstance(iss, str) and isinstance(tag, str)
-                      and writer_policy.allowed(self.policy, tag, iss)):
+        if verdict == V.UNSIGNED_LEGACY:
+            rule = self.policy.tags.get(tag or "", self.policy.default)
+            if rule.require_signature and not rule.legacy_grace:
                 return UNTRUSTED
+        elif not (isinstance(iss, str) and isinstance(tag, str)
+                  and writer_policy.allowed(self.policy, tag, iss)):
+            return UNTRUSTED
         if await self.store.block_alert_rules(block_id) & DISTRUST_RULES:
             return UNTRUSTED
         if verdict == V.PRODUCER_SIGNED:
@@ -603,8 +604,6 @@ class IncidentEngine:
     def _score_writers(self, tag: str | None) -> dict[str, Any]:
         """Which earlier scores may serve as the reference a score is compared with: the
         same writers and signature rule the policy sets for the tag."""
-        if self.policy is None:
-            return {}
         rule = self.policy.tags.get(tag or SCORE_KIND, self.policy.default)
         return {"issuers": None if "*" in rule.allowed else list(rule.allowed),
                 "unsigned": not (rule.require_signature and not rule.legacy_grace)}

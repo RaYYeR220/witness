@@ -21,6 +21,7 @@ from witness_indexer.incidents import (
     component_key,
 )
 from witness_indexer.orion import IE, OrionUnavailable
+from witness_indexer.pipeline import ALLOW_ALL
 from witness_indexer.rules import SEVERITY
 from witness_indexer.store import Alert, MessageRow, Store, Submission
 
@@ -31,16 +32,18 @@ IE_Z = "Edge:001122334455"
 SC = "urn:ngsi-ld:Service:0a1b:Component:web"
 SC_K8S = "urn-ngsi-ld-service-0a1b-component-web"  # the LLO reports the k8s resource name
 T0 = 1_791_280_000  # seconds
+WRITER = "did:iota:testnet:0x" + "77" * 32  # signs every signed test row
 _blocks = itertools.count(1)
 
 
-def row(tag: str, body: dict, *, ms: int, verdict: str = V.PRODUCER_SIGNED,
+def row(tag: str, body: dict, *, ms: int, verdict: str | None = V.PRODUCER_SIGNED,
         ts: int | None = None) -> MessageRow:
     data = json.dumps(body).encode()
     c = schema.classify(tag, data)
     return MessageRow(
         block_id=blake2b256(data + next(_blocks).to_bytes(8, "big")), tag=tag, kind=c.kind,
         data=data, json=c.json, ie_id=c.ie_id, verdict=verdict, ms_index=ms, wf_index=0,
+        iss=None if verdict == V.UNSIGNED_LEGACY else WRITER,
         ts=T0 + 30 * ms if ts is None else ts)
 
 
@@ -128,7 +131,7 @@ def pub() -> FakePublisher:
 
 @pytest.fixture
 def engine(store: Store, pub: FakePublisher) -> IncidentEngine:
-    return IncidentEngine(store, FakeOrion({SC: IE_X}), IncidentConfig(), pub)
+    return IncidentEngine(store, FakeOrion({SC: IE_X}), IncidentConfig(), pub, policy=ALLOW_ALL)
 
 
 def actions(changes: list[dict]) -> list[str]:
@@ -422,7 +425,7 @@ async def test_attacks_on_ies_orion_does_not_know_stay_alerts(store, engine):
 async def test_without_orion_attack_alerts_only_join(store, pub):
     orion = FakeOrion({})
     orion.down = True
-    eng = IncidentEngine(store, orion, IncidentConfig(), pub)
+    eng = IncidentEngine(store, orion, IncidentConfig(), pub, policy=ALLOW_ALL)
     first = score(0.1, ms=10, ie=IE_Z, verdict=V.FORGED)
     assert await feed(store, eng, first, alerts=("FORGED",)) == []
     assert (await store.service_status())["incident-orion"]["status"] == "unreachable"
@@ -438,7 +441,7 @@ async def test_hostile_orion_component_map(store, pub):
     long_sc = "urn:ngsi-ld:Service:0a1b:Component:" + "w" * 500
     hosts = {long_sc: URN + IE_X, "\x00bad\nid\u202e": IE_Y, "": IE_X, "  ": IE_Y,
              "x": "", "y": None, 7: IE_X, "z" * 100_000: "\x1b" + "q" * 5000}
-    eng = IncidentEngine(store, FakeOrion(hosts), IncidentConfig(), pub)
+    eng = IncidentEngine(store, FakeOrion(hosts), IncidentConfig(), pub, policy=ALLOW_ALL)
     await feed(store, eng, score(0.9, ms=10))
     assert actions(await feed(store, eng, score(0.4, ms=11))) == ["opened"]
     # the component id is cut like the LLO's own report, so the two still line up
@@ -449,7 +452,7 @@ async def test_hostile_orion_component_map(store, pub):
     assert len(eng._hosts) == 3
     # an Orion answering more entities than allowed is not taken at all
     capped = IncidentEngine(store, FakeOrion({SC: IE_X}),
-                            IncidentConfig(orion_max_entries=2), pub)
+                            IncidentConfig(orion_max_entries=2), pub, policy=ALLOW_ALL)
     lone = llo("Service component failed", ms=13, verdict=V.FORGED)
     assert await feed(store, capped, lone, alerts=("FORGED",)) == []
     assert capped._known_ies is None
@@ -565,6 +568,13 @@ POLICY = writer_policy.load({
                              "legacy_grace": False}},
     "default": {"allowed": ["*"], "require_signature": False, "legacy_grace": True},
 })
+
+
+def test_the_engine_needs_a_writer_policy(store):
+    with pytest.raises(TypeError):
+        IncidentEngine(store)  # type: ignore[call-arg]
+    with pytest.raises(TypeError):
+        IncidentEngine(store, policy=None)  # type: ignore[arg-type]
 
 
 async def test_policy_decides_trust_without_waiting_for_the_rules(store, pub):
@@ -717,7 +727,7 @@ async def test_recovery_target_is_the_level_the_first_drop_fell_from(store, engi
 async def test_llo_failure_correlates_by_component_without_orion(store, pub):
     orion = FakeOrion({})
     orion.down = True
-    eng = IncidentEngine(store, orion, IncidentConfig(), pub)
+    eng = IncidentEngine(store, orion, IncidentConfig(), pub, policy=ALLOW_ALL)
     assert actions(await feed(store, eng, llo("Service component failed", ms=10))) == [
         "opened"]
     other = llo("Service component failed", ms=10, sc="urn-ngsi-ld-service-0a1b-component-db")
@@ -846,11 +856,11 @@ async def test_nothing_is_published_before_commit(store, engine, pub):
 
 
 async def test_publisher_cursor_survives_a_restart(store, pub):
-    eng = IncidentEngine(store, None, IncidentConfig(), pub)
+    eng = IncidentEngine(store, None, IncidentConfig(), pub, policy=ALLOW_ALL)
     await feed(store, eng, score(0.9, ms=10))
     await feed(store, eng, score(0.3, ms=11))
     assert await eng.flush() == 1
-    again = IncidentEngine(store, None, IncidentConfig(), pub)
+    again = IncidentEngine(store, None, IncidentConfig(), pub, policy=ALLOW_ALL)
     assert await again.flush() == 0
     await feed(store, again, so_error("restart", ms=12))
     assert await again.flush() == 1
@@ -866,7 +876,7 @@ async def until(cond, timeout_s: float = 3.0) -> None:
 
 
 async def test_only_the_publisher_task_talks_to_the_broker(store, pub):
-    eng = IncidentEngine(store, None, IncidentConfig(publish_poll_s=60), pub)
+    eng = IncidentEngine(store, None, IncidentConfig(publish_poll_s=60), pub, policy=ALLOW_ALL)
     await feed(store, eng, score(0.9, ms=10))
     assert actions(await feed(store, eng, score(0.3, ms=11))) == ["opened"]
     await eng.periodic(now_ms=(T0 + 400) * 1000)
@@ -1022,7 +1032,7 @@ async def test_unreachable_broker_is_reported_not_raised(store):
     pub = MqttAlertPublisher("mqtt://127.0.0.1:1", timeout_s=2.0)
     with pytest.raises(Exception):  # noqa: B017 - whatever the transport raises
         await pub.publish("witness/alerts/high", b"{}")
-    eng = IncidentEngine(store, None, IncidentConfig(), pub)
+    eng = IncidentEngine(store, None, IncidentConfig(), pub, policy=ALLOW_ALL)
     await feed(store, eng, score(0.9, ms=10))
     assert actions(await feed(store, eng, score(0.3, ms=11))) == ["opened"]
     assert await eng.flush() == 0
@@ -1044,7 +1054,7 @@ async def test_alerts_reach_mosquitto(store):
         prefix = f"witness-test/{uuid.uuid4().hex[:8]}/alerts"
         await sub.subscribe(f"{prefix}/#", qos=1)
         pub = MqttAlertPublisher(LIVE_MQTT, client_id=f"witness-test-pub-{uuid.uuid4().hex[:8]}")
-        eng = IncidentEngine(store, None, IncidentConfig(mqtt_topic_prefix=prefix), pub)
+        eng = IncidentEngine(store, None, IncidentConfig(mqtt_topic_prefix=prefix), pub, policy=ALLOW_ALL)
         await feed(store, eng, score(0.9, ms=10))
         await feed(store, eng, score(0.3, ms=11))
         assert await eng.flush() == 1

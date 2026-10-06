@@ -155,7 +155,7 @@ def build_rules(args: argparse.Namespace, store: Store, pol: WriterPolicy
 
 
 def build_incidents(args: argparse.Namespace, store: Store, orion: OrionClient | None,
-                    pol: WriterPolicy | None = None) -> IncidentEngine | None:
+                    pol: WriterPolicy) -> IncidentEngine | None:
     """The incident engine, or None with --no-incidents."""
     if not args.incidents:
         return None
