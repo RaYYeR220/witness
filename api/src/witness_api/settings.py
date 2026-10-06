@@ -55,10 +55,11 @@ class Settings:
     posture_dashboard_url: str | None = None
     posture_allow_active_hosts: list[str] = field(default_factory=list)
     posture_timeout_s: float = 5.0
-    # Signed audit reports (POST /reports). The hash is posted as `audit.report` through the
-    # relay, signed with a component DID key loaded from `report_signer_key` (never logged).
+    # Signed audit reports (POST /reports). The hash is posted as `audit.report` through a
+    # witness-relay (no default: unset means 503), signed with a component DID key loaded
+    # from `report_signer_key` (never logged).
     report_token: str | None = None
-    relay_url: str | None = "http://127.0.0.1:5556"
+    relay_url: str | None = None
     report_relay_node: str = "iota-hornet"
     report_signer_key: str | None = None
     drift_epsilon: float = 0.01
@@ -156,7 +157,7 @@ class Settings:
             posture_allow_active_hosts=items("WITNESS_POSTURE_ALLOW_ACTIVE_HOSTS"),
             posture_timeout_s=number("WITNESS_POSTURE_TIMEOUT_S", 5.0),
             report_token=get("WITNESS_REPORT_TOKEN"),
-            relay_url=get("WITNESS_RELAY_URL") or "http://127.0.0.1:5556",
+            relay_url=get("WITNESS_RELAY_URL"),
             report_relay_node=get("WITNESS_REPORT_RELAY_NODE") or "iota-hornet",
             report_signer_key=get("WITNESS_REPORT_SIGNER_KEY"),
             stream_max_subscribers=int(number("WITNESS_STREAM_MAX_SUBSCRIBERS", 200, int)),

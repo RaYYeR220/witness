@@ -160,6 +160,26 @@ Live checks: `WITNESS_LIVE=1 uv run pytest indexer/tests/test_source_inx_live.py
 indexes a block written straight to HORNET into a throwaway schema; needs
 `WITNESS_TEST_PG`).
 
+## Signed audit reports
+
+`POST /reports` posts each report's hash as a producer-signed `audit.report`
+message through a witness-relay (`WITNESS_RELAY_URL`; there is no default, and
+the API refuses a URL whose `GET /healthz` does not identify a witness-relay, so
+the legacy Messages API is never used by mistake). The relay's writer policy
+must allow the signer DID on `audit.report`.
+
+- **Give reports a signer DID of their own.** Each post claims the envelope
+  sequence number `max(now in ms, last claimed + 1)`, continuing from the
+  `reports` table. Another producer signing with the same DID would advance the
+  relay's sequence for that issuer behind the API's back, and the relay would
+  refuse later reports as replays.
+- **Run one API instance that writes reports.** Posts are serialised inside one
+  process; two instances writing reports could claim the same sequence number.
+- A report is stored as **not anchored** before it is posted and marked
+  anchored with its block id once the relay accepts it. A failed post leaves
+  the report listed with `anchored: false`, and its HTML page says "NOT
+  anchored".
+
 ## Troubleshooting
 
 - **`bootstrap.sh` refuses to run on Windows.** The upstream script wants root

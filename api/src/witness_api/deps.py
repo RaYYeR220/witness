@@ -46,6 +46,8 @@ class Services:
     stats_cache: tuple[float, dict[str, int]] | None = None
     posture_cache: Any = None  # the last posture scan (m.Posture), served by GET /posture
     posture_lock: asyncio.Lock = field(default_factory=asyncio.Lock)
+    # POST /reports runs one at a time, so envelope sequence numbers never collide.
+    report_lock: asyncio.Lock = field(default_factory=asyncio.Lock)
 
     @property
     def validating(self) -> bool:

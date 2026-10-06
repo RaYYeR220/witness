@@ -490,8 +490,13 @@ class Posture(ApiModel):
 
 # -- reports ----------------------------------------------------------------------------------
 
+IE_ID_PATTERN = r"^[^:\s]+:[0-9a-fA-F]{12}$"
+
+
 class ReportRequest(ApiModel):
-    ie: str | None = Field(None, description="Limit to one Infrastructure Element",
+    ie: str | None = Field(None, max_length=256, pattern=IE_ID_PATTERN,
+                           description="Limit to one Infrastructure Element "
+                                       "(`<Domain>:<12 hex>`)",
                            examples=["MyDomain:fa163e5e25ef"])
     ms_from: int | None = Field(None, ge=0, le=0xFFFFFFFF, description="First milestone index")
     ms_to: int | None = Field(None, ge=0, le=0xFFFFFFFF, description="Last milestone index")
@@ -499,22 +504,27 @@ class ReportRequest(ApiModel):
 
 class ReportSummary(ApiModel):
     report_hash: str = Field(examples=["0x" + "cd" * 32])
+    anchored: bool = Field(description="True once the relay accepted the audit.report "
+                           "message; false means nothing on the ledger vouches for it yet")
+    block_id: str | None = Field(None, description="The audit.report block, once anchored")
     ie: str | None = None
     ms_from: int | None = None
     ms_to: int | None = None
-    block_id: str | None = Field(None, description="The audit.report block on the Tangle")
+    iss: str | None = Field(None, description="DID that signed the audit.report message")
+    seq: int | None = Field(None, description="Envelope sequence number claimed for it")
     generated_at_ms: int
     generated_at: str
+    anchored_at_ms: int | None = None
+    anchored_at: str | None = None
     links: dict[str, str] = Field(default_factory=dict)
 
 
 class ReportList(ApiModel):
     items: list[ReportSummary]
+    next_cursor: str | None = Field(None, description="Pass as `cursor` for the next page")
+    limit: int
 
 
-class ReportResult(ApiModel):
-    report_hash: str
-    block_id: str | None = Field(None, description="The audit.report block id, when posted")
-    links: dict[str, str]
+class ReportResult(ReportSummary):
     report: Any = Field(description="The full report JSON (its canonical form hashes to "
                         "reportHash)")

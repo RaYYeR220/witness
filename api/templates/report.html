@@ -28,6 +28,10 @@
   code { font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace; font-size: .82rem;
          word-break: break-all; }
   .muted { color: #5b6b7b; }
+  .status { border-radius: 8px; padding: .7rem .8rem; margin: .8rem 0; font-weight: 600; }
+  .status.ok { background: #e7f6ec; border: 1px solid #9bd3ad; color: #14532d; }
+  .status.no { background: #fdecea; border: 1px solid #f1a39a; color: #7f1d1d; }
+  .status span { font-weight: 400; }
   footer { margin-top: 2.5rem; color: #5b6b7b; font-size: .8rem; }
   @media (prefers-color-scheme: dark) {
     body { color: #e5e9ee; background: #0f141a; }
@@ -53,6 +57,15 @@
   <p class="muted">BLAKE2b-256 of this report's canonical JSON. It is written to the Tangle as
      an <code>audit.report</code> message so the report is verifiable against the ledger.</p>
   <div class="hash" id="report-hash">{{ report_hash }}</div>
+  {% if anchored %}
+  <div class="status ok" id="anchor-status">Anchored on the Tangle
+    <span>&middot; <code>audit.report</code> block <code>{{ block_id }}</code>{% if signer %},
+    signed by <code>{{ signer }}</code>{% endif %}</span></div>
+  {% else %}
+  <div class="status no" id="anchor-status">NOT anchored
+    <span>&middot; this report's hash has not been written to the Tangle, so nothing on the
+    ledger vouches for it yet.</span></div>
+  {% endif %}
 
   <h2>Messages</h2>
   <div class="grid">
@@ -101,15 +114,19 @@
   {% endif %}
   {% else %}<p class="muted">No anchors recorded.</p>{% endif %}
 
-  <h2>Proof index <span class="muted">({{ report.proofs|length }})</span></h2>
+  <h2>Proof index <span class="muted">({{ report.proofs|length }} of
+    {{ report.messages.confirmed }} confirmed)</span></h2>
+  {% if report.proofsTruncated %}<p class="muted">The index lists the first
+    {{ report.proofs|length }}; every confirmed block has a proof bundle.</p>{% endif %}
   {% if report.proofs %}
   <table>
-    <thead><tr><th>Milestone</th><th>Kind</th><th>Verdict</th><th>Block</th></tr></thead>
+    <thead><tr><th>Milestone</th><th>Tag</th><th>Kind</th><th>Verdict</th><th>Block</th></tr></thead>
     <tbody>
       {% for p in report.proofs %}
       <tr>
         <td>{{ p.msIndex }}.{{ p.wfIndex }}</td>
-        <td>{{ p.kind or p.tag }}</td>
+        <td><code>{{ p.tag }}</code></td>
+        <td>{{ p.kind }}</td>
         <td>{{ p.verdict }}</td>
         <td><code>{{ p.blockId }}</code></td>
       </tr>
