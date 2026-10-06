@@ -1,0 +1,7 @@
+# Context is the repository root; send only what the relay image needs.
+*
+!core/pyproject.toml
+!core/src
+!relay/pyproject.toml
+!relay/src
+**/__pycache__
