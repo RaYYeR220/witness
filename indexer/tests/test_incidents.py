@@ -440,6 +440,25 @@ async def test_relay_attested_score_never_closes(store, engine):
     assert actions(await feed(store, engine, score(0.95, ms=13))) == ["attached", "closed"]
 
 
+async def test_recovery_itself_refuses_anything_but_proven(store, engine):
+    # white box: whatever hands it a score, the recovery step checks the level itself
+    from witness_indexer.incidents import RELAYED, UNTRUSTED, _Obs, _Step
+
+    await feed(store, engine, score(0.9, ms=10))
+    assert actions(await feed(store, engine, score(0.4, ms=11))) == ["opened"]
+    up = score(0.99, ms=12, verdict=V.RELAY_ATTESTED)
+    await store_row(store, up)
+    candidates = await store.open_incidents([f"ie:{IE_X}"])
+    for level in (RELAYED, UNTRUSTED):
+        obs = _Obs(up.block_id, {f"ie:{IE_X}"}, up.ts * 1000, "score", level, ie_id=IE_X,
+                   score=0.99)
+        step = _Step()
+        await engine._recovery(obs, candidates, step)
+        assert step.changes == []
+    [inc] = await store.incidents()
+    assert inc["status"] == "open"
+
+
 async def test_relayed_triggers_open_and_join_but_never_shape(store, engine):
     await feed(store, engine, score(0.9, ms=10, ie=IE_Y))
     drop = score(0.3, ms=11, ie=IE_Y, verdict=V.RELAY_ATTESTED)

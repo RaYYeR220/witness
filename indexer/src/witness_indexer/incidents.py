@@ -848,6 +848,8 @@ class IncidentEngine:
         """A routine proven score. An incident that saw a trust drop (`low_score` set) closes
         when a PROVEN score is back at the level the first drop fell from; otherwise only how
         low it went is kept."""
+        if not obs.proven or obs.score is None:
+            return  # only a proven score may close or lower anything
         for inc in candidates:
             if f"ie:{obs.ie_id}" not in inc["keys"] or obs.at_ms < inc["opened_at_ms"]:
                 continue
