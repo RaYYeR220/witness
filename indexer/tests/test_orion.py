@@ -127,7 +127,7 @@ async def test_oversized_listing_is_refused():
     with pytest.raises(OrionUnavailable, match="larger than 1000 bytes"):
         await OrionClient(BASE, max_reply_bytes=1000).ie_entities()
     assert len(await OrionClient(BASE).ie_entities(max_bytes=len(body))) == 50
-    with pytest.raises(OrionUnavailable, match="larger than"):
+    with pytest.raises(OrionUnavailable, match=f"larger than {len(body) - 1} bytes"):
         await OrionClient(BASE).ie_entities(max_bytes=len(body) - 1)
     with pytest.raises(OrionUnavailable):
         await OrionClient(BASE).service_component_hosts(max_bytes=10)
@@ -137,7 +137,7 @@ async def test_oversized_listing_is_refused():
 async def test_listing_budget_spans_pages():
     page = json.dumps([entity(f"MyDomain:{n:012x}", 0.5) for n in range(2)])
     respx.get(ENTITIES).mock(return_value=httpx.Response(200, text=page))
-    with pytest.raises(OrionUnavailable, match="larger than"):
+    with pytest.raises(OrionUnavailable, match=f"larger than {len(page) * 3} bytes"):
         # every page is full (2 of 2), so it keeps paging until the budget runs out
         await OrionClient(BASE, page_size=2, max_reply_bytes=len(page) * 3).ie_entities()
 

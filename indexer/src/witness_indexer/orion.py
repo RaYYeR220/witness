@@ -107,11 +107,14 @@ class OrionClient:
         return headers
 
     async def _page(self, offset: int, limit: int, type_: str = ENTITY_TYPE,
-                    budget: int | None = None) -> tuple[list, int]:
-        """One page of entities and its size in bytes; more than `budget` bytes is an error."""
+                    budget: int | None = None,
+                    cap: int | None = None) -> tuple[list, int]:
+        """One page of entities and its size in bytes; more than `budget` bytes (what is
+        left of the listing's `cap`) is an error."""
         if self._http is None:
             self._http = httpx.AsyncClient(timeout=self.timeout_s)
         budget = self._max_reply_bytes if budget is None else budget
+        cap = budget if cap is None else cap
         params = {"type": type_, "limit": str(limit), "offset": str(offset)}
         buf = bytearray()
         try:
@@ -124,7 +127,7 @@ class OrionClient:
                     buf += chunk
                     if len(buf) > budget:
                         raise OrionUnavailable(
-                            f"Orion {type_} listing larger than {self._max_reply_bytes} bytes")
+                            f"Orion {type_} listing larger than {cap} bytes")
         except httpx.HTTPError as exc:
             raise OrionUnavailable(f"Orion unreachable: {exc}") from exc
         try:
@@ -137,10 +140,11 @@ class OrionClient:
 
     async def _all(self, type_: str, max_bytes: int | None = None) -> list:
         out: list = []
-        budget = self._max_reply_bytes if max_bytes is None else max_bytes
+        cap = self._max_reply_bytes if max_bytes is None else max_bytes
+        budget = cap
         for page in range(MAX_PAGES):
             batch, size = await self._page(page * self._page_size, self._page_size, type_,
-                                           budget)
+                                           budget, cap)
             budget -= size
             out.extend(batch)
             if len(batch) < self._page_size:
