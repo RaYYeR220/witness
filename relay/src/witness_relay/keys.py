@@ -3,6 +3,11 @@
 Three sources, tried in order: a static file of public JWKs (operator-pinned keys,
 optionally marked revoked), `did:key` (self-describing, offline), and the anchor
 service's DID resolver (`GET {resolver_url}/resolve/{did}`), cached for a minute.
+
+Only answers about the DID are cached: a document of that DID, or a definitive refusal
+(DEFINITIVE: "no such DID"). Anything else (connection error, timeout, 5xx, 408, 429, an
+auth or proxy refusal, a reply that is not a document of the DID) raises KeysUnavailable
+and caches nothing, so the request is refused as temporary instead of FORGED.
 """
 
 from __future__ import annotations
@@ -20,6 +25,15 @@ import httpx
 from witness_core.envelope import KeyInfo
 
 log = logging.getLogger(__name__)
+
+# Statuses that answer "no such DID" (or "this id can never resolve"). Any other non-200
+# says nothing about the DID: an outage or an auth failure must not read as "no key".
+DEFINITIVE = frozenset({400, 404, 410, 414, 431})
+
+
+class KeysUnavailable(Exception):
+    """The DID resolver could not say which key a kid names; decide nothing for now."""
+
 
 # Only DID methods we can resolve, with a conservative method-specific-id alphabet.
 DID_RE = re.compile(r"did:(iota|key):[A-Za-z0-9:._%-]+")
@@ -94,6 +108,13 @@ def _load_static(path: str) -> dict[str, KeyInfo]:
     return out
 
 
+def _is_answer(value: object, did: str) -> bool:
+    if not isinstance(value, dict) or not isinstance(value.get("keys"), list):
+        return False
+    doc = value.get("doc")
+    return isinstance(doc, dict) and doc.get("id") == did
+
+
 class KeyResolver:
     def __init__(
         self,
@@ -123,6 +144,8 @@ class KeyResolver:
         return cls(static, resolver_url=resolver_url, http=http)
 
     async def resolve(self, kid: str) -> KeyInfo | None:
+        """The key `kid` names, or None if it names none. Raises KeysUnavailable when the
+        DID resolver cannot answer right now."""
         if not isinstance(kid, str):
             return None
         if kid in self._static:
@@ -148,11 +171,21 @@ class KeyResolver:
         url = f"{self._url}/resolve/{quote(did, safe='')}"
         try:
             resp = await self._http.get(url, timeout=5.0)
-            result = resp.json() if resp.status_code == 200 else None
-        except (httpx.HTTPError, ValueError) as exc:
+        except httpx.HTTPError as exc:
             log.warning("DID resolution failed for %s: %s", did, exc)
-            return None  # not cached: retry on the next message
-        value = result if isinstance(result, dict) else None
+            raise KeysUnavailable(f"DID resolver unreachable ({type(exc).__name__})") from exc
+        if resp.status_code in DEFINITIVE:
+            value = None  # the registry has no such DID: an answer, cached like a document
+        elif resp.status_code == 200:
+            try:
+                value = resp.json()
+            except ValueError as exc:
+                raise KeysUnavailable("DID resolver sent no JSON") from exc
+            if not _is_answer(value, did):
+                raise KeysUnavailable("DID resolver reply is not a document of the DID")
+        else:
+            log.warning("DID resolution failed for %s: HTTP %s", did, resp.status_code)
+            raise KeysUnavailable(f"DID resolver answered HTTP {resp.status_code}")
         self._cache[did] = (now, value)
         self._cache.move_to_end(did)
         while len(self._cache) > self._cache_size:

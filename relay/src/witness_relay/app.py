@@ -38,7 +38,7 @@ from .attest import Attestor, block_size, envelope_data, legacy_data, load_signi
 from .auth import AuthError, AuthUnavailable, CallerAuth
 from .config import RelayConfig, load_search_key
 from .forward import Forwarder, ForwardQueue, build_forwarders
-from .keys import KeyResolver
+from .keys import KeyResolver, KeysUnavailable
 from .policy_gate import Decision, PolicyGate, load_policy, tags_without_relay
 from .receipts import Receipt, ReceiptStore
 
@@ -185,7 +185,16 @@ async def _handle(
         return JSONResponse({"error": d.reason, "verdict": d.verdict}, status_code=403)
 
     if envelope.is_envelope(message):
-        decision = await relay.gate.check_envelope(tag, message)
+        try:
+            decision = await relay.gate.check_envelope(tag, message)
+        except KeysUnavailable as exc:
+            # Not a verdict: the signer's key could not be looked up. Retry later.
+            log.warning("cannot check an envelope for %r now: %s", tag, exc)
+            return JSONResponse(
+                {"error": f"signing key cannot be resolved right now, retry later: {exc}"},
+                status_code=503,
+                headers={"retry-after": "5"},
+            )
         sub.apply(decision)
         if not decision.allowed:
             return refuse(decision)

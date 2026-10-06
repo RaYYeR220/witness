@@ -2,11 +2,13 @@ import asyncio
 import json
 import logging
 import time
+from urllib.parse import quote
 
 import httpx
 import jwt
 import pytest
 from cryptography.hazmat.primitives.asymmetric import rsa
+from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
 from witness_core import canon, envelope, verdicts
 from witness_core.envelope import KeyInfo
 from witness_core.sealed import blind_token, decrypt_body, encrypt_body
@@ -484,3 +486,31 @@ async def test_receipts_and_healthz(make_cfg, hornet, relay, ids):
         health = await client.get("/healthz")
         assert health.status_code == 200
         assert health.json()["status"] == "ok"
+
+
+async def test_resolver_outage_is_a_temporary_refusal(make_cfg, hornet, relay):
+    """A DID resolver that cannot answer (here 401, then 503) refuses with 503 and caches
+    nothing; once it answers, the same envelope goes through."""
+    did = "did:iota:testnet:0xabc"
+    key = Ed25519PrivateKey.generate()
+    env = envelope.seal("free", {"a": 1}, iss=did, kid=did + "#sig-1", sign_key=key, seq=1,
+                        att_mode="producer")
+    doc = {"doc": {"id": did}, "version": 1, "historyComplete": True,
+           "keys": [{"kid": "#sig-1", "type": "Ed25519", "revokedAtMs": None,
+                     "publicKeyHex": key.public_key().public_bytes_raw().hex()}]}
+    route = hornet.router.get(f"http://anchor.test/resolve/{quote(did, safe='')}")
+    async with relay(make_cfg(resolver_url="http://anchor.test")) as client:
+        for status in (401, 503):
+            route.mock(return_value=httpx.Response(status))
+            resp = await client.post("/upload", params=UPLOAD,
+                                     json={"tag": "free", "message": env})
+            assert resp.status_code == 503
+            assert resp.headers["retry-after"] == "5"
+            assert "retry later" in resp.json()["error"]
+            assert "verdict" not in resp.json()
+        assert hornet.route.call_count == 0
+        route.mock(return_value=httpx.Response(200, json=doc))
+        resp = await client.post("/upload", params=UPLOAD, json={"tag": "free", "message": env})
+    assert resp.status_code == 200, resp.text
+    assert hornet.route.call_count == 1
+    assert route.call_count == 3

@@ -10,7 +10,7 @@ import respx
 from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
 from witness_core import envelope, policy, verdicts
 from witness_relay.config import RelayConfig
-from witness_relay.keys import KeyResolver, did_key, did_key_public
+from witness_relay.keys import KeyResolver, KeysUnavailable, did_key, did_key_public
 from witness_relay.policy_gate import PolicyGate
 
 
@@ -264,3 +264,67 @@ async def test_resolver_prefers_last_live_entry():
     last = Ed25519PrivateKey.generate().public_key().public_bytes_raw()
     info = await _resolve_with(_resolve_body(did, (kid, first, None), (kid, last, None)), kid)
     assert info.ed25519_public == last
+
+
+DID = "did:iota:testnet:0xabc"
+RESOLVE_URL = f"http://anchor.test/resolve/{quote(DID, safe='')}"
+
+
+@pytest.mark.parametrize("status", [400, 404, 410, 414, 431])
+async def test_resolver_caches_definitive_refusals(status):
+    with respx.mock() as router:
+        route = router.get(RESOLVE_URL).mock(return_value=httpx.Response(status))
+        async with httpx.AsyncClient() as http:
+            resolver = KeyResolver(resolver_url="http://anchor.test", http=http)
+            assert await resolver.resolve(DID + "#sig-1") is None
+            assert await resolver.resolve(DID + "#sig-1") is None
+    assert route.call_count == 1
+
+
+@pytest.mark.parametrize(
+    "failure",
+    [
+        httpx.Response(401),
+        httpx.Response(403),
+        httpx.Response(407),
+        httpx.Response(408),
+        httpx.Response(429),
+        httpx.Response(500),
+        httpx.Response(503),
+        httpx.Response(200, text="not json"),
+        httpx.Response(200, json={"doc": {"id": "did:iota:testnet:0xother"}, "keys": []}),
+        httpx.ConnectError("refused"),
+        httpx.ReadTimeout("slow"),
+    ],
+)
+async def test_resolver_outage_is_not_an_answer(failure):
+    """Neither cached nor turned into "no key": the next request asks again."""
+    pub = Ed25519PrivateKey.generate().public_key().public_bytes_raw()
+    with respx.mock() as router:
+        route = router.get(RESOLVE_URL)
+        if isinstance(failure, httpx.Response):
+            route.mock(return_value=failure)
+        else:
+            route.mock(side_effect=failure)
+        async with httpx.AsyncClient() as http:
+            resolver = KeyResolver(resolver_url="http://anchor.test", http=http)
+            with pytest.raises(KeysUnavailable):
+                await resolver.resolve(DID + "#sig-1")
+            route.mock(return_value=httpx.Response(
+                200, json=_resolve_body(DID, (DID + "#sig-1", pub, None))))
+            assert (await resolver.resolve(DID + "#sig-1")).ed25519_public == pub
+    assert route.call_count == 2
+
+
+async def test_gate_lets_resolver_outages_through():
+    class DownResolver:
+        async def resolve(self, kid):
+            raise KeysUnavailable("DID resolver answered HTTP 503")
+
+    key = Ed25519PrivateKey.generate()
+    env = envelope.seal(
+        "t", {"a": 1}, iss=DID, kid=DID + "#sig-1", sign_key=key, seq=1, att_mode="producer"
+    )
+    gate = PolicyGate(policy.load({"version": 1}), DownResolver(), "did:key:zRelay")
+    with pytest.raises(KeysUnavailable):
+        await gate.check_envelope("t", env)
