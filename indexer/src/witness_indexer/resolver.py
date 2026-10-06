@@ -9,11 +9,19 @@ force throughout the second holding `at_ms` (see `witness_core.bundle.snapshot_k
 milestone timestamps have second precision, so a key revoked anywhere in that second counts
 as revoked, as in `witness_core.bundle.valid_through_second`.
 
-Answers are cached per DID for `cache_ttl_s`, including "no such DID": a 404 or any other
-definitive 4xx. A registry that cannot be asked (connection error, timeout, 5xx, 408, 429),
-or replies with something that is not an answer about the DID, raises `ResolverUnavailable`
-and caches nothing: callers must then decide nothing, rather than treat the signer as
-unknown.
+Answers are cached per DID, including "no such DID": a 404 or any other definitive 4xx. How
+long an answer is reused depends on what it is and on the time asked about, so revocations
+near the live tip are seen promptly:
+
+- a lookup at or after `fetched - LIVE_WINDOW_MS` (wall clock of the fetch), or for the
+  current key (`at_ms` None), reuses an answer at most LIVE_MAX_AGE_S old: a revocation
+  published just before or after the fetch must not be missed;
+- "no such DID" and documents without `historyComplete: true` live SHORT_TTL_S;
+- complete documents asked about an earlier time live `cache_ttl_s`.
+
+A registry that cannot be asked (connection error, timeout, 5xx, 408, 429), or replies with
+something that is not an answer about the DID, raises `ResolverUnavailable` and caches
+nothing: callers must then decide nothing, rather than treat the signer as unknown.
 
 Without a `base_url` DID resolution is disabled: only `did:key` and `offline_docs` DIDs
 resolve, every other DID is unknown (None), never an outage. DIDs longer than
@@ -122,6 +130,18 @@ def _pick(reply: dict | None, kid: str, at_ms: int | None) -> KeyInfo | None:
 
 
 _MISS = object()
+LIVE_WINDOW_MS = 2000  # at_ms this close to the fetch (or later) asks about the live tip
+LIVE_MAX_AGE_S = 3.0
+SHORT_TTL_S = 5.0  # "no such DID", and documents whose history is incomplete
+
+
+class _Entry:
+    __slots__ = ("fetched", "fetched_wall_ms", "value")
+
+    def __init__(self, fetched: float, fetched_wall_ms: int, value: dict | None) -> None:
+        self.fetched = fetched  # monotonic clock when the request was sent
+        self.fetched_wall_ms = fetched_wall_ms  # wall clock (epoch ms) at the same moment
+        self.value = value
 
 
 class DidResolver:
@@ -136,6 +156,7 @@ class DidResolver:
         http: httpx.Client | None = None,
         ahttp: httpx.AsyncClient | None = None,
         clock: Callable[[], float] = time.monotonic,
+        wall_clock: Callable[[], float] = time.time,
     ) -> None:
         self.base_url = base_url.rstrip("/") if base_url else None
         self._ttl = cache_ttl_s
@@ -145,7 +166,8 @@ class DidResolver:
         self._http = http
         self._ahttp = ahttp
         self._clock = clock
-        self._cache: OrderedDict[str, tuple[float, dict | None]] = OrderedDict()
+        self._wall_clock = wall_clock
+        self._cache: OrderedDict[str, _Entry] = OrderedDict()
         self._lock = threading.Lock()
         # "ok" / "unreachable" after the last registry exchange; None before any.
         self.status: str | None = None
@@ -161,40 +183,44 @@ class DidResolver:
         parts = _split(kid)
         if parts is None:
             return None
-        return _pick(self.doc(parts[0]), parts[1], at_ms)
+        return _pick(self.doc(parts[0], at_ms), parts[1], at_ms)
 
     async def aresolve_kid(self, kid: str, at_ms: int | None = None) -> KeyInfo | None:
         parts = _split(kid)
         if parts is None:
             return None
-        return _pick(await self.adoc(parts[0]), parts[1], at_ms)
+        return _pick(await self.adoc(parts[0], at_ms), parts[1], at_ms)
 
-    def doc(self, did: str) -> dict | None:
-        """The resolve reply for `did` (a DID snapshot), or None if the DID does not exist."""
-        local = self._local(did)
+    def doc(self, did: str, at_ms: int | None = None) -> dict | None:
+        """The resolve reply for `did` (a DID snapshot), or None if the DID does not exist.
+        `at_ms` is the time the caller reads the document at (None: now); it decides whether
+        a cached reply is fresh enough."""
+        local = self._local(did, at_ms)
         if local is not _MISS:
             return local  # type: ignore[return-value]
         if self._http is None:
             self._http = httpx.Client(timeout=self._timeout)
+        sent = self._now()
         try:
             resp = self._http.get(self._url(did), timeout=self._timeout)
         except httpx.HTTPError as exc:
             self.status = "unreachable"
             raise ResolverUnavailable(f"resolver unreachable: {exc}") from exc
-        return self._accept(did, resp)
+        return self._accept(did, resp, sent)
 
-    async def adoc(self, did: str) -> dict | None:
-        local = self._local(did)
+    async def adoc(self, did: str, at_ms: int | None = None) -> dict | None:
+        local = self._local(did, at_ms)
         if local is not _MISS:
             return local  # type: ignore[return-value]
         if self._ahttp is None:
             self._ahttp = httpx.AsyncClient(timeout=self._timeout)
+        sent = self._now()
         try:
             resp = await self._ahttp.get(self._url(did), timeout=self._timeout)
         except httpx.HTTPError as exc:
             self.status = "unreachable"
             raise ResolverUnavailable(f"resolver unreachable: {exc}") from exc
-        return self._accept(did, resp)
+        return self._accept(did, resp, sent)
 
     async def aclose(self) -> None:
         if self._ahttp is not None:
@@ -214,7 +240,19 @@ class DidResolver:
             return False
         return did.startswith(_KEY_PREFIX) or did in self._offline or self.base_url is not None
 
-    def _local(self, did: str) -> object:
+    def _now(self) -> tuple[float, int]:
+        return self._clock(), int(self._wall_clock() * 1000)
+
+    def _fresh(self, entry: _Entry, at_ms: int | None) -> bool:
+        """Whether a cached reply may answer a lookup about `at_ms` (None: now)."""
+        value = entry.value
+        complete = isinstance(value, dict) and value.get("historyComplete") is True
+        ttl = self._ttl if complete else min(self._ttl, SHORT_TTL_S)
+        if at_ms is None or at_ms >= entry.fetched_wall_ms - LIVE_WINDOW_MS:
+            ttl = min(ttl, LIVE_MAX_AGE_S)  # near the live tip: revocations must show up
+        return self._clock() - entry.fetched < ttl
+
+    def _local(self, did: str, at_ms: int | None = None) -> object:
         """A reply known without asking the registry, or _MISS."""
         if not isinstance(did, str) or len(did) > MAX_DID_LENGTH or not DID_RE.fullmatch(did):
             return None
@@ -224,14 +262,14 @@ class DidResolver:
             return _did_key_reply(did)
         with self._lock:
             hit = self._cache.get(did)
-            if hit is not None and self._clock() - hit[0] < self._ttl:
+            if hit is not None and self._fresh(hit, at_ms):
                 self._cache.move_to_end(did)
-                return copy.deepcopy(hit[1])
+                return copy.deepcopy(hit.value)
         if self.base_url is None:
             return None  # resolution disabled: the DID is unknown here, not unreachable
         return _MISS
 
-    def _accept(self, did: str, resp: httpx.Response) -> dict | None:
+    def _accept(self, did: str, resp: httpx.Response, sent: tuple[float, int]) -> dict | None:
         code = resp.status_code
         if 400 <= code < 500 and code not in (408, 429):
             value = None  # the registry says it has no such DID (or refuses this one for good)
@@ -249,7 +287,9 @@ class DidResolver:
             raise ResolverUnavailable(f"resolver answered HTTP {resp.status_code} for {did}")
         self.status = "ok"
         with self._lock:
-            self._cache[did] = (self._clock(), value)
+            # Stamped with the time the request was sent: the reply may miss anything
+            # published while it was in flight.
+            self._cache[did] = _Entry(sent[0], sent[1], value)
             self._cache.move_to_end(did)
             while len(self._cache) > self._cache_size:
                 self._cache.popitem(last=False)

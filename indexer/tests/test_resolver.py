@@ -26,12 +26,28 @@ def reply(*keys: dict, did: str = DID) -> dict:
     return {"doc": {"id": did}, "version": "7", "keys": list(keys), "historyComplete": True}
 
 
+WALL0 = 1_790_000_000.0  # wall clock (epoch s) when Clock.t == 0
+
+
 class Clock:
+    """Monotonic clock for the resolver; `wall` is the wall clock moving with it."""
+
     def __init__(self) -> None:
         self.t = 1000.0
 
     def __call__(self) -> float:
         return self.t
+
+    def wall(self) -> float:
+        return WALL0 + self.t
+
+    def wall_ms(self) -> int:
+        return int(self.wall() * 1000)
+
+
+def clocked(**kw) -> tuple[DidResolver, Clock]:
+    clock = Clock()
+    return DidResolver(BASE, clock=clock, wall_clock=clock.wall, **kw), clock
 
 
 @respx.mock(assert_all_called=False)
@@ -50,29 +66,124 @@ def test_did_key_resolves_offline():
 
 
 @respx.mock
-def test_http_called_once_within_ttl():
+def test_historical_lookups_reuse_a_complete_document_for_the_ttl():
     route = respx.get(URL).mock(return_value=httpx.Response(200, json=reply(entry(NEW, None))))
-    clock = Clock()
-    r = DidResolver(BASE, cache_ttl_s=60, clock=clock)
-    assert r.resolve_kid(KID).ed25519_public == pub(NEW)
+    r, clock = clocked(cache_ttl_s=60)
+    past = clock.wall_ms() - 3_600_000  # an hour before the fetch: catching up
+    assert r.resolve_kid(KID, at_ms=past).ed25519_public == pub(NEW)
     clock.t += 59
-    assert r.resolve_kid(KID).ed25519_public == pub(NEW)
-    assert r.doc(DID)["version"] == "7"
+    assert r.resolve_kid(KID, at_ms=past).ed25519_public == pub(NEW)
+    assert r.doc(DID, at_ms=past)["version"] == "7"
     assert route.call_count == 1
     clock.t += 2
-    r.resolve_kid(KID)
+    r.resolve_kid(KID, at_ms=past)
     assert route.call_count == 2
     assert r.status == "ok"
 
 
 @respx.mock
+@pytest.mark.parametrize("live", ["now", "at_fetch", "window_edge", "future"])
+def test_lookups_near_the_live_tip_refetch_after_3s(live):
+    route = respx.get(URL).mock(return_value=httpx.Response(200, json=reply(entry(NEW, None))))
+    r, clock = clocked(cache_ttl_s=60)
+    fetched = clock.wall_ms()
+    at_ms = {"now": None, "at_fetch": fetched, "window_edge": fetched - 2000,
+             "future": fetched + 5000}[live]
+    r.resolve_kid(KID, at_ms=at_ms)
+    clock.t += 2.9
+    r.resolve_kid(KID, at_ms=at_ms)
+    assert route.call_count == 1
+    clock.t += 0.2
+    r.resolve_kid(KID, at_ms=at_ms)
+    assert route.call_count == 2
+
+
+@respx.mock
+def test_a_historical_fetch_does_not_serve_the_live_tip_for_long():
+    """Fetched while catching up, then asked about the tip: older than 3 s is a miss."""
+    route = respx.get(URL).mock(return_value=httpx.Response(200, json=reply(entry(NEW, None))))
+    r, clock = clocked(cache_ttl_s=60)
+    r.resolve_kid(KID, at_ms=clock.wall_ms() - 3_600_000)
+    clock.t += 1
+    r.resolve_kid(KID, at_ms=clock.wall_ms() - 2500)  # 1.5 s before the fetch: live
+    assert route.call_count == 1
+    clock.t += 2.5
+    r.resolve_kid(KID, at_ms=clock.wall_ms() - 1000)
+    assert route.call_count == 2
+    # Just outside the window of the new fetch, a complete document is still historical.
+    clock.t += 30
+    r.resolve_kid(KID, at_ms=clock.wall_ms() - 30_000 - 2001)
+    assert route.call_count == 2
+
+
+@respx.mock
+def test_revocation_near_the_tip_is_seen_promptly():
+    tip_ms = int(WALL0 * 1000) + 1_000_000
+    route = respx.get(URL).mock(return_value=httpx.Response(200, json=reply(entry(NEW, None))))
+    r, clock = clocked(cache_ttl_s=60)
+    clock.t = (tip_ms - int(WALL0 * 1000)) / 1000  # the wall clock reads the tip's time
+    assert r.resolve_kid(KID, at_ms=tip_ms).revoked_at_ms is None
+    route.mock(return_value=httpx.Response(200, json=reply(entry(NEW, tip_ms + 1500))))
+    clock.t += 3.5
+    info = r.resolve_kid(KID, at_ms=tip_ms + 1000)
+    assert info.revoked_at_ms == tip_ms + 1500
+    assert route.call_count == 2
+
+
+@respx.mock
+@pytest.mark.parametrize(
+    "response",
+    [
+        httpx.Response(404, json={"error": "not found"}),
+        httpx.Response(200, json={**reply(entry(NEW, None)), "historyComplete": False}),
+        httpx.Response(200, json={k: v for k, v in reply(entry(NEW, None)).items()
+                                  if k != "historyComplete"}),
+    ],
+)
+def test_negative_and_incomplete_answers_live_5s(response):
+    route = respx.get(URL).mock(return_value=response)
+    r, clock = clocked(cache_ttl_s=60)
+    past = clock.wall_ms() - 3_600_000
+    r.resolve_kid(KID, at_ms=past)
+    clock.t += 4.9
+    r.resolve_kid(KID, at_ms=past)
+    assert route.call_count == 1
+    clock.t += 0.2
+    r.resolve_kid(KID, at_ms=past)
+    assert route.call_count == 2
+
+
+@respx.mock
+def test_cache_entry_is_stamped_when_the_request_is_sent():
+    """A slow reply is as old as its request: it may miss what was published meanwhile."""
+    r, clock = clocked(cache_ttl_s=60)
+
+    def slow(_request):
+        clock.t += 2.5
+        return httpx.Response(200, json=reply(entry(NEW, None)))
+
+    route = respx.get(URL).mock(side_effect=slow)
+    r.resolve_kid(KID)
+    clock.t += 0.6  # 0.6 s after the reply, 3.1 s after the request
+    r.resolve_kid(KID)
+    assert route.call_count == 2
+
+
+@respx.mock
 async def test_async_lookup_shares_the_cache():
     route = respx.get(URL).mock(return_value=httpx.Response(200, json=reply(entry(NEW, None))))
-    r = DidResolver(BASE)
+    r, clock = clocked()
     assert (await r.aresolve_kid(KID)).ed25519_public == pub(NEW)
     assert r.resolve_kid(KID).ed25519_public == pub(NEW)
     assert (await r.adoc(DID))["doc"]["id"] == DID
     assert route.call_count == 1
+    clock.t += 10  # too old for the live tip, fine for an hour ago
+    past = clock.wall_ms() - 3_600_000
+    await r.aresolve_kid(KID, at_ms=past)
+    assert r.resolve_kid(KID, at_ms=past) is not None
+    assert route.call_count == 1
+    await r.adoc(DID)
+    assert route.call_count == 2
 
 
 @respx.mock
