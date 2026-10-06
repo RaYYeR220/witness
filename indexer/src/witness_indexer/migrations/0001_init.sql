@@ -88,8 +88,8 @@ CREATE UNIQUE INDEX alerts_dedupe
 
 CREATE TABLE anchors (
     seq             bigint PRIMARY KEY,
-    from_ms         integer NOT NULL,
-    to_ms           integer NOT NULL,
+    from_ms         bigint NOT NULL,
+    to_ms           bigint NOT NULL,
     ms_root         bytea,
     checkpoint      jsonb,
     checkpoint_hash bytea,

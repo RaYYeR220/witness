@@ -370,3 +370,29 @@ async def test_incident_events_ordered_by_time(store: Store):
     await store.attach_incident_event(iid, bid(1), "late")
     await store.attach_incident_event(iid, bid(2), "early")
     assert [e["role"] for e in (await store.incident(iid))["events"]] == ["early", "late"]
+
+
+async def test_child_task_cannot_use_pinned_connection(store: Store):
+    async with store.transaction():
+        await store.put_message(row(1))
+        with pytest.raises(RuntimeError, match="pinned to another task"):
+            await asyncio.create_task(store.stats())
+        with pytest.raises(RuntimeError):
+            await asyncio.gather(store.stats())
+    assert (await store.stats())["messages"] == 1
+
+
+async def test_confirmation_keeps_stronger_values(store: Store):
+    first = row(1, ms_index=None, wf_index=None, ts=0, verdict="RELAY_ATTESTED", nonce="n",
+                iat=7, received_at_ms=100)
+    await store.put_message(first)
+    weak = row(1, ms_index=3, wf_index=0, ts=0, verdict=None, nonce=None, iat=None)
+    assert await store.put_message(weak) == "confirmed"
+    m = await store.get_message(bid(1))
+    assert (m["verdict"], m["nonce"], m["iat"], m["ts"]) == ("RELAY_ATTESTED", "n", 7, 0)
+    assert m["confirmed_at_ms"] is None and m["ms_index"] == 3
+    await store.put_message(row(2, ms_index=None, wf_index=None, verdict="RELAY_ATTESTED"))
+    forged = row(2, ms_index=4, wf_index=1, ts=50, verdict="FORGED")
+    assert await store.put_message(forged) == "confirmed"
+    m2 = await store.get_message(bid(2))
+    assert m2["verdict"] == "FORGED" and m2["confirmed_at_ms"] == 50_000

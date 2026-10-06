@@ -6,13 +6,14 @@ emit an event only for genuinely new data. Reads return plain dicts; bytea colum
 
 from __future__ import annotations
 
+import asyncio
 import base64
 import json
 import time
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 from contextvars import ContextVar
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Literal
 
@@ -24,7 +25,9 @@ from psycopg_pool import AsyncConnectionPool
 
 from .events import NOTIFY_CHANNEL
 
-EMIT_LOCK = 7_700_001
+# (store, connection, owning task) of the active Store.transaction(), if any.
+_PIN: ContextVar[tuple[Any, psycopg.AsyncConnection, asyncio.Task | None] | None] = ContextVar(
+    "witness_store_tx", default=None)
 MIGRATIONS_DIR = Path(__file__).parent / "migrations"
 
 LIFECYCLE_STATUSES = frozenset({
@@ -56,7 +59,7 @@ class MessageRow:
     tag: str | None = None
     kind: str | None = None
     data: bytes | None = None
-    json: dict | None = field(default_factory=dict)
+    json: dict | None = None
     ie_id: str | None = None
     canon_hash: bytes | None = None
     iss: str | None = None
@@ -146,8 +149,6 @@ class Store:
         self._pool = pool
         self.dsn = dsn
         self.schema = schema
-        self._tx: ContextVar[psycopg.AsyncConnection | None] = ContextVar(
-            f"witness_tx_{id(self)}", default=None)
 
     @classmethod
     async def open(cls, dsn: str, *, schema: str = "witness") -> Store:
@@ -177,9 +178,17 @@ class Store:
 
     # -- plumbing ---------------------------------------------------------------------------
 
+    def _pinned(self) -> psycopg.AsyncConnection | None:
+        pin = _PIN.get()
+        if pin is None or pin[0] is not self:
+            return None
+        if pin[2] is not asyncio.current_task():
+            raise RuntimeError("store connection pinned to another task")
+        return pin[1]
+
     @asynccontextmanager
     async def _conn(self) -> AsyncIterator[psycopg.AsyncConnection]:
-        pinned = self._tx.get()
+        pinned = self._pinned()
         if pinned is not None:
             yield pinned
         else:
@@ -188,16 +197,22 @@ class Store:
 
     @asynccontextmanager
     async def transaction(self) -> AsyncIterator[None]:
-        """Run every store call made in this task inside one database transaction."""
-        if self._tx.get() is not None:
-            yield  # nested: join the outer transaction
+        """Run every store call made by the current task inside one database transaction.
+
+        The connection is pinned to the task that opened the block. Child tasks (create_task,
+        gather, TaskGroup) inherit the context but must not share the connection, so a store
+        call from one raises RuntimeError. A nested call in the same task joins the outer
+        transaction.
+        """
+        if self._pinned() is not None:
+            yield
             return
         async with self._pool.connection() as c, c.transaction():
-            token = self._tx.set(c)
+            token = _PIN.set((self, c, asyncio.current_task()))
             try:
                 yield
             finally:
-                self._tx.reset(token)
+                _PIN.reset(token)
 
     async def _fetch(self, query: str, params: tuple | list = ()) -> list[dict]:
         async with self._conn() as c:
@@ -286,17 +301,18 @@ class Store:
                 COALESCE(%(received_at_ms)s, (SELECT received_at_ms FROM submissions
                     WHERE block_id = %(block_id)s)),
                 COALESCE(%(confirmed_at_ms)s,
-                    CASE WHEN %(ms_index)s::bigint IS NOT NULL THEN %(ts)s::bigint * 1000 END,
+                    CASE WHEN %(ms_index)s::bigint IS NOT NULL AND %(ts)s::bigint > 0
+                         THEN %(ts)s::bigint * 1000 END,
                     (SELECT min(at_ms) FROM lifecycle
                      WHERE block_id = %(block_id)s AND status = 'CONFIRMED')))
             ON CONFLICT (block_id) DO UPDATE SET
                 ms_index = excluded.ms_index,
                 wf_index = excluded.wf_index,
-                ts = excluded.ts,
-                verdict = excluded.verdict,
-                iat = excluded.iat,
-                nonce = excluded.nonce,
-                confirmed_at_ms = excluded.ts * 1000
+                ts = CASE WHEN excluded.ts > 0 THEN excluded.ts ELSE messages.ts END,
+                verdict = COALESCE(excluded.verdict, messages.verdict),
+                iat = COALESCE(excluded.iat, messages.iat),
+                nonce = COALESCE(excluded.nonce, messages.nonce),
+                confirmed_at_ms = COALESCE(excluded.confirmed_at_ms, messages.confirmed_at_ms)
             WHERE messages.ms_index IS NULL AND excluded.ms_index IS NOT NULL
             RETURNING (xmax = 0) AS inserted
         """
@@ -415,10 +431,13 @@ class Store:
     # -- events -----------------------------------------------------------------------------
 
     async def emit(self, type: str, payload: dict) -> int:
+        """Append an event and NOTIFY. The per-schema emit lock is held until the surrounding
+        transaction ends, so inside Store.transaction() call emit last."""
         async with self._conn() as c, c.transaction():
             # Serialise emitters so id allocation order equals commit order; a reader that
             # polls events_after() can then never skip an id that commits late.
-            await c.execute("SELECT pg_advisory_xact_lock(%s)", (EMIT_LOCK,))
+            await c.execute("SELECT pg_advisory_xact_lock(hashtext(%s))",
+                            (f"{self.schema}:emit",))
             cur = await c.execute(
                 "INSERT INTO events (type, payload, ts) VALUES (%s,%s,%s) RETURNING id",
                 (type, Jsonb(payload), _now_ms()))
@@ -648,5 +667,5 @@ class Store:
         inc["events"] = await self._fetch(
             "SELECT e.block_id, e.role FROM incident_events e "
             "LEFT JOIN messages m ON m.block_id = e.block_id WHERE e.incident_id = %s "
-            "ORDER BY m.ts NULLS LAST, e.attached_at_ms, e.block_id", (id,))
+            "ORDER BY COALESCE(m.received_at_ms, m.confirmed_at_ms, m.ts * 1000) NULLS LAST, e.attached_at_ms, e.block_id", (id,))
         return inc
