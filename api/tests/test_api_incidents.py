@@ -29,7 +29,7 @@ def hx(b: bytes) -> str:
 
 async def test_engine_incident_through_the_api(client, store):
     engine = IncidentEngine(store, None, IncidentConfig())
-    base, drop = score(0.9, ms=10), score(0.4, ms=11, verdict=V.RELAY_ATTESTED)
+    base, drop = score(0.9, ms=10), score(0.4, ms=11)
     forged, recovered = score(0.99, ms=12, verdict=V.FORGED), score(0.95, ms=13)
     await store.put_submission(Submission(
         sub_id="sub-drop", source="mqtt", received_at_ms=drop.ts * 1000 - 500,
@@ -58,7 +58,7 @@ async def test_engine_incident_through_the_api(client, store):
     detail = r.json()
     events = detail["events"]
     assert [(e["blockId"], e["role"], e["verdict"], e["status"]) for e in events] == [
-        (hx(drop.block_id), "trigger", V.RELAY_ATTESTED, "CONTENT_VERIFIED"),
+        (hx(drop.block_id), "trigger", V.PRODUCER_SIGNED, "CONTENT_VERIFIED"),
         (hx(forged.block_id), "alert", V.FORGED, "CONFIRMED"),
         (hx(recovered.block_id), "remediation", V.PRODUCER_SIGNED, "CONFIRMED"),
     ]

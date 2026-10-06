@@ -323,6 +323,65 @@ async def test_relay_routed_unsigned_events_may_open(store, engine):
     assert inc["status"] == "open"
 
 
+async def test_r4_unsigned_score_cannot_open_a_drop(store, engine):
+    # unsigned on a tag whose policy requires signatures: the rules raise UNSIGNED, and the
+    # relay forwarding it does not make it evidence
+    await feed(store, engine, score(0.9, ms=10, ie=IE_Y))
+    fake = score(0.1, ms=11, ie=IE_Y, verdict=V.UNSIGNED_LEGACY)
+    assert await feed(store, engine, fake, submitted=True, alerts=("UNSIGNED",)) == []
+    await engine.periodic(now_ms=(T0 + 400) * 1000)
+    assert await store.incidents() == []
+
+
+async def test_relayed_all_clear_is_no_remediation(store, engine):
+    await feed(store, engine, score(0.9, ms=10))
+    assert actions(await feed(store, engine, score(0.4, ms=11))) == ["opened"]
+    ok = so_error("0", ms=12, verdict=V.UNSIGNED_LEGACY)
+    assert await feed(store, engine, ok, submitted=True) == []
+    assert actions(await feed(store, engine, so_error("0", ms=13))) == ["attached"]
+    [inc] = await store.incidents()
+    roles = [e["role"] for e in (await engine.timeline(inc["id"]))["events"]]
+    assert roles == ["trigger", "remediation"]
+
+
+async def test_relay_attested_score_never_closes(store, engine):
+    await feed(store, engine, score(0.9, ms=10))
+    assert actions(await feed(store, engine, score(0.4, ms=11))) == ["opened"]
+    assert await feed(store, engine, score(0.95, ms=12, verdict=V.RELAY_ATTESTED)) == []
+    [inc] = await store.incidents()
+    assert (inc["status"], inc["low_score"]) == ("open", 0.4)
+    assert actions(await feed(store, engine, score(0.95, ms=13))) == ["attached", "closed"]
+
+
+async def test_relayed_triggers_open_and_join_but_never_shape(store, engine):
+    await feed(store, engine, score(0.9, ms=10, ie=IE_Y))
+    drop = score(0.3, ms=11, ie=IE_Y, verdict=V.RELAY_ATTESTED)
+    assert actions(await feed(store, engine, drop)) == ["opened"]
+    [inc] = await store.incidents()
+    assert (inc["baseline_score"], inc["low_score"], inc["keys"]) == (None, None, [f"ie:{IE_Y}"])
+    # a relayed LLO failure on a component Orion places on X joins X's incident without
+    # adding its component to the keys
+    await feed(store, engine, score(0.9, ms=10))
+    assert actions(await feed(store, engine, score(0.4, ms=11))) == ["opened"]
+    failed = llo("Service component failed", ms=12, verdict=V.RELAY_ATTESTED)
+    assert actions(await feed(store, engine, failed)) == ["attached"]
+    x = next(i for i in await store.incidents() if i["ie_id"] == IE_X)
+    assert x["keys"] == [f"ie:{IE_X}"]
+
+
+async def test_relayed_traffic_cannot_keep_an_incident_open(store, engine):
+    opened_s = T0 + 330
+    first = so_error("restart", ms=11, verdict=V.RELAY_ATTESTED)
+    assert actions(await feed(store, engine, first)) == ["opened"]
+    for i, delay in enumerate((480, 960, 1150)):  # each within a window of the last one
+        r = so_error("restart", ms=12 + i, verdict=V.RELAY_ATTESTED, ts=opened_s + delay)
+        assert actions(await feed(store, engine, r)) == ["attached"]
+    [inc] = await store.incidents()
+    assert inc["last_event_ms"] == opened_s * 1000 + 600_000  # one window past the opening
+    assert actions(await engine.periodic(now_ms=opened_s * 1000 + 600_000 + 1_800_001)) == [
+        "closed"]
+
+
 async def test_self_orchestrator_error_alone_closes_only_when_quiet(store, engine):
     await feed(store, engine, score(0.9, ms=10))
     assert actions(await feed(store, engine, so_error(503, ms=11))) == ["opened"]

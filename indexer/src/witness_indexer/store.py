@@ -910,15 +910,17 @@ class Store:
                            ie_id: str | None = None, status: str = "open",
                            closed_at_ms: int | None = None, keys: list[str] | None = None,
                            last_event_ms: int | None = None,
+                           anchor_ms: int | None = None,
                            baseline_score: float | None = None,
                            baseline_block_id: bytes | None = None,
                            low_score: float | None = None) -> int:
         rows = await self._fetch(
             "INSERT INTO incidents (opened_at_ms, closed_at_ms, ie_id, severity, title, status, "
-            "keys, last_event_ms, baseline_score, baseline_block_id, low_score, updated_at_ms) "
-            "VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s) RETURNING id",
+            "keys, last_event_ms, anchor_ms, baseline_score, baseline_block_id, low_score, "
+            "updated_at_ms) VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s) RETURNING id",
             (opened_at_ms, closed_at_ms, ie_id, severity, title, status, keys or [],
-             opened_at_ms if last_event_ms is None else last_event_ms, baseline_score,
+             opened_at_ms if last_event_ms is None else last_event_ms,
+             opened_at_ms if anchor_ms is None else anchor_ms, baseline_score,
              baseline_block_id, low_score, _now_ms()))
         return rows[0]["id"]
 
@@ -932,7 +934,7 @@ class Store:
             (incident_id, block_id, role, _now_ms(), at_ms, _jb(detail)))
 
     _INCIDENT_FIELDS = frozenset({
-        "severity", "title", "ie_id", "keys", "last_event_ms", "baseline_score",
+        "severity", "title", "ie_id", "keys", "last_event_ms", "anchor_ms", "baseline_score",
         "baseline_block_id", "low_score"})
 
     async def update_incident(self, id: int, **fields: Any) -> None:
@@ -1008,6 +1010,35 @@ class Store:
             "WHERE e.incident_id = %s ORDER BY COALESCE(e.at_ms, m.received_at_ms, "
             "m.confirmed_at_ms, m.ts * 1000) NULLS LAST, e.attached_at_ms, e.block_id",
             (incident_id,))
+
+    async def block_alert_rules(self, block_id: bytes) -> set[str]:
+        """The rules of every alert raised on a block."""
+        rows = await self._fetch("SELECT DISTINCT rule FROM alerts WHERE block_id = %s",
+                                 (block_id,))
+        return {r["rule"] for r in rows}
+
+    async def trusted_previous_score(self, ie_id: str, *, relayed: bool,
+                                     before: tuple[int, int] | None,
+                                     exclude_block_id: bytes) -> dict | None:
+        """The IE's confirmed trust.score just before position `before` (ms_index, wf_index),
+        or its latest when `before` is None, among producer-signed scores, plus (`relayed`)
+        relay-attested ones and unsigned ones a submission names; never one with an UNSIGNED
+        or SHADOW alert. block_id, score, ts, ms_index."""
+        cond, args = "", [ie_id, exclude_block_id, relayed]
+        if before is not None:
+            cond = "AND (ms_index, COALESCE(wf_index, 0)) < (%s, %s)"
+            args += list(before)
+        return await self._one(
+            "SELECT block_id, (json->>'score')::float8 AS score, ts, ms_index FROM messages m "
+            "WHERE ie_id = %s AND kind = 'trust.score' AND block_id <> %s "
+            f"AND ms_index IS NOT NULL AND {_SCORE_OK} "
+            "AND (verdict = 'PRODUCER_SIGNED' OR (%s AND (verdict = 'RELAY_ATTESTED' "
+            " OR (verdict = 'UNSIGNED_LEGACY' AND EXISTS (SELECT 1 FROM submissions s "
+            "  WHERE s.block_id = m.block_id))))) "
+            "AND NOT EXISTS (SELECT 1 FROM alerts a WHERE a.block_id = m.block_id "
+            " AND a.rule IN ('UNSIGNED', 'SHADOW')) "
+            f"{cond} ORDER BY ms_index DESC, COALESCE(wf_index, 0) DESC, block_id DESC LIMIT 1",
+            args)
 
     async def alerts_after(self, after_id: int, severities: list[str],
                            limit: int) -> list[dict]:

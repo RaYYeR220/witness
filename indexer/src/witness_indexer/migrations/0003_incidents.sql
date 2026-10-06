@@ -1,6 +1,8 @@
 -- Incident Explorer: the correlation state each incident carries.
 --   keys           what the incident is about: 'ie:<IE id>', 'sc:<service component>', 'ledger'
 --   last_event_ms  time of its latest event (correlation window, quiet close)
+--   anchor_ms      time of its latest proven or witnessed event (or its opening): relayed
+--                  events move last_event_ms at most one window past it
 --   baseline_*     the IE's last proven trust score before the incident, then the one its
 --                  first trust drop fell from (the recovery target)
 --   low_score      the lowest trusted score since its first trust drop (none: no drop yet)
@@ -8,6 +10,7 @@
 ALTER TABLE incidents
     ADD COLUMN keys              text[] NOT NULL DEFAULT '{}',
     ADD COLUMN last_event_ms     bigint,
+    ADD COLUMN anchor_ms         bigint,
     ADD COLUMN baseline_score    double precision,
     ADD COLUMN baseline_block_id bytea,
     ADD COLUMN low_score         double precision,

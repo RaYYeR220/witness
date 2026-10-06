@@ -7,11 +7,13 @@ running on it. The engine groups them into incidents.
 
 Triggers (a message or alert that may open an incident):
 
-- a `trust.score` that drops by at least `drop_threshold` below the IE's previous PROVEN score;
+- a `trust.score` that drops by at least `drop_threshold` below the IE's previous score (the
+  previous proven one for a proven score, the previous proven or relayed one for a relayed
+  score);
 - a `self-orchestrator` message with a non-zero, non-empty `errorCode`;
 - an LLO (`LLO-K8s` / `LLO-Docker`) "Service component failed";
 - a message on one of `security_tags` naming an IE (e.g. `self-security`);
-- a critical or high alert on a trusted block (CHAIN_FORK, ...);
+- a critical or high alert on a proven or relayed block (CHAIN_FORK, ...);
 - a witnessed attack (`ATTACK_RULES`: FORGED, REPLAY, UNAUTHORIZED_WRITER, REVOKED_KEY at
   critical/high) on a message that names an IE, directly or through its service component:
   a forgery attempt shows up as an incident on the IE it targets. Without an IE it stays an
@@ -27,13 +29,22 @@ comes from Orion's ServiceComponent entities (fetched only outside a database tr
 2 s budget, cached), else the component id alone is the key. The LLO's k8s resource name
 (`urn-ngsi-ld-service-<id>-component-<name>`) and the Orion entity id are lined up.
 
-Trust: what a message claims counts only if it is PROVEN (producer-signed or relay-attested)
-or relay-routed unsigned (a submission names the block), without a SHADOW alert. Only such
-messages open incidents from their content, add keys to one or close it. Anything else
-(FORGED, REPLAY, written around the relay, ...) joins as `alert` evidence; it is an incident
-only through the alert Witness raised about it (above), which can open and prolong one but
-never reshapes, remediates or closes it: an attacker can neither write a closure nor
-fabricate a trust drop, an orchestrator error or a failed deployment.
+Trust: every block is judged at one of three levels.
+
+- proven: PRODUCER_SIGNED, with no UNSIGNED or SHADOW alert on the block. Only proven events
+  shape an incident: set its baseline and low score, add correlation keys or its IE, act as
+  `remediation`, and close it on recovery.
+- relayed: RELAY_ATTESTED, or UNSIGNED_LEGACY with a submission from the Messages API, and no
+  UNSIGNED or SHADOW alert. Submission records come from an unauthenticated broker and the
+  relay accepts anyone inside the cluster, so a relayed event may open an incident or join
+  one as a trigger (stock aeriOS components write unsigned through the relay, and a false
+  alarm beats a missed one) but never shapes, remediates or closes it, and moves its latest
+  event at most one window past the incident's last proven activity, so relayed traffic
+  cannot keep an incident open.
+- untrusted: anything else (FORGED, REPLAY, written around the relay, R4 UNSIGNED, ...). It
+  joins an open incident as `alert` evidence only; it is an incident only through the alert
+  Witness raised about it (above), which can open and prolong one but never reshapes,
+  remediates or closes it.
 
 Every event carries its block id and a role: `trigger` (the event that opened the incident),
 `trust-drop`, `security`, `deployment` (LLO reports), `remediation` (a cleared self-
@@ -85,8 +96,8 @@ from witness_core.ids import to_hex
 
 from . import events
 from .orion import OrionClient, ie_id_of
-from .rules import PROVEN, _clean_text
 from .rules import _clean as _clean_value
+from .rules import _clean_text
 from .store import Alert, MessageRow, Store
 
 __all__ = ["AlertPublisher", "CorrelatedRules", "IncidentConfig", "IncidentEngine",
@@ -130,6 +141,11 @@ PUBLISH_CURSOR = "incidents.mqtt_cursor"
 # Alerts are re-read this many ids behind the cursor: an alert whose transaction commits
 # after a later one would otherwise be skipped.
 ALERT_LOOKBACK = 50
+PROVEN = "proven"
+RELAYED = "relayed"
+UNTRUSTED = "untrusted"
+# Alerts that take a block's content out of evidence whatever its verdict.
+DISTRUST_RULES = frozenset({"SHADOW", "UNSIGNED"})
 TITLE_MAX = 160
 ID_MAX = 120
 EPS = 1e-9
@@ -249,18 +265,21 @@ class _Obs:
     keys: set[str]
     at_ms: int
     role: str                     # its role when it joins an open incident
-    trusted: bool                 # proven or relay-routed, no SHADOW: may shape an incident
+    level: str                    # PROVEN, RELAYED or UNTRUSTED
     opens: bool = False           # a trigger
-    extends: bool = False         # moves the incident's last event (keeps it from going quiet)
+    witnessed: bool = False       # an attack or integrity alert: Witness's own observation
     severity: str | None = None
     title: str = ""
     ie_id: str | None = None
     detail: dict = field(default_factory=dict)
     score: float | None = None
-    proven_score: bool = False    # a PROVEN trust.score: may close an incident by recovery
     baseline: tuple[float, bytes] | None = None
     position: tuple[int, int] | None = None
     alert: dict | None = None
+
+    @property
+    def proven(self) -> bool:
+        return self.level == PROVEN
 
 
 @dataclass
@@ -425,16 +444,16 @@ class IncidentEngine:
         return step.changes
 
     async def _trust(self, block_id: bytes, verdict: str | None) -> str:
-        """`proven`, `relayed` (unsigned, received through the Messages API) or `untrusted`."""
-        if verdict in PROVEN:
-            level = "proven"
-        elif verdict == V.UNSIGNED_LEGACY and await self.store.submission(block_id=block_id):
-            level = "relayed"
-        else:
-            return "untrusted"
-        if await self.store.has_alert("SHADOW", block_id=block_id):
-            return "untrusted"
-        return level
+        """PROVEN, RELAYED or UNTRUSTED (see the module docstring)."""
+        if verdict not in (V.PRODUCER_SIGNED, V.RELAY_ATTESTED, V.UNSIGNED_LEGACY):
+            return UNTRUSTED
+        if await self.store.block_alert_rules(block_id) & DISTRUST_RULES:
+            return UNTRUSTED
+        if verdict == V.PRODUCER_SIGNED:
+            return PROVEN
+        if verdict == V.RELAY_ATTESTED or await self.store.submission(block_id=block_id):
+            return RELAYED
+        return UNTRUSTED
 
     async def _observe(self, row: MessageRow) -> _Obs | None:
         body = row.json if isinstance(row.json, dict) else None
@@ -454,26 +473,27 @@ class IncidentEngine:
                 return None
         else:
             return None
-        trust = await self._trust(row.block_id, row.verdict)
+        level = await self._trust(row.block_id, row.verdict)
         at = _msg_time(await self.store.get_message(row.block_id)) or _msg_time(row)
-        obs = _Obs(row.block_id, self._keys(ie, sc), at or self._now(), "alert",
-                   trusted=trust != "untrusted", ie_id=ie or self._host(sc),
+        obs = _Obs(row.block_id, self._keys(ie, sc), at or self._now(), "alert", level,
+                   ie_id=ie or self._host(sc),
                    detail={"kind": kind, "tag": row.tag, "verdict": row.verdict,
-                           "trust": trust},
+                           "trust": level},
                    position=None if row.ms_index is None else (row.ms_index, row.wf_index or 0))
-        if not obs.trusted:
+        if level == UNTRUSTED:
             return obs  # evidence only
-        obs.extends = True
         if kind == SCORE_KIND:
-            await self._score_obs(obs, row, ie, value, trust)
-        elif kind == ORCHESTRATOR_KIND:
+            return await self._score_obs(obs, row, ie, value)
+        if kind == ORCHESTRATOR_KIND:
             code = body.get("errorCode")
             obs.detail["errorCode"] = code
             if _is_error(code):
                 obs.role, obs.opens, obs.severity = "security", True, "medium"
                 obs.title = f"Self-orchestrator error {_label(str(code), 40)} on {ie}"
-            else:
+            elif obs.proven:
                 obs.role = "remediation"
+            else:
+                return None  # a relayed all-clear remediates nothing
         elif kind in LLO_KINDS:
             event, host = body.get("event"), self._host(sc)
             obs.role = "deployment"
@@ -487,19 +507,22 @@ class IncidentEngine:
             obs.title = f"Security notification for {ie}"
         return obs
 
-    async def _score_obs(self, obs: _Obs, row: MessageRow, ie: str, value: float,
-                         trust: str) -> None:
+    async def _score_obs(self, obs: _Obs, row: MessageRow, ie: str,
+                         value: float) -> _Obs | None:
+        """A drop (a trigger), a proven routine score (may close by recovery), or nothing."""
         obs.role, obs.score = "score", value
-        obs.proven_score = trust == "proven"
         obs.detail["score"] = value
-        prev = await self.store.previous_score(ie, list(PROVEN), obs.position, row.block_id)
-        if prev is None:
-            return
-        obs.detail.update(previousScore=prev["score"], previousBlockId=_hex(prev["block_id"]))
-        if prev["score"] - value >= self.cfg.drop_threshold - EPS:
-            obs.role, obs.opens, obs.severity = "trust-drop", True, "high"
-            obs.title = f"Trust score of {ie} dropped {prev['score']:.2f} -> {value:.2f}"
-            obs.baseline = (prev["score"], bytes(prev["block_id"]))
+        prev = await self.store.trusted_previous_score(
+            ie, relayed=not obs.proven, before=obs.position, exclude_block_id=row.block_id)
+        if prev is not None:
+            obs.detail.update(previousScore=prev["score"],
+                              previousBlockId=_hex(prev["block_id"]))
+            if prev["score"] - value >= self.cfg.drop_threshold - EPS:
+                obs.role, obs.opens, obs.severity = "trust-drop", True, "high"
+                obs.title = f"Trust score of {ie} dropped {prev['score']:.2f} -> {value:.2f}"
+                obs.baseline = (prev["score"], bytes(prev["block_id"]))
+                return obs
+        return obs if obs.proven else None
 
     def _subject(self, tag: str | None, kind: str | None, ie_id: str | None,
                  body: dict | None) -> tuple[str | None, str | None]:
@@ -543,14 +566,15 @@ class IncidentEngine:
         msg = await self.store.get_message(bid) if bid is not None else None
         rule = str(a["rule"])
         alert_ie = _ident(a["ie_id"]) if isinstance(a["ie_id"], str) and a["ie_id"] else None
-        if rule in INTEGRITY_RULES:
-            trusted = True
+        witnessed = False
+        if rule in INTEGRITY_RULES:  # about the explorer's own records
+            level, witnessed, opens = PROVEN, True, True
             keys = {f"ie:{alert_ie}"} if alert_ie else {LEDGER}
             ie = alert_ie
-            opens = True
         else:
-            trusted = (msg is not None
-                       and await self._trust(bid, msg["verdict"]) != "untrusted")  # type: ignore[arg-type]
+            level = UNTRUSTED
+            if msg is not None and bid is not None:
+                level = await self._trust(bid, msg["verdict"])
             body = msg["json"] if msg is not None and isinstance(msg["json"], dict) else None
             ie, sc = self._subject(msg and msg["tag"], msg and msg["kind"],
                                    alert_ie or (msg and msg["ie_id"]), body)
@@ -558,14 +582,14 @@ class IncidentEngine:
             ie = ie or self._host(sc)
             if not keys:
                 return
-            opens = trusted
-            if not trusted and rule in ATTACK_RULES and ie:
-                keys, opens = {f"ie:{ie}"}, True  # an attack on this IE's record
+            opens = level != UNTRUSTED
+            if level == UNTRUSTED and rule in ATTACK_RULES and ie:
+                # an attack on this IE's record
+                keys, opens, witnessed = {f"ie:{ie}"}, True, True
         label = RULE_TITLES.get(rule, _label(rule, 40))
         where = f"on {ie}" if ie else (f"in block {_hex(bid)[:12]}..." if bid else "")
         obs = _Obs(bid, keys, _msg_time(msg) or _int(a["ts"]) or self._now(), "alert",
-                   trusted=trusted, opens=opens, extends=opens, severity=a["severity"],
-                   ie_id=ie,
+                   level, opens=opens, witnessed=witnessed, severity=a["severity"], ie_id=ie,
                    title=f"{label} {where}".strip() + f" ({rule})" * (label != rule),
                    detail={"rule": rule, "alertId": a["id"],
                            "reason": _clean_value((a["evidence"] or {}).get("reason"))},
@@ -585,9 +609,8 @@ class IncidentEngine:
         if sev != inc["severity"]:
             fields["severity"] = sev
         at = inc.get("event_at_ms")
-        if (a["rule"] in ATTACK_RULES | INTEGRITY_RULES and inc["status"] == OPEN
-                and at is not None and at > (inc["last_event_ms"] or 0)):
-            fields["last_event_ms"] = at
+        if a["rule"] in ATTACK_RULES | INTEGRITY_RULES and inc["status"] == OPEN and at:
+            fields.update(self._extension(inc, at, full=True))
         if fields:
             await self.store.update_incident(inc["id"], **fields)
             inc.update(fields)
@@ -624,19 +647,20 @@ class IncidentEngine:
     async def _baseline(self, ie: str, obs: _Obs) -> tuple[float, bytes] | None:
         if obs.baseline is not None:
             return obs.baseline
-        prev = await self.store.previous_score(ie, list(PROVEN), obs.position,
-                                               obs.block_id or b"")
+        prev = await self.store.trusted_previous_score(
+            ie, relayed=False, before=obs.position, exclude_block_id=obs.block_id or b"")
         return None if prev is None else (prev["score"], bytes(prev["block_id"]))
 
     async def _open(self, obs: _Obs, step: _Step) -> None:
-        base = await self._baseline(obs.ie_id, obs) if obs.ie_id else None
+        base = await self._baseline(obs.ie_id, obs) if obs.ie_id and obs.proven else None
+        low = obs.score if obs.proven and obs.role == "trust-drop" else None
         inc = {"status": OPEN, "severity": obs.severity or "low", "ie_id": obs.ie_id,
                "title": _label(obs.title or "Incident")}
         inc["id"] = await self.store.put_incident(
             opened_at_ms=obs.at_ms, severity=inc["severity"], title=inc["title"],
             ie_id=obs.ie_id, keys=sorted(obs.keys), last_event_ms=obs.at_ms,
-            baseline_score=base and base[0], baseline_block_id=base and base[1],
-            low_score=obs.score if obs.role == "trust-drop" else None)
+            anchor_ms=obs.at_ms, baseline_score=base and base[0],
+            baseline_block_id=base and base[1], low_score=low)
         if obs.block_id is not None:
             await self.store.attach_incident_event(
                 inc["id"], obs.block_id, "trigger", at_ms=obs.at_ms,
@@ -659,9 +683,9 @@ class IncidentEngine:
         sev = _max_sev(inc["severity"], obs.severity)
         if sev != inc["severity"]:
             fields["severity"] = sev
-        if obs.extends and obs.at_ms > (inc["last_event_ms"] or 0):
-            fields["last_event_ms"] = obs.at_ms
-        if obs.trusted:  # what an attacker wrote never shapes an incident
+        if obs.level != UNTRUSTED or obs.witnessed:
+            fields.update(self._extension(inc, obs.at_ms, full=obs.proven or obs.witnessed))
+        if obs.proven:  # only proven content shapes an incident
             keys = set(inc["keys"]) | obs.keys
             if keys != set(inc["keys"]):
                 fields["keys"] = sorted(keys)
@@ -691,24 +715,39 @@ class IncidentEngine:
         elif obs.block_id is None and obs.alert is not None:
             step.changes.append(_change("updated", inc, rule=obs.detail.get("rule")))
 
+    def _extension(self, inc: dict, at: int, *, full: bool) -> dict[str, int]:
+        """How an event at `at` moves the incident's latest event: freely for proven and
+        witnessed events (which also move the anchor), at most one window past the anchor
+        for relayed ones."""
+        fields: dict[str, int] = {}
+        anchor = inc["anchor_ms"] or inc["opened_at_ms"]
+        if full:
+            if at > anchor:
+                fields["anchor_ms"] = at
+        else:
+            at = min(at, anchor + self.cfg.window_ms)
+        if at > (inc["last_event_ms"] or 0):
+            fields["last_event_ms"] = at
+        return fields
+
     async def _recovery(self, obs: _Obs, candidates: list[dict], step: _Step) -> None:
-        """A routine trusted score. An incident that saw a trust drop (`low_score` set) closes
+        """A routine proven score. An incident that saw a trust drop (`low_score` set) closes
         when a PROVEN score is back at the level the first drop fell from; otherwise only how
         low it went is kept."""
         for inc in candidates:
             if f"ie:{obs.ie_id}" not in inc["keys"] or obs.at_ms < inc["opened_at_ms"]:
                 continue
             base, low = inc["baseline_score"], inc["low_score"]
-            if (obs.proven_score and base is not None and low is not None
-                    and obs.score >= base - EPS):
+            if base is not None and low is not None and obs.score >= base - EPS:
                 if await self.store.attach_incident_event(
                         inc["id"], obs.block_id, "remediation", at_ms=obs.at_ms,
                         detail=_clean_value({**obs.detail, "baselineScore": base})):
                     step.attached.add(obs.block_id)
                     step.changes.append(_change("attached", inc, block_id=obs.block_id,
                                                 role="remediation", at_ms=obs.at_ms))
-                await self.store.update_incident(inc["id"], last_event_ms=max(
-                    obs.at_ms, inc["last_event_ms"] or 0))
+                ext = self._extension(inc, obs.at_ms, full=True)
+                if ext:
+                    await self.store.update_incident(inc["id"], **ext)
                 if await self.store.close_incident(inc["id"], CLOSED_RECOVERED,
                                                    closed_at_ms=obs.at_ms,
                                                    closed_by=obs.block_id):
