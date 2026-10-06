@@ -626,6 +626,9 @@ class IncidentEngine:
         if bid is not None:
             holders = await self.store.incidents_with_block(bid)
             if holders:
+                if a["rule"] in DISTRUST_RULES:  # found after the block counted
+                    for inc in holders:
+                        await self._revoke(inc, bid, str(a["rule"]), step)
                 await self._link(holders[0], a, step)
                 return
         msg = await self.store.get_message(bid) if bid is not None else None
@@ -689,6 +692,35 @@ class IncidentEngine:
         if joined_now and "severity" not in fields:
             return
         step.changes.append(_change("updated", inc, block_id=a["block_id"], rule=a["rule"]))
+
+    async def _revoke(self, inc: dict, bid: bytes, rule: str, step: _Step) -> None:
+        """A block an incident counted turned out SHADOW: its event becomes evidence only,
+        an incident it closed reopens, and if it was a proven drop the recovery target and
+        low score are recomputed from the proven drops that remain. Keys and the latest event
+        time are not rewound (they only keep the incident wider and open longer)."""
+        was = await self.store.revoke_incident_event(inc["id"], bid, rule.lower())
+        if was is None:
+            return
+        step.attached.add(bid)  # reported here; the alert's own link needs no second line
+        step.changes.append(_change("revoked", inc, block_id=bid, role=was, rule=rule))
+        closed_by = inc["closed_by"]
+        if (inc["status"] == CLOSED_RECOVERED and closed_by is not None
+                and bytes(closed_by) == bid and await self.store.reopen_incident(inc["id"], bid)):
+            inc.update(status=OPEN, closed_at_ms=None, closed_by=None)
+            step.changes.append(_change("reopened", inc, block_id=bid, rule=rule))
+        detail = inc.get("event_detail") or {}
+        if was == "trust-drop" or (was == "trigger" and detail.get("as") == "trust-drop"):
+            drops = await self.store.incident_proven_drops(inc["id"])
+            scores = [d["detail"].get("score") for d in drops]
+            fields: dict[str, Any] = {"low_score": min(
+                (v for v in scores if isinstance(v, int | float)), default=None)}
+            first = drops[0]["detail"] if drops else {}
+            prev, prev_id = first.get("previousScore"), first.get("previousBlockId")
+            if isinstance(prev, int | float) and isinstance(prev_id, str):
+                fields["baseline_score"] = float(prev)
+                fields["baseline_block_id"] = bytes.fromhex(prev_id.removeprefix("0x"))
+            await self.store.update_incident(inc["id"], **fields)
+            inc.update(fields)
 
     # -- correlation ----------------------------------------------------------------------------
 

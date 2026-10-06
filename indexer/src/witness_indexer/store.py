@@ -974,9 +974,37 @@ class Store:
     async def incidents_with_block(self, block_id: bytes) -> list[dict]:
         """Incidents the block is an event of, open ones first, then newest."""
         return await self._fetch(
-            "SELECT i.*, e.role AS event_role, e.at_ms AS event_at_ms FROM incident_events e "
+            "SELECT i.*, e.role AS event_role, e.at_ms AS event_at_ms, "
+            "e.detail AS event_detail FROM incident_events e "
             "JOIN incidents i ON i.id = e.incident_id WHERE e.block_id = %s "
             "ORDER BY (i.status = 'open') DESC, i.id DESC", (block_id,))
+
+    async def revoke_incident_event(self, incident_id: int, block_id: bytes,
+                                    reason: str) -> str | None:
+        """Turn an event into `alert` evidence, recording why and its former role (returned);
+        None if it was evidence only already."""
+        row = await self._one(
+            "UPDATE incident_events SET role = 'alert', detail = COALESCE(detail, '{}'::jsonb) "
+            "|| jsonb_build_object('revoked', %s::text, 'was', role) "
+            "WHERE incident_id = %s AND block_id = %s AND role <> 'alert' "
+            "RETURNING detail->>'was' AS was", (reason, incident_id, block_id))
+        return None if row is None else row["was"]
+
+    async def reopen_incident(self, id: int, closed_by: bytes) -> bool:
+        """Reopen an incident that `closed_by` closed on recovery; False otherwise."""
+        return await self._insert_like(
+            "UPDATE incidents SET status = 'open', closed_at_ms = NULL, closed_by = NULL, "
+            "updated_at_ms = %s WHERE id = %s AND status = 'closed:recovered' "
+            "AND closed_by = %s", (_now_ms(), id, closed_by))
+
+    async def incident_proven_drops(self, incident_id: int) -> list[dict]:
+        """The incident's proven trust drops that still count, oldest first: block_id, at_ms,
+        detail (score, previousScore, previousBlockId)."""
+        return await self._fetch(
+            "SELECT block_id, at_ms, detail FROM incident_events WHERE incident_id = %s "
+            "AND detail->>'trust' = 'proven' AND detail->>'revoked' IS NULL "
+            "AND (role = 'trust-drop' OR (role = 'trigger' AND detail->>'as' = 'trust-drop')) "
+            "ORDER BY at_ms, block_id", (incident_id,))
 
     async def link_incident_alert(self, alert_id: int, incident_id: int, at_ms: int) -> bool:
         """False if the alert already belongs to an incident."""

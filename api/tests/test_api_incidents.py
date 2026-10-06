@@ -5,7 +5,8 @@ import json
 
 from witness_core import schema
 from witness_core import verdicts as V
-from witness_core.ids import blake2b256
+from witness_core.ids import blake2b256, to_hex
+from witness_indexer import events
 from witness_indexer.incidents import IncidentConfig, IncidentEngine
 from witness_indexer.store import Alert, MessageRow, Submission
 
@@ -23,6 +24,15 @@ def score(value: float, *, ms: int, verdict: str = V.PRODUCER_SIGNED) -> Message
         wf_index=0, ts=T0 + 30 * ms)
 
 
+async def raise_alert(store, a: Alert) -> None:
+    """Store an alert and log its event, as the rules engine and the validator do."""
+    if await store.put_alert(a):
+        await store.emit(events.ALERT, {
+            "rule": a.rule, "severity": a.severity,
+            "blockId": None if a.block_id is None else to_hex(a.block_id), "ieId": a.ie_id,
+            "ts": a.ts, "dedupeKey": a.dedupe_key})
+
+
 def hx(b: bytes) -> str:
     return "0x" + b.hex()
 
@@ -37,7 +47,7 @@ async def test_engine_incident_through_the_api(client, store):
     for r in (base, drop, forged, recovered):
         await store.put_message(r)
         if r is forged:
-            await store.put_alert(Alert("FORGED", "critical", r.block_id, IE,
+            await raise_alert(store, Alert("FORGED", "critical", r.block_id, IE,
                                         {"reason": "signature does not verify"}, r.ts * 1000))
         if r is drop:
             await store.set_lifecycle(block_id=r.block_id, sub_id="sub-drop",
@@ -81,7 +91,7 @@ async def test_ledger_incident_without_an_indexed_message(client, store):
                                           block_id=bid, hornet_status=201))
     await store.set_lifecycle(block_id=bid, sub_id="sub-o", status="ORPHANED",
                               at_ms=T0 * 1000 + 60_000)
-    await store.put_alert(Alert("ORPHANED", "high", bid, None, {"reason": "never confirmed"},
+    await raise_alert(store, Alert("ORPHANED", "high", bid, None, {"reason": "never confirmed"},
                                 T0 * 1000 + 60_000))
     await engine.periodic(now_ms=T0 * 1000 + 61_000)
     [inc] = (await client.get("/incidents")).json()["items"]

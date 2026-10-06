@@ -64,6 +64,15 @@ def security(*, ms: int, ie: str = IE_X, **kw) -> MessageRow:
                ms=ms, **kw)
 
 
+async def raise_alert(store: Store, a: Alert) -> None:
+    """Store an alert and log its event, as the rules engine and the validator do."""
+    if await store.put_alert(a):
+        await store.emit(events.ALERT, {
+            "rule": a.rule, "severity": a.severity,
+            "blockId": None if a.block_id is None else to_hex(a.block_id), "ieId": a.ie_id,
+            "ts": a.ts, "dedupeKey": a.dedupe_key})
+
+
 async def store_row(store: Store, r: MessageRow, *, submitted: bool = False,
                     alerts: tuple[str, ...] = ()) -> None:
     if submitted:
@@ -73,8 +82,8 @@ async def store_row(store: Store, r: MessageRow, *, submitted: bool = False,
             hornet_status=201))
     await store.put_message(r)
     for rule in alerts:
-        await store.put_alert(Alert(rule, SEVERITY[rule], r.block_id, r.ie_id,
-                                    {"reason": f"test {rule}"}, r.ts * 1000))
+        await raise_alert(store, Alert(rule, SEVERITY[rule], r.block_id, r.ie_id,
+                                       {"reason": f"test {rule}"}, r.ts * 1000))
 
 
 async def feed(store: Store, eng: IncidentEngine, r: MessageRow, **kw) -> list[dict]:
@@ -272,7 +281,7 @@ async def test_attacker_content_never_reshapes_an_incident(store, engine):
     forged = llo("Service component failed", ms=13, sc="urn-ngsi-ld-service-ff-component-x",
                  verdict=V.FORGED, ts=T0 + 330 + 500)
     await store_row(store, forged)
-    await store.put_alert(Alert("FORGED", "critical", forged.block_id, IE_X, {}, 1))
+    await raise_alert(store, Alert("FORGED", "critical", forged.block_id, IE_X, {}, 1))
     [change] = await engine.on_message(forged)
     assert (change["action"], change["role"], change["severity"]) == (
         "attached", "alert", "critical")
@@ -474,7 +483,7 @@ async def test_integrity_alerts_and_relayed_context_shape_nothing(store, engine)
     # an integrity alert naming X joins, keeps the incident going, shapes nothing
     other = so_error("restart", ms=13, verdict=V.UNSIGNED_LEGACY)
     await store_row(store, other, submitted=True)
-    await store.put_alert(Alert("CONTENT_MISMATCH", "critical", other.block_id, IE_X,
+    await raise_alert(store, Alert("CONTENT_MISMATCH", "critical", other.block_id, IE_X,
                                 {"reason": "bytes differ"}, other.ts * 1000))
     assert actions(await engine.periodic(now_ms=other.ts * 1000)) == ["attached"]
     [inc] = await store.incidents()
@@ -544,6 +553,37 @@ async def test_quiet_close_runs_on_the_ledger_clock(store, engine):
     assert actions(await engine.periodic(now_ms=far)) == ["closed"]
 
 
+async def test_shadow_found_later_takes_back_what_the_block_did(store, engine):
+    await feed(store, engine, score(0.9, ms=10))
+    drop = score(0.4, ms=11)
+    assert actions(await feed(store, engine, drop)) == ["opened"]
+    recovered = score(0.95, ms=12)
+    assert actions(await feed(store, engine, recovered)) == ["attached", "closed"]
+    # R14 runs 30 s after confirmation: the recovery was written around the relay
+    await raise_alert(store, Alert("SHADOW", "high", recovered.block_id, IE_X,
+                                   {"reason": "never received"}, recovered.ts * 1000 + 31_000))
+    changes = await engine.periodic(now_ms=recovered.ts * 1000 + 31_000)
+    assert [(c["action"], c.get("role")) for c in changes] == [
+        ("revoked", "remediation"), ("reopened", None)]
+    [inc] = await store.incidents()
+    assert (inc["status"], inc["closed_by"], inc["closed_at_ms"]) == ("open", None, None)
+    assert (inc["baseline_score"], inc["low_score"]) == (0.9, 0.4)
+    events_ = {e["blockId"]: e for e in (await engine.timeline(inc["id"]))["events"]}
+    rec = events_[to_hex(recovered.block_id)]
+    assert rec["role"] == "alert"
+    assert (rec["detail"]["revoked"], rec["detail"]["was"]) == ("shadow", "remediation")
+    # the drop behind the recovery target was a bypass write too: no genuine drop is left
+    await raise_alert(store, Alert("SHADOW", "high", drop.block_id, IE_X, {},
+                                   drop.ts * 1000 + 31_000))
+    assert actions(await engine.periodic(now_ms=recovered.ts * 1000 + 40_000)) == ["revoked"]
+    [inc] = await store.incidents()
+    assert inc["low_score"] is None
+    # so a proven score at the old level closes nothing; only time does
+    assert await feed(store, engine, score(0.96, ms=13)) == []
+    [inc] = await store.incidents()
+    assert inc["status"] == "open"
+
+
 async def test_recovery_target_is_the_level_the_first_drop_fell_from(store, engine):
     await feed(store, engine, score(0.9, ms=10))
     assert actions(await feed(store, engine, so_error("restart", ms=11))) == ["opened"]
@@ -604,10 +644,10 @@ async def test_integrity_alerts_group_into_a_ledger_incident(store, engine):
     await store_row(store, a, submitted=True)
     await store_row(store, b, submitted=True)
     for bid, rule in ((a.block_id, "CONTENT_MISMATCH"), (b.block_id, "DB_TAMPER")):
-        await store.put_alert(Alert(rule, "critical", bid, None, {"reason": rule}, T0 * 1000))
-    await store.put_alert(Alert("ANCHOR_MISMATCH", "critical", None, None,
+        await raise_alert(store, Alert(rule, "critical", bid, None, {"reason": rule}, T0 * 1000))
+    await raise_alert(store, Alert("ANCHOR_MISMATCH", "critical", None, None,
                                 {"reason": "root differs", "seq": 4}, T0 * 1000))
-    await store.put_alert(Alert("STALE", "low", None, IE_X, {}, T0 * 1000))
+    await raise_alert(store, Alert("STALE", "low", None, IE_X, {}, T0 * 1000))
     changes = await engine.periodic(now_ms=(T0 + 330) * 1000)
     assert actions(changes) == ["opened", "attached", "updated"]
     [inc] = await store.incidents()
@@ -627,7 +667,7 @@ async def test_alert_on_a_proven_block_opens_and_alerts_raise_severity(store, en
     assert inc["ie_id"] == IE_X and inc["severity"] == "high"
     assert "CHAIN_FORK" in inc["title"] or "fork" in inc["title"].lower()
     # an alert raised later (validator) on a block already in the incident raises its severity
-    await store.put_alert(Alert("CONTENT_MISMATCH", "critical", fork.block_id, None, {},
+    await raise_alert(store, Alert("CONTENT_MISMATCH", "critical", fork.block_id, None, {},
                                 T0 * 1000))
     assert actions(await engine.periodic(now_ms=(T0 + 400) * 1000)) == ["updated"]
     [inc] = await store.incidents()
