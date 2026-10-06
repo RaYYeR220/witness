@@ -102,3 +102,42 @@ async def test_ledger_incident_without_an_indexed_message(client, store):
         hx(bid), "trigger", "ORPHANED", False)
     assert event["verdict"] is None and event["tag"] is None
     assert [a["rule"] for a in detail["alerts"]] == ["ORPHANED"]
+
+
+async def test_incident_detail_is_paged(client, store):
+    iid = await store.put_incident(opened_at_ms=T0 * 1000, severity="high", title="big",
+                                   ie_id=IE, keys=[f"ie:{IE}"])
+    blocks = [blake2b256(b"event %d" % n) for n in range(5)]
+    for n, bid in enumerate(blocks):
+        await store.attach_incident_event(iid, bid, "trigger" if n == 0 else "alert",
+                                          at_ms=T0 * 1000 + n)
+    for n in range(3):
+        await raise_alert(store, Alert("ANCHOR_MISMATCH", "critical", None, None, {}, T0 * 1000,
+                                       dedupe_key=f"seq:{n}"))
+    for a in await store.alerts({"rule": "ANCHOR_MISMATCH"}):
+        await store.link_incident_alert(a["id"], iid, T0 * 1000)
+
+    seen, alerts, params = [], [], {"limit": 2}
+    while True:
+        r = await client.get(f"/incidents/{iid}", params=params)
+        assert r.status_code == 200, r.text
+        page = r.json()
+        assert (page["eventsTotal"], page["alertsTotal"]) == (5, 3)
+        assert len(page["events"]) <= 2 and len(page["alerts"]) <= 2
+        seen += [e["blockId"] for e in page["events"]]
+        alerts += [a["id"] for a in page["alerts"]]
+        if page["nextEventsCursor"] is None and page["nextAlertsAfter"] is None:
+            break
+        params = {"limit": 2}
+        if page["nextEventsCursor"]:
+            params["eventsAfter"] = page["nextEventsCursor"]
+        if page["nextAlertsAfter"]:
+            params["alertsAfter"] = page["nextAlertsAfter"]
+        else:
+            params["alertsAfter"] = max(alerts)
+    assert seen[:5] == [hx(b) for b in blocks] and len(set(seen)) == 5
+    assert len(alerts) == len(set(alerts)) == 3
+    for bad in ("x", "12:zz", "1:" + "ab" * 31):
+        r = await client.get(f"/incidents/{iid}", params={"eventsAfter": bad})
+        assert r.status_code == 422
+    assert (await client.get(f"/incidents/{iid}", params={"limit": 501})).status_code == 422

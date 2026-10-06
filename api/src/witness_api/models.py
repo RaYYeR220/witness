@@ -388,11 +388,18 @@ class AlertList(ApiModel):
 
 
 class IncidentDetail(Incident):
-    events: list[IncidentEvent] = Field(description="In time order; check each against its "
-                                        "block with links.proof")
+    events: list[IncidentEvent] = Field(description="A page of events in time order; check "
+                                        "each against its block with links.proof")
+    events_total: int = Field(0, description="Events in the whole incident")
+    next_events_cursor: str | None = Field(None, description="Pass as `eventsAfter` for the "
+                                           "next page of events; null on the last")
     alerts: list[AlertOut] = Field(default_factory=list,
-                                   description="Alerts that joined the incident, including "
-                                               "those about no single block")
+                                   description="A page of the alerts that joined the "
+                                               "incident, including those about no single "
+                                               "block")
+    alerts_total: int = Field(0, description="Alerts in the whole incident")
+    next_alerts_after: int | None = Field(None, description="Pass as `alertsAfter` for the "
+                                          "next page of alerts; null on the last")
 
 
 class AnchorOut(ApiModel):

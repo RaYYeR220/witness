@@ -401,15 +401,17 @@ class IncidentEngine:
                 await self._set_status(ENGINE_STATUS, "ok")
         return changes
 
-    async def timeline(self, incident_id: int) -> dict | None:
-        """The incident and its events in time order. Each event names its block, the
-        message's verdict and its lifecycle status, and the proof to check it against
-        (`/proofs/{blockId}`)."""
-        inc = await self.store.incident(incident_id)
+    async def timeline(self, incident_id: int, *, limit: int = 500) -> dict | None:
+        """The incident and its first `limit` events in time order (and alerts). Each event
+        names its block, the message's verdict and its lifecycle status, and the proof to
+        check it against (`/proofs/{blockId}`). `eventsTotal` / `alertsTotal` say how many
+        there are in all; Store.incident_timeline pages through the rest."""
+        inc = await self.store.incident_header(incident_id)
         if inc is None:
             return None
-        rows = await self.store.incident_timeline(incident_id)
-        alerts = await self.store.incident_alerts(incident_id)
+        rows = await self.store.incident_timeline(incident_id, limit=limit)
+        alerts = await self.store.incident_alerts(incident_id, limit=limit)
+        counts = await self.store.incident_counts(incident_id)
         return {
             "incident": {
                 "id": inc["id"], "title": inc["title"], "severity": inc["severity"],
@@ -419,6 +421,7 @@ class IncidentEngine:
                 "lowScore": inc["low_score"], "closedBy": _hex(inc["closed_by"]),
             },
             "events": [self._event_view(r) for r in rows],
+            "eventsTotal": counts["events"], "alertsTotal": counts["alerts"],
             "alerts": [{"id": a["id"], "rule": a["rule"], "severity": a["severity"],
                         "blockId": _hex(a["block_id"]), "ieId": a["ie_id"], "ts": a["ts"],
                         "reason": (a["evidence"] or {}).get("reason")} for a in alerts],

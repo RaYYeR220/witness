@@ -1016,28 +1016,55 @@ class Store:
         return await self._one(
             "SELECT 1 AS x FROM incident_alerts WHERE alert_id = %s", (alert_id,)) is not None
 
-    async def incident_alerts(self, incident_id: int) -> list[dict]:
+    INCIDENT_PAGE = 500
+
+    async def incident_header(self, id: int) -> dict | None:
+        """The incident row alone, without its events."""
+        return await self._one("SELECT * FROM incidents WHERE id = %s", (id,))
+
+    async def incident_counts(self, id: int) -> dict:
+        """How many events and alerts the incident has: {"events": n, "alerts": m}."""
+        row = await self._one(
+            "SELECT (SELECT count(*) FROM incident_events WHERE incident_id = %(id)s) AS events, "
+            "(SELECT count(*) FROM incident_alerts WHERE incident_id = %(id)s) AS alerts",
+            {"id": id})  # type: ignore[arg-type]
+        return {"events": row["events"], "alerts": row["alerts"]} if row else {
+            "events": 0, "alerts": 0}
+
+    async def incident_alerts(self, incident_id: int, *, after_id: int | None = None,
+                              limit: int = INCIDENT_PAGE) -> list[dict]:
+        """A page of the alerts that joined the incident, in id order after `after_id`."""
         return await self._fetch(
             "SELECT a.id, a.rule, a.severity, a.block_id, a.ie_id, a.evidence, a.ts, "
             "a.dedupe_key "
             "FROM incident_alerts l JOIN alerts a ON a.id = l.alert_id "
-            "WHERE l.incident_id = %s ORDER BY a.ts, a.id", (incident_id,))
+            "WHERE l.incident_id = %s AND (%s::bigint IS NULL OR a.id > %s::bigint) "
+            "ORDER BY a.id LIMIT %s", (incident_id, after_id, after_id, limit))
 
-    async def incident_timeline(self, incident_id: int) -> list[dict]:
-        """The incident's events in time order, each with what the database knows about its
-        block: message fields and its status, the latest lifecycle status (else CONFIRMED
-        for a block of a milestone cone that never came through the Messages API)."""
+    async def incident_timeline(self, incident_id: int, *,
+                                after: tuple[int, bytes] | None = None,
+                                limit: int = INCIDENT_PAGE) -> list[dict]:
+        """A page of the incident's events in time order, after the (sort_ms, block_id) of
+        the last one seen. Each with what the database knows about its block: message fields
+        and its status, the latest lifecycle status (else CONFIRMED for a block of a
+        milestone cone that never came through the Messages API), and `sort_ms`."""
+        after_ms, after_bid = after if after is not None else (None, None)
         return await self._fetch(
-            "SELECT e.block_id, e.role, e.at_ms, e.attached_at_ms, e.detail, m.tag, m.kind, "
-            "m.verdict, m.ie_id, m.iss, m.ms_index, m.ts, m.received_at_ms, "
+            "WITH ev AS (SELECT e.block_id, e.role, e.at_ms, e.attached_at_ms, e.detail, "
+            "m.tag, m.kind, m.verdict, m.ie_id, m.iss, m.ms_index, m.ts, m.received_at_ms, "
             "m.confirmed_at_ms, (m.block_id IS NOT NULL) AS indexed, "
             "COALESCE((SELECT l.status FROM lifecycle l WHERE l.block_id = e.block_id "
             " ORDER BY l.at_ms DESC, l.id DESC LIMIT 1), m.status, "
-            " CASE WHEN m.ms_index IS NOT NULL THEN 'CONFIRMED' END) AS status "
+            " CASE WHEN m.ms_index IS NOT NULL THEN 'CONFIRMED' END) AS status, "
+            "COALESCE(e.at_ms, m.received_at_ms, m.confirmed_at_ms, m.ts * 1000, "
+            " e.attached_at_ms) AS sort_ms "
             "FROM incident_events e LEFT JOIN messages m ON m.block_id = e.block_id "
-            "WHERE e.incident_id = %s ORDER BY COALESCE(e.at_ms, m.received_at_ms, "
-            "m.confirmed_at_ms, m.ts * 1000) NULLS LAST, e.attached_at_ms, e.block_id",
-            (incident_id,))
+            "WHERE e.incident_id = %(id)s) "
+            "SELECT * FROM ev WHERE %(after_ms)s::bigint IS NULL "
+            "OR (sort_ms, block_id) > (%(after_ms)s::bigint, %(after_bid)s::bytea) "
+            "ORDER BY sort_ms, block_id LIMIT %(limit)s",
+            {"id": incident_id, "after_ms": after_ms, "after_bid": after_bid,
+             "limit": limit})  # type: ignore[arg-type]
 
     async def block_alert_rules(self, block_id: bytes) -> set[str]:
         """The rules of every alert raised on a block."""
