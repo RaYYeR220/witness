@@ -8,6 +8,7 @@ const ComingSoon = () => import("@/views/ComingSoon.vue");
 /** Screens that are built; the rest show their placeholder until their task lands. */
 const VIEWS: Record<string, RouteRecordRaw["component"]> = {
   live: () => import("@/views/LiveView.vue"),
+  search: () => import("@/views/SearchView.vue"),
 };
 
 const routes: RouteRecordRaw[] = [
