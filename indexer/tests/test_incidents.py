@@ -659,6 +659,26 @@ async def test_integrity_alerts_group_into_a_ledger_incident(store, engine):
     assert await engine.periodic(now_ms=(T0 + 340) * 1000) == []  # idempotent
 
 
+async def test_no_alert_is_skipped_when_transactions_commit_out_of_order(store, engine):
+    # an alert stored early in a long transaction gets a lower id than alerts that commit
+    # before it; its event is logged (and so read) only when its transaction commits
+    late = llo("Service component updated", ms=10, verdict=V.UNSIGNED_LEGACY)
+    await store_row(store, late, submitted=True)
+    late_alert = Alert("CONTENT_MISMATCH", "critical", late.block_id, None, {}, T0 * 1000)
+    assert await store.put_alert(late_alert)  # id 1, event not logged yet
+    for n in range(60):
+        await raise_alert(store, Alert("ANCHOR_MISMATCH", "critical", None, None, {},
+                                       T0 * 1000, dedupe_key=f"seq:{n}"))
+    assert actions(await engine.periodic(now_ms=(T0 + 300) * 1000))[0] == "opened"
+    [a_late] = await store.alerts({"rule": "CONTENT_MISMATCH"})
+    assert not await store.incident_alert_linked(a_late["id"])
+    await store.emit(events.ALERT, {"rule": "CONTENT_MISMATCH", "severity": "critical",
+                                    "blockId": to_hex(late.block_id), "ieId": None,
+                                    "ts": T0 * 1000, "dedupeKey": None})
+    assert actions(await engine.periodic(now_ms=(T0 + 301) * 1000)) == ["attached"]
+    assert await store.incident_alert_linked(a_late["id"])
+
+
 async def test_alert_on_a_proven_block_opens_and_alerts_raise_severity(store, engine):
     fork = so_error("0", ms=10)
     changes = await feed(store, engine, fork, alerts=("CHAIN_FORK",))

@@ -1074,13 +1074,16 @@ class Store:
             f"{cond} ORDER BY ms_index DESC, COALESCE(wf_index, 0) DESC, block_id DESC LIMIT 1",
             args)  # type: ignore[arg-type]
 
-    async def alerts_after(self, after_id: int, severities: list[str],
-                           limit: int) -> list[dict]:
-        """Alerts with an id above `after_id` and one of `severities`, in id order."""
-        return await self._fetch(
+    async def alert_by_key(self, rule: str, block_id: bytes | None, ie_id: str | None,
+                           dedupe_key: str | None) -> dict | None:
+        """The alert with this dedupe key (rule, block, IE, dedupe key), as an `alert` event
+        names it."""
+        return await self._one(
             "SELECT id, rule, severity, block_id, ie_id, evidence, ts, dedupe_key FROM alerts "
-            "WHERE id > %s AND severity = ANY(%s::text[]) ORDER BY id LIMIT %s",
-            (after_id, severities, limit))
+            "WHERE rule = %s AND coalesce(block_id, ''::bytea) = coalesce(%s::bytea, ''::bytea) "
+            "AND coalesce(ie_id, '') = coalesce(%s::text, '') "
+            "AND coalesce(dedupe_key, '') = coalesce(%s::text, '')",
+            (rule, block_id, ie_id, dedupe_key))
 
     async def incidents(self, f: dict | None = None, limit: int = 200) -> list[dict]:
         f = f or {}

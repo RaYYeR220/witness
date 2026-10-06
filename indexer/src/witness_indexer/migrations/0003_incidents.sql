@@ -39,3 +39,7 @@ CREATE INDEX incident_alerts_incident ON incident_alerts (incident_id);
 
 -- The engine looks up the alerts raised on a block as it correlates the block.
 CREATE INDEX alerts_block ON alerts (block_id);
+
+-- The engine reads `alert` events (new alerts) and `incident` events (alerts to publish)
+-- from cursors over the events log.
+CREATE INDEX events_type ON events (type, id);

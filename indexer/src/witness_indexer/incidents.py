@@ -112,7 +112,7 @@ from urllib.parse import unquote, urlsplit
 
 from witness_core import policy as writer_policy
 from witness_core import verdicts as V
-from witness_core.ids import to_hex
+from witness_core.ids import from_hex, to_hex
 from witness_core.policy import WriterPolicy
 
 from . import events
@@ -158,11 +158,11 @@ CLOSED_QUIET = "closed:quiet"
 ENGINE_STATUS = "incident-engine"
 ORION_STATUS = "incident-orion"
 MQTT_STATUS = "alerts-mqtt"
-ALERT_CURSOR = "incidents.alert_cursor"
+# Last `alert` event of the events log the periodic pass has correlated. Event ids follow
+# commit order (Store.emit serialises emitters), alert ids do not: a cursor over alert ids
+# would skip an alert whose transaction commits after a later one.
+ALERT_CURSOR = "incidents.alert_event_cursor"
 PUBLISH_CURSOR = "incidents.mqtt_cursor"
-# Alerts are re-read this many ids behind the cursor: an alert whose transaction commits
-# after a later one would otherwise be skipped.
-ALERT_LOOKBACK = 50
 PROVEN = "proven"
 RELAYED = "relayed"
 UNTRUSTED = "untrusted"
@@ -864,12 +864,23 @@ class IncidentEngine:
     # -- periodic steps -------------------------------------------------------------------------
 
     async def _scan_alerts(self, step: _Step, now_ms: int) -> None:
+        """Every critical or high alert logged since the last pass, from the events log:
+        every alert the rules and the validator store is logged there, in commit order."""
         cursor = _int(await self.store.get_rule_state(ALERT_CURSOR)) or 0
-        rows = await self.store.alerts_after(max(0, cursor - ALERT_LOOKBACK),
-                                             TRIGGER_SEVERITIES, self.cfg.alert_batch)
-        for a in rows:
-            await self._alert(a, step)
-        if rows and rows[-1]["id"] > cursor:
+        rows = await self.store.events_of_type_after(events.ALERT, cursor,
+                                                     self.cfg.alert_batch)
+        for ev in rows:
+            p = ev["payload"] if isinstance(ev["payload"], dict) else {}
+            if p.get("severity") not in TRIGGER_SEVERITIES or not isinstance(p.get("rule"), str):
+                continue
+            try:
+                bid = None if p.get("blockId") is None else from_hex(p["blockId"])
+            except (TypeError, ValueError):
+                continue
+            a = await self.store.alert_by_key(p["rule"], bid, p.get("ieId"), p.get("dedupeKey"))
+            if a is not None:
+                await self._alert(a, step)
+        if rows:
             await self.store.set_rule_state(ALERT_CURSOR, rows[-1]["id"], at_ms=now_ms)
 
     async def _quiet(self, step: _Step, now_ms: int) -> None:
