@@ -1,14 +1,20 @@
 import asyncio
 import dataclasses
 import json
+from urllib.parse import quote
 
+import httpx
 import pytest
+import respx
 from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
 from fakechain import FakeChain, FakeSource, did_key, signed, tamper
 from witness_core import canon, codec, envelope, merkle, policy
 from witness_core.envelope import KeyInfo
+from witness_indexer.classify import ResolverFailed
 from witness_indexer.didkey import OfflineResolver
-from witness_indexer.pipeline import Indexer
+from witness_indexer.pipeline import ALLOW_ALL, Indexer
+from witness_indexer.resolver import DidResolver
+from witness_indexer.rules import RulesEngine
 from witness_indexer.source import (
     ConeBlock,
     ConeMismatch,
@@ -696,3 +702,72 @@ async def test_failed_rules_roll_back_the_milestone(store: Store):
     stats = await store.stats()
     assert (stats["milestones"], stats["messages"], stats["events"], stats["cursor"]) == (
         0, 0, 0, 0)
+
+
+# -- the Task 9 DID resolver -------------------------------------------------------------------
+
+ANCHOR = "http://anchor.test"
+IOTA_DID = "did:iota:testnet:0xabc"
+IOTA_KEY = Ed25519PrivateKey.from_private_bytes(b"\x05" * 32)
+
+
+def iota_signed(seq: int) -> bytes:
+    env = envelope.seal("trust.score", score("D:aabbccddeeff", 0.5), iss=IOTA_DID,
+                        kid=IOTA_DID + "#sig-1", sign_key=IOTA_KEY, seq=seq,
+                        att_mode="producer", now_ms=1_790_000_000_000 + seq,
+                        nonce=seq.to_bytes(16, "big"))
+    return json.dumps(env).encode()
+
+
+def did_reply(revoked_at_ms: int | None) -> dict:
+    return {"doc": {"id": IOTA_DID}, "version": "3", "historyComplete": True,
+            "keys": [{"kid": "#sig-1", "type": "Ed25519",
+                      "publicKeyHex": IOTA_KEY.public_key().public_bytes_raw().hex(),
+                      "revokedAtMs": revoked_at_ms}]}
+
+
+async def test_did_resolver_is_asked_at_the_milestone_time(store: Store):
+    chain = FakeChain()
+    chain.add([("trust.score", iota_signed(1))])
+    chain.add([("trust.score", iota_signed(2)),
+               ("trust.score", signed(ALICE, "trust.score", score("D:aabbccddeeff", 0.5), 1))])
+    revoked = chain.ms[2].timestamp * 1000 - 1  # between the two milestones
+    url = f"{ANCHOR}/resolve/{quote(IOTA_DID, safe='')}"
+    async with respx.mock(assert_all_called=True) as router:
+        route = router.get(url).mock(return_value=httpx.Response(200, json=did_reply(revoked)))
+        resolver = DidResolver(ANCHOR)
+        await indexer(FakeSource(chain), store, resolve=resolver, policy=ALLOW_ALL).sync()
+        await resolver.aclose()
+    assert route.call_count == 1  # cached across milestones; did:key needs no call
+    assert [(await msg(store, chain.block_id(i, 0)))["verdict"] for i in (1, 2)] == [
+        "PRODUCER_SIGNED", "REVOKED_KEY"]
+    assert (await msg(store, chain.block_id(2, 1)))["verdict"] == "PRODUCER_SIGNED"
+
+
+async def test_unreachable_did_resolver_stalls_the_milestone(store: Store):
+    chain = FakeChain()
+    chain.add([("trust.score", iota_signed(1))])
+    url = f"{ANCHOR}/resolve/{quote(IOTA_DID, safe='')}"
+    async with respx.mock() as router:
+        router.get(url).mock(side_effect=httpx.ConnectError("refused"))
+        resolver = DidResolver(ANCHOR)
+        with pytest.raises(ResolverFailed):
+            await indexer(FakeSource(chain), store, resolve=resolver, policy=ALLOW_ALL).sync()
+        await resolver.aclose()
+    stats = await store.stats()
+    assert (stats["milestones"], stats["messages"], stats["cursor"]) == (0, 0, 0)
+    with pytest.raises(ResolverFailed):  # no registry configured at all: same, never FORGED
+        await indexer(FakeSource(chain), store, resolve=DidResolver(None),
+                      policy=ALLOW_ALL).sync()
+    assert (await store.stats())["messages"] == 0
+
+
+async def test_rules_engine_alerts_are_stored_and_emitted_once(store: Store):
+    chain = FakeChain()
+    chain.add([("trust.score", signed(BOB, "trust.score", score("D:aabbccddeeff", 0.1), 1))])
+    rules = RulesEngine(store, None, DidResolver(None), POLICY)
+    ix = indexer(FakeSource(chain), store, rules=rules)
+    await ix.sync()
+    await ix.process_milestone(chain.ms[1])
+    assert [a["rule"] for a in await store.alerts()] == ["UNAUTHORIZED_WRITER"]
+    assert (await event_types(store)).count("alert") == 1

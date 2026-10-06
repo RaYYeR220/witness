@@ -6,12 +6,18 @@ import uuid
 
 import psycopg
 import pytest
-from fakechain import FakeChain, FakeSource
+from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
+from fakechain import FakeChain, FakeSource, signed, tamper
 from witness_core import policy
 from witness_indexer import main as cli
+from witness_indexer.pipeline import ALLOW_ALL
+from witness_indexer.resolver import DidResolver
+from witness_indexer.rules import RulesEngine
 from witness_indexer.source_inx import InxSource
 from witness_indexer.source_rest import RestSource
 from witness_indexer.store import Store
+
+ALICE = Ed25519PrivateKey.from_private_bytes(b"\x01" * 32)
 
 
 def test_parse_args_defaults(monkeypatch):
@@ -91,8 +97,11 @@ async def _noop():
 @pytest.mark.skipif(not os.environ.get("WITNESS_TEST_PG"), reason="WITNESS_TEST_PG is unset")
 async def test_amain_indexes_and_shuts_down_cleanly(monkeypatch):
     chain = FakeChain()
-    for _ in range(3):
+    for _ in range(2):
         chain.add([("trust.score", b'{"id":"D:aabbccddeeff","score":0.5}')])
+    forged = tamper(signed(ALICE, "trust.score", {"id": "D:aabbccddeeff", "score": 0.9}, 1),
+                    score=0.1)
+    chain.add([("trust.score", forged)])
     src = FakeSource(chain, tail=True)
 
     async def fake_open_source(args):
@@ -101,7 +110,8 @@ async def test_amain_indexes_and_shuts_down_cleanly(monkeypatch):
     monkeypatch.setattr(cli, "open_source", fake_open_source)
     schema = f"t_{uuid.uuid4().hex[:12]}"
     args = cli.parse_args(["--db", os.environ["WITNESS_TEST_PG"], "--schema", schema,
-                           "--allow-any-writer"])
+                           "--allow-any-writer", "--resolver", "", "--orion", "",
+                           "--rescan-s", "0.05"])
     store = await Store.open(os.environ["WITNESS_TEST_PG"], schema=schema)
     stop = asyncio.Event()
     task = asyncio.create_task(cli.amain(args, stop=stop))
@@ -109,7 +119,8 @@ async def test_amain_indexes_and_shuts_down_cleanly(monkeypatch):
         async def indexed() -> None:
             while True:
                 try:
-                    if await store.get_cursor() == 3:
+                    st = await store.stats()
+                    if st["cursor"] == 3 and st.get("rules") == "ok":
                         return
                 except psycopg.errors.UndefinedTable:
                     pass  # amain has not migrated yet
@@ -123,11 +134,40 @@ async def test_amain_indexes_and_shuts_down_cleanly(monkeypatch):
         assert src.closed
         stats = await store.stats()
         assert (stats["messages"], stats["policy"], stats["indexer"]) == (3, "allow-any", "ok")
+        # the rules engine judged the stored messages and ran its periodic pass
+        assert [a["rule"] for a in await store.alerts()] == ["FORGED"]
+        assert stats["shadow"] == "no-baseline"
     finally:
         stop.set()
         await asyncio.gather(task, return_exceptions=True)
         await store.drop_schema()
         await store.close()
+
+
+def test_build_rules_wiring(caplog):
+    args = cli.parse_args(["--db", "postgresql://x", "--allow-any-writer",
+                           "--resolver", "http://anchor.test:7300/", "--orion", "http://orion.test"])
+    store = object()
+    rules, resolver, orion = cli.build_rules(args, store, ALLOW_ALL)
+    assert isinstance(rules, RulesEngine) and isinstance(resolver, DidResolver)
+    assert (rules.store, rules.resolver, rules.orion, rules.policy) == (
+        store, resolver, orion, ALLOW_ALL)
+    assert resolver.base_url == "http://anchor.test:7300"
+    assert orion.base_url == "http://orion.test"
+    assert rules.anchor is not None  # R11 reads checkpoints from the same anchor service
+
+    with caplog.at_level(logging.WARNING):
+        rules, resolver, orion = cli.build_rules(
+            cli.parse_args(["--db", "postgresql://x", "--allow-any-writer", "--resolver", "",
+                            "--orion", ""]), store, ALLOW_ALL)
+    assert resolver.base_url is None and orion is None and rules.orion is None
+    assert "no --resolver" in caplog.text
+
+
+def test_parse_args_rules_defaults():
+    a = cli.parse_args(["--db", "postgresql://x", "--allow-any-writer"])
+    assert (a.resolver, a.orion, a.periodic_s, a.rescan_s, a.rescan_batch) == (
+        "http://127.0.0.1:7300", "http://127.0.0.1:1026", 30.0, 300.0, 200)
 
 
 async def test_supervise_stops_the_rest_when_one_service_dies():

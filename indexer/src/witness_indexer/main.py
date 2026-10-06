@@ -9,6 +9,11 @@ says so and polls the REST API instead (the choice is made once; a later INX out
 retried on INX). `--mqtt` consumes the Messages API's submission records, `--validate`
 checks every submitted block against the node (solid, confirmed, same bytes). A writer
 policy is required; `--allow-any-writer` is the explicit opt-out for development.
+
+Signing keys are resolved through the anchor service (`--resolver`, did:key needs nothing),
+and the integrity rules run on every stored message, every `--periodic-s` seconds
+(drift, stale, anchors, shadow writes) and every `--rescan-s` seconds against the Tangle
+(rows missing from the database). Pass an empty `--resolver` / `--orion` to run without.
 """
 
 from __future__ import annotations
@@ -20,14 +25,18 @@ import logging
 import os
 import signal
 import sys
+import time
 from collections.abc import Awaitable, Callable, Coroutine
 from typing import Any
 
 from witness_core import policy
 from witness_core.policy import WriterPolicy
 
-from .didkey import OfflineResolver
+from .maintenance import Every, Rescanner
+from .orion import OrionClient
 from .pipeline import ALLOW_ALL, Indexer
+from .resolver import DidResolver
+from .rules import RulesConfig, RulesEngine
 from .source import BlockSource, SourceUnavailable
 from .source_inx import InxSource
 from .source_rest import RestSource
@@ -55,6 +64,16 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     who.add_argument("--policy", help="writer policy JSON (which DIDs may write which tags)")
     who.add_argument("--allow-any-writer", action="store_true",
                      help="development only: accept every signer for every tag")
+    p.add_argument("--resolver", default="http://127.0.0.1:7300",
+                   help="anchor service base URL for DID resolution (empty: did:key only)")
+    p.add_argument("--orion", default="http://127.0.0.1:1026",
+                   help="Orion-LD base URL for the drift / unknown-IE rules (empty: off)")
+    p.add_argument("--periodic-s", type=float, default=30.0,
+                   help="seconds between periodic rule passes")
+    p.add_argument("--rescan-s", type=float, default=300.0,
+                   help="seconds between re-scans of indexed cones against the Tangle")
+    p.add_argument("--rescan-batch", type=int, default=200,
+                   help="milestones re-read from the node per re-scan")
     p.add_argument("--mqtt", help="consume submission records from this broker, "
                                   "e.g. mqtt://127.0.0.1:1883")
     p.add_argument("--validate", action="store_true",
@@ -91,6 +110,20 @@ async def open_source(args: argparse.Namespace) -> BlockSource:
     return RestSource(args.rest, poll_s=args.poll)
 
 
+def build_rules(args: argparse.Namespace, store: Store, pol: WriterPolicy
+                ) -> tuple[RulesEngine, DidResolver, OrionClient | None]:
+    resolver = DidResolver(args.resolver or None)
+    if not args.resolver:
+        log.warning("no --resolver: only did:key signers can be checked; a message signed "
+                    "with any other DID holds indexing back (resolver: unreachable)")
+    orion = OrionClient(args.orion) if args.orion else None
+    return RulesEngine(store, orion, resolver, pol, RulesConfig()), resolver, orion
+
+
+def _now_ms() -> int:
+    return int(time.time() * 1000)
+
+
 class _NoValidation:
     """Stands in for the validator when submissions are ingested without `--validate`."""
 
@@ -109,9 +142,23 @@ async def amain(args: argparse.Namespace, *, stop: asyncio.Event | None = None) 
         await store.migrate()
         source = await open_source(args)
         closers.insert(0, source.close)
+        rules, resolver, orion = build_rules(args, store, pol)
+        closers.insert(0, resolver.aclose)
+        if orion is not None:
+            closers.insert(0, orion.aclose)
+        if rules.anchor is not None:
+            closers.insert(0, rules.anchor.aclose)
         indexer = Indexer(source, store, policy=pol, policy_mode=policy_mode,
-                          resolve=OfflineResolver())
+                          resolve=resolver, rules=rules)
         services.append(("indexer", indexer.run, indexer.stop))
+        # Outside milestone transactions, in their own tasks.
+        periodic = Every("rules", args.periodic_s,
+                         lambda: rules.periodic(now_ms=_now_ms()))
+        rescanner = Rescanner(source, store, rules, batch=args.rescan_batch)
+        rescan = Every("re-scan", args.rescan_s, rescanner.run_once,
+                       initial_delay_s=args.rescan_s)
+        services.append(("rules", periodic.run, periodic.stop))
+        services.append(("re-scan", rescan.run, rescan.stop))
 
         validator: Any = _NoValidation()
         if args.validate:

@@ -113,7 +113,15 @@ uv run witness-indexer --db postgresql://postgres:witness@127.0.0.1:5432/postgre
   from the policy get `UNAUTHORIZED_WRITER`.
 - `--mqtt` stores the Messages API's submission records; `--validate` checks each
   submitted block against the node.
-- Ctrl+C / SIGTERM lets the milestone being written commit, then exits.
+- Signing keys are resolved by the anchor service (`--resolver`, default
+  `http://127.0.0.1:7300`; `did:key` needs no registry). The integrity rules run on
+  every stored message, every `--periodic-s` (30 s: drift against Orion `--orion`,
+  stale scores, anchors, shadow writes) and every `--rescan-s` (300 s: up to
+  `--rescan-batch` indexed milestones are re-read from the node and any tagged block
+  missing from the database is reported as `MISSING_IN_DB`). The periodic passes run
+  in their own tasks, never inside a milestone transaction. An empty `--resolver` or
+  `--orion` turns that service off.
+- Ctrl+C / SIGTERM lets the milestone being written (and a rules pass) finish, then exits.
 
 Health shows up in `Store.stats()` (and so in the API's stats):
 
@@ -122,6 +130,7 @@ Health shows up in `Store.stats()` (and so in the API's stats):
 | `indexer` | `ok`; `retrying (<inx\|rest\|database> unavailable)`; `retrying (resolver unreachable)`; `retrying milestone N (<reason>, attempt k)`; `stuck at N (<reason>)` after 5 failed attempts on the same milestone (e.g. `cone root mismatch`); `network changed` when the node serves a different Tangle than the database holds |
 | `resolver` | `unreachable` while signing keys cannot be resolved (no verdicts are written meanwhile), `ok` once it recovers |
 | `policy` | `file`, `allow-any`, or `none` (library default: every signed writer is unauthorized) |
+| `rules`, `orion`, `anchor`, `shadow`, `ledger` | reported by the rules engine (see `indexer/src/witness_indexer/rules.py`) |
 
 Messages nested more than 64 levels deep keep their raw bytes only (no JSON copy);
 a witness envelope that deep is `MALFORMED` ("nesting too deep"). An issuer's
