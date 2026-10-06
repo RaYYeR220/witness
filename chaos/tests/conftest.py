@@ -3,6 +3,7 @@ import socket
 from pathlib import Path
 
 import pytest
+import yaml
 from witness_core import bundle, checkpoint
 from witness_core.bundle import VerifierConfig
 from witness_core.codec import Ed25519Sig
@@ -79,3 +80,11 @@ def no_network(monkeypatch):
     monkeypatch.setattr(socket, "getaddrinfo", boom)
     monkeypatch.setattr(httpx.Client, "send", boom)
     monkeypatch.setattr(httpx.AsyncClient, "send", boom)
+
+
+@pytest.fixture(scope="session")
+def key():
+    from witness_chaos import attacks
+
+    return yaml.safe_load(
+        Path(attacks.__file__).with_name("answer_key.yaml").read_text(encoding="utf-8"))

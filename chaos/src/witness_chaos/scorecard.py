@@ -38,6 +38,65 @@ def expected_label(expect: dict) -> str:
     return f"ladder_overall:{expect['ladder_overall']}"
 
 
+def alert_buckets(cls: dict, alerts: Iterable[str]) -> tuple[list[str], list[str]]:
+    """Split the alerts seen on an injected block into (allowed side alerts, unexpected).
+
+    The alert the class expects is neither: it is the detection itself.
+    """
+    expected = cls["expect"].get("alert")
+    allowed = set(cls.get("allowed_side_alerts", []))
+    side, unexpected = [], []
+    for a in alerts:
+        if a == expected:
+            continue
+        (side if a in allowed else unexpected).append(a)
+    return side, unexpected
+
+
+def evaluate_trial(cls: dict, obs: dict) -> dict:
+    """Score one trial from what was observed on the injected block.
+
+    obs: {"verdict": str|None, "alerts": [rule, ...], "ladder": {step: ok}, "overall": str,
+          "parses": bool|None, "sealed": bool|None, "blind_search": bool|None}
+    Every assertion in the class's `expect` must hold for the trial to count as detected.
+    """
+    e = cls["expect"]
+    alerts = list(obs.get("alerts", []))
+    checks: list[bool] = []
+    if "verdict" in e:
+        checks.append(obs.get("verdict") == e["verdict"])
+    if "alert" in e:
+        checks.append(e["alert"] in alerts)
+    if "ladder" in e:
+        want = e["ladder"]
+        checks.append((obs.get("ladder") or {}).get(want["step"]) is want["ok"])
+        if "parses" in want:
+            checks.append(obs.get("parses") is want["parses"])
+    if "ladder_overall" in e:
+        checks.append(obs.get("overall") == e["ladder_overall"])
+    if "block_verdict" in e:
+        checks.append(obs.get("verdict") == e["block_verdict"])
+    for flag in ("sealed", "blind_search"):
+        if e.get(flag):
+            checks.append(obs.get(flag) is True)
+    detected = bool(checks) and all(checks)
+    if detected:
+        observed = expected_label(e)
+    else:
+        observed = obs.get("verdict") or (alerts[0] if alerts else None)
+    return {"detected": detected, "observed": observed, "alerts": alerts}
+
+
+def control_passed(control: dict, alerts: Iterable[str]) -> bool:
+    """A positive control passes when the forbidden alert (and any alert, if the control
+    says `alerts: 0`) is absent."""
+    seen = list(alerts)
+    e = control["expect"]
+    if "no_alert" in e and e["no_alert"] in seen:
+        return False
+    return not (e.get("alerts") == 0 and seen)
+
+
 def confusion_matrix(results: list[dict], classes: list[dict]) -> dict[str, dict[str, int]]:
     """Per class: how many trials ended in each observed outcome (NONE = nothing seen)."""
     matrix: dict[str, Counter] = {c["id"]: Counter() for c in classes}
@@ -54,6 +113,12 @@ def per_class(results: list[dict], classes: list[dict]) -> list[dict]:
     for c in classes:
         mine = [r for r in results if r["class"] == c["id"]]
         hit = [r for r in mine if r.get("detected")]
+        side: Counter = Counter()
+        unexpected: Counter = Counter()
+        for r in mine:
+            s_, u_ = alert_buckets(c, r.get("alerts", []))
+            side.update(s_)
+            unexpected.update(u_)
         lat = [r["latency_ms"] for r in hit if r.get("latency_ms") is not None]
         out.append({
             "id": c["id"], "name": c["name"], "expected": expected_label(c["expect"]),
@@ -61,6 +126,7 @@ def per_class(results: list[dict], classes: list[dict]) -> list[dict]:
             "detected": len(hit),
             "rate": len(hit) / len(mine) if mine else 0.0,
             "observed": matrix[c["id"]],
+            "side_alerts": dict(side), "unexpected_alerts": dict(unexpected),
             "latency_p50_ms": percentile(lat, 50), "latency_p95_ms": percentile(lat, 95),
         })
     return out
@@ -73,7 +139,8 @@ def trap_false_positives(trap: dict, allowed_verdicts: Iterable[str]) -> int:
     return int(trap.get("alerts", 0)) + bad
 
 
-def build_scorecard(results: list[dict], trap: dict | None, key: dict) -> dict:
+def build_scorecard(results: list[dict], trap: dict | None, key: dict,
+                    control_results: list[dict] | None = None) -> dict:
     classes = key["classes"]
     rows = per_class(results, classes)
     detected = sum(r["detected"] for r in rows)
@@ -89,8 +156,15 @@ def build_scorecard(results: list[dict], trap: dict | None, key: dict) -> dict:
         "detection_rate": detected / total if total else 0.0,
         "latency_p50_ms": percentile(lat, 50),
         "latency_p95_ms": percentile(lat, 95),
+        "unexpected_alerts": sum(sum(r["unexpected_alerts"].values()) for r in rows),
         "traps": None,
+        "controls": None,
     }
+    if control_results is not None:
+        by_id = {c["id"]: c for c in key.get("controls", [])}
+        passed = sum(control_passed(by_id[r["control"]], r.get("alerts", []))
+                     for r in control_results)
+        card["controls"] = {"trials": len(control_results), "passed": passed}
     if trap is not None:
         spec = key["traps"]["expect"]
         fp = trap_false_positives(trap, spec["verdicts"])
@@ -136,6 +210,18 @@ def render_markdown(card: dict) -> str:
         for r in misses:
             seen = ", ".join(f"{k} x{v}" for k, v in sorted(r["observed"].items()))
             lines.append(f"- {r['id']} {r['name']}: {seen}")
+    noisy = [r for r in card["classes"] if r["side_alerts"] or r["unexpected_alerts"]]
+    if noisy:
+        lines += ["", ("Other alerts on injected blocks (allowed side alerts are expected; "
+                       "unexpected ones are not):"), ""]
+        for r in noisy:
+            side = ", ".join(f"{k} x{v}" for k, v in sorted(r["side_alerts"].items())) or "-"
+            bad = ", ".join(f"{k} x{v}" for k, v in sorted(r["unexpected_alerts"].items())) or "-"
+            lines.append(f"- {r['id']}: side {side}; unexpected {bad}")
+    c = card.get("controls")
+    if c:
+        lines += ["", (f"Positive control: {c['passed']}/{c['trials']} relay-routed genuine "
+                       "blocks raised no alert.")]
     t = card.get("traps")
     if t:
         lines += ["", f"Traps: {t['messages']} genuine messages over "

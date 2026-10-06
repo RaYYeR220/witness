@@ -40,6 +40,16 @@ def seed_of(private_key: bytes) -> bytes:
     return private_key[:32]
 
 
+def _data_region(raw: bytes) -> tuple[int, int]:
+    """Byte range of the tagged-data `data` field inside a serialized block."""
+    block = codec.parse_block(raw)
+    payload = block.payload
+    if not isinstance(payload, codec.TaggedData) or not payload.data:
+        raise ValueError("block carries no tagged data to flip a byte in")
+    start = 2 + 32 * len(block.parents) + 4 + 4 + 1 + len(payload.tag) + 4
+    return start, start + len(payload.data)
+
+
 def forge_milestone_bundle(real_bundle: dict, sample_private_keys: list[bytes]) -> dict:
     """Fake block + fake milestone for the index of `real_bundle`'s milestone.
 
@@ -97,7 +107,8 @@ def tamper_bundle(
 ) -> dict:
     """Copy of `b` with one attack applied.
 
-    byte_flip    (A07) flips one bit inside the raw block, keeping the claimed id
+    byte_flip    (A07) flips one bit inside the tagged-data payload of the raw block (the block
+                 still parses), keeping the claimed id
     merkle_path  (A08) corrupts one step of the inclusion path (adds one if the path is empty)
     checkpoint   (A10) doctors the anchor checkpoint's msgCount; its membership proof
                  stays valid but its hash no longer equals the on-chain record
@@ -106,8 +117,8 @@ def tamper_bundle(
     out = copy.deepcopy(b)
     if kind == "byte_flip":
         raw = bytearray(from_hex(out["block"]["raw"]))
-        pos = rng.randrange(len(raw))
-        raw[pos] ^= 1 << rng.randrange(8)
+        lo, hi = _data_region(bytes(raw))
+        raw[rng.randrange(lo, hi)] ^= 1 << rng.randrange(8)
         out["block"]["raw"] = to_hex(bytes(raw))
     elif kind == "merkle_path":
         path = out["inclusion"]["path"]

@@ -189,8 +189,12 @@ async def test_offline_attacks_meet_their_expectation(ctx, name, cid, step, no_n
     rec = await getattr(A, name)(ctx)
     assert isinstance(rec, A.InjectionRecord)
     assert rec.id == cid
-    assert rec.expected == {"ladder": {"step": step, "ok": False}}
+    want = {"step": step, "ok": False}
+    if cid == "A07":
+        want["parses"] = True
+    assert rec.expected == {"ladder": want}
     assert rec.detail["steps"][step] is False
+    assert A.meets_offline_expectation(rec.expected, rec.detail)
     assert step in STEP_NAMES
     assert rec.block_id == rec.detail["bundle"]["block"]["id"]
 

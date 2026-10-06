@@ -2,29 +2,8 @@ import json
 
 import pytest
 import yaml
-from witness_chaos import attacks, scorecard
-
-
-@pytest.fixture(scope="module")
-def key():
-    return attacks.answer_key()
-
-
-def make(key, misses=None, wrong=None):
-    misses, wrong = misses or {}, wrong or {}
-    out = []
-    for c in key["classes"]:
-        label = scorecard.expected_label(c["expect"])
-        for t in range(c["trials"]):
-            if t < misses.get(c["id"], 0):
-                out.append({"class": c["id"], "trial": t, "detected": False, "observed": None})
-            elif t < misses.get(c["id"], 0) + wrong.get(c["id"], 0):
-                out.append({"class": c["id"], "trial": t, "detected": False,
-                            "observed": "PRODUCER_SIGNED"})
-            else:
-                out.append({"class": c["id"], "trial": t, "detected": True, "observed": label,
-                            "latency_ms": 1000 * (t + 1)})
-    return out
+from helpers import make
+from witness_chaos import scorecard
 
 
 def test_percentile_nearest_rank():

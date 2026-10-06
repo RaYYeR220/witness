@@ -20,7 +20,8 @@ from typing import Any
 import httpx
 import yaml
 from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
-from witness_core import bundle, canon, envelope
+from cryptography.hazmat.primitives.asymmetric.x25519 import X25519PrivateKey
+from witness_core import bundle, canon, codec, envelope, sealed
 from witness_core.bundle import VerifierConfig
 from witness_core.ids import blake2b256, to_hex
 
@@ -67,6 +68,11 @@ class AttackContext:
     ie_id: str = "ChaosDomain:aabbccddeeff"
     stale_ie_id: str = "ChaosDomain:112233445566"
     baseline_score: float = 0.5
+    # Per-trial IE ids come from these pools (IEs the run registered in Orion); when a
+    # pool is empty a fresh random id is used.
+    ie_pool: list[str] = field(default_factory=list)
+    stale_pool: list[str] = field(default_factory=list)
+    search_key: bytes | None = None  # domain blind-index key, for A11
     # Offline classes.
     real_bundle: dict | None = None
     sample_private_keys: list[bytes] = field(default_factory=list)
@@ -85,6 +91,13 @@ class AttackContext:
             self._seq[iss] = self.clock_ms()
         self._seq[iss] += 1
         return self._seq[iss]
+
+    def begin_trial(self) -> None:
+        """Fresh IE ids and baseline score, so trials cannot interfere with each other."""
+        self.ie_id = self.ie_pool.pop(0) if self.ie_pool else random_ie_id(self.rng)
+        self.stale_ie_id = (self.stale_pool.pop(0) if self.stale_pool
+                            else random_ie_id(self.rng))
+        self.baseline_score = round(self.rng.uniform(0.4, 0.6), 3)
 
     def require_live(self) -> None:
         if self.live is not True:
@@ -383,6 +396,10 @@ async def a05_revoked_key(ctx: AttackContext) -> InjectionRecord:
 
 async def a06_orion_drift(ctx: AttackContext) -> InjectionRecord:
     ctx.require_live()
+    ctx.begin_trial()
+    seed = env_bytes(seal_as(ctx.need("producer"), ctx,
+                             score_body(ctx.ie_id, ctx.baseline_score)))
+    await _post_hornet(ctx, TRUST_TAG, seed)  # the ledger score Orion will disagree with
     url, body = orion_patch(ctx, ctx.ie_id, ctx.baseline_score)
     at = ctx.clock_ms()
     client, own = await _client(ctx)
@@ -395,15 +412,47 @@ async def a06_orion_drift(ctx: AttackContext) -> InjectionRecord:
     return _record(ctx, "A06", None, ctx.ie_id, {"orionValue": body["value"]}, at)
 
 
+def build_a11(ctx: AttackContext) -> dict:
+    """Plaintext report for the sealed tag; `secret` is the marker that must never show."""
+    return {"reportId": str(uuid.uuid4()), "secret": f"s{ctx.rng.getrandbits(64):016x}"}
+
+
+def check_sealed(stored: Any, plaintext: dict) -> tuple[bool, str]:
+    """A11 `sealed`: the stored envelope has `enc` and no `body`, none of the plaintext is
+    visible in it, and decrypting without the recipient key fails."""
+    if not isinstance(stored, dict) or not isinstance(stored.get("enc"), dict):
+        return False, "stored message has no enc"
+    if "body" in stored:
+        return False, "stored message carries a plaintext body"
+    text = json.dumps(stored)
+    if any(str(v) in text for v in plaintext.values()):
+        return False, "plaintext visible in the stored message"
+    try:
+        sealed.decrypt_body(stored["enc"], "did:none#kex-1", X25519PrivateKey.generate())
+    except (sealed.NotARecipient, sealed.DecryptError):
+        return True, "decrypt without the recipient key fails"
+    return False, "decryption without the recipient key succeeded"
+
+
+def blind_token_for(ctx: AttackContext, tag: str = SEALED_TAG) -> str:
+    return sealed.blind_token(ctx.need("search_key"), "tag", tag)
+
+
+def check_blind_search(result_block_ids: list[str], block_id: str | None) -> bool:
+    """A11 `blind_search`: the lookup by blind token returns the injected block."""
+    return block_id is not None and block_id.lower() in {b.lower() for b in result_block_ids}
+
+
 async def a11_sealed_without_key(ctx: AttackContext) -> InjectionRecord:
     ctx.require_live()
     at = ctx.clock_ms()
-    message = {"reportId": str(uuid.uuid4()), "secret": ctx.rng.getrandbits(64)}
+    message = build_a11(ctx)
     reply = await _post_relay(ctx, SEALED_TAG, message)
     bid = (reply.get("witness") or {}).get("blockId")
     return _record(ctx, "A11", bid, None,
                    {"tag": SEALED_TAG, "plaintext": message,
-                    "check": "no plaintext without the recipient key"}, at)
+                    "blindToken": blind_token_for(ctx),
+                    "checks": ["sealed", "blind_search"]}, at)
 
 
 async def a12_unknown_ie(ctx: AttackContext) -> InjectionRecord:
@@ -413,12 +462,15 @@ async def a12_unknown_ie(ctx: AttackContext) -> InjectionRecord:
 
 async def a13_score_jump(ctx: AttackContext) -> InjectionRecord:
     ctx.require_live()
+    ctx.begin_trial()
     first, second = build_a13(ctx)
     await _post_hornet(ctx, *first)
     return await _direct(ctx, "A13", *second, detail={"from": 0.9, "to": 0.1})
 
 
 async def a14_stale_ie(ctx: AttackContext) -> InjectionRecord:
+    ctx.require_live()
+    ctx.begin_trial()
     tag, data = build_a14(ctx)
     return await _direct(ctx, "A14", tag, data, ie_id=ctx.stale_ie_id)
 
@@ -430,6 +482,7 @@ async def a15_malformed_payload(ctx: AttackContext) -> InjectionRecord:
 
 async def a16_content_mismatch(ctx: AttackContext) -> InjectionRecord:
     ctx.require_live()
+    ctx.begin_trial()
     tag, data = build_a17(ctx)
     at = ctx.clock_ms()
     bid = await _post_hornet(ctx, tag, data)
@@ -438,12 +491,15 @@ async def a16_content_mismatch(ctx: AttackContext) -> InjectionRecord:
 
 
 async def a17_shadow(ctx: AttackContext) -> InjectionRecord:
+    ctx.require_live()
+    ctx.begin_trial()
     tag, data = build_a17(ctx)
     return await _direct(ctx, "A17", tag, data)
 
 
 async def a18_orphaned(ctx: AttackContext) -> InjectionRecord:
     ctx.require_live()
+    ctx.begin_trial()
     record = build_a18_record(ctx)
     at = ctx.clock_ms()
     await _post_ingest(ctx, record)
@@ -467,6 +523,7 @@ async def a19_db_tamper(ctx: AttackContext) -> InjectionRecord:
 
 async def a20_chain_gap(ctx: AttackContext) -> InjectionRecord:
     ctx.require_live()
+    ctx.begin_trial()
     m1, m3, missing = build_a20(ctx)
     await _post_relay(ctx, TRUST_TAG, m1)
     at = ctx.clock_ms()
@@ -495,9 +552,26 @@ def forge_fetch(ctx: AttackContext) -> Callable[[dict], dict | None]:
     return lambda _anchor: record
 
 
+def parses(b: dict) -> bool:
+    try:
+        codec.parse_block(bytes.fromhex(b["block"]["raw"][2:]))
+    except (codec.DecodeError, ValueError, KeyError):
+        return False
+    return True
+
+
+def meets_offline_expectation(expect: dict, detail: dict) -> bool:
+    """Does the ladder outcome recorded in `detail` match an offline `expect`?"""
+    want = expect["ladder"]
+    if detail["steps"].get(want["step"]) is not want["ok"]:
+        return False
+    return "parses" not in want or detail.get("parses") is want["parses"]
+
+
 def _offline(ctx: AttackContext, cid: str, b: dict) -> InjectionRecord:
     at = ctx.clock_ms()
     detail = _ladder_detail(ctx, b)
+    detail["parses"] = parses(b)
     detail["bundle"] = b
     return _record(ctx, cid, b["block"]["id"], None, detail, at)
 

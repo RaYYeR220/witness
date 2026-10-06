@@ -3,8 +3,7 @@ import json
 import re
 from pathlib import Path
 
-import pytest
-import yaml
+from helpers import VALIDATOR_ALERTS
 from witness_chaos import attacks
 from witness_core import verdicts
 from witness_core.bundle import STEP_NAMES
@@ -15,15 +14,9 @@ POLICY = Path(__file__).resolve().parents[1] / "demo-policy.json"
 IDENTITIES = Path(__file__).resolve().parents[2] / "deploy" / "identity" / "testnet.json"
 
 VERDICTS = {v for k, v in vars(verdicts).items() if k.isupper() and isinstance(v, str)}
-# Raised by the validator (indexer.validator source), not listed in rules.SEVERITY.
-VALIDATOR_ALERTS = {"ORPHANED": "high", "CONTENT_MISMATCH": "critical",
-                    "DB_TAMPER": "critical", "NOT_FOUND": "critical"}
+PRIMARY = {"verdict", "alert", "ladder", "ladder_overall"}
+EXTRA = {"severity", "block_verdict", "sealed", "blind_search"}
 CHANNELS = {"relay", "hornet-direct", "orion", "db", "bundle-offline"}
-
-
-@pytest.fixture(scope="module")
-def key():
-    return yaml.safe_load(KEY.read_text(encoding="utf-8"))
 
 
 def test_answer_key_complete(key):
@@ -35,7 +28,9 @@ def test_answer_key_complete(key):
         assert c["description"].strip() and c["name"]
         assert c["trials"] == 20 and c["timeout_s"] > 0
         assert c["channel"] in CHANNELS
-        assert len(c["expect"]) == 1 or set(c["expect"]) == {"alert", "severity"}
+        assert len(PRIMARY & set(c["expect"])) == 1, c["id"]
+        assert set(c["expect"]) <= PRIMARY | EXTRA, c["id"]
+        assert isinstance(c["allowed_side_alerts"], list), c["id"]
         fn = getattr(attacks, c["inject"], None)
         assert inspect.iscoroutinefunction(fn), c["id"]
         assert list(inspect.signature(fn).parameters) == ["ctx"]
