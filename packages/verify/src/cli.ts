@@ -22,10 +22,11 @@ const USAGE = `Usage: witness-verify <bundle.json> --config <verifier.json> [--a
 Verifies a witness-proof/v1 bundle offline and prints the ladder as JSON.
 
   --config <file>         pinned verifier config:
-                          {network, trustedCoordinatorKeys, threshold, rebasedNetwork?, trailId?}
+                          {network, trustedCoordinatorKeys, threshold, rebasedNetwork?, trailId?,
+                          anchorWriter?}
   --anchor-record <file>  TRUSTED input: the on-chain record of the bundle's checkpoint, read by
-                          you from the pinned trail: {checkpointHash} and/or {checkpoint};
-                          null means unavailable
+                          you from the pinned trail: {checkpointHash} and/or {checkpoint}, plus
+                          {addedBy} when anchorWriter is pinned; null means unavailable
   --resolver <file>       TRUSTED input: DID documents from the registry, keyed by DID:
                           {"did:...": {doc, version, keys}}
   -h, --help              show this help

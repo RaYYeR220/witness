@@ -78,6 +78,14 @@ export {
   type CheckpointBound,
 } from "./checkpoint.js";
 export {
+  fetchRecord,
+  makeRebasedFetcher,
+  RebasedError,
+  type AnchorRecord,
+  type RebasedPins,
+  type RebasedReadOptions,
+} from "./rebased.js";
+export {
   BUNDLE_VERSION,
   DidSnapshotError,
   pinnedSignatures,

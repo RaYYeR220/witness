@@ -47,6 +47,12 @@ export interface VerifierConfig {
   threshold: number;
   rebasedNetwork?: string | null;
   trailId?: string | null;
+  /** HTTPS JSON-RPC of an IOTA Rebased fullnode to read the anchor record from (see `makeRebasedFetcher`). */
+  rebasedRpc?: string | null;
+  /** Audit Trail package id as it appears in the trail object's Move type. */
+  auditTrailPackage?: string | null;
+  /** Address that writes the anchor's trail records; when pinned, a record by anyone else fails step 5. */
+  anchorWriter?: string | null;
 }
 
 export interface StepResult {
@@ -65,7 +71,9 @@ type Awaitable<T> = T | Promise<T>;
 export interface VerifyOptions {
   /**
    * Returns the on-chain checkpoint record (`{checkpointHash}` and/or
-   * `{checkpoint}`; null when unreachable) for the bundle's `anchor` section.
+   * `{checkpoint}`, plus `addedBy` when `anchorWriter` is pinned; null when
+   * the trail has no such record) for the bundle's `anchor` section;
+   * `makeRebasedFetcher` builds one that reads the pinned chain.
    * It must read record `anchor.rebased.record` from the verifier's pinned
    * trail on the pinned Rebased network and ignore the bundle's `tx` and
    * `network`. Only called once checkpoint, membership path and pins have
@@ -101,6 +109,9 @@ interface PinnedConfig {
   threshold: unknown;
   rebasedNetwork: string | null;
   trailId: string | null;
+  rebasedRpc: string | null;
+  auditTrailPackage: string | null;
+  anchorWriter: string | null;
 }
 
 function normalizeConfig(cfg: VerifierConfig): PinnedConfig {
@@ -127,6 +138,9 @@ function normalizeConfig(cfg: VerifierConfig): PinnedConfig {
     threshold: cfg.threshold,
     rebasedNetwork: optional(cfg.rebasedNetwork, "rebasedNetwork"),
     trailId: optional(cfg.trailId, "trailId"),
+    rebasedRpc: optional(cfg.rebasedRpc, "rebasedRpc"),
+    auditTrailPackage: optional(cfg.auditTrailPackage, "auditTrailPackage"),
+    anchorWriter: optional(cfg.anchorWriter, "anchorWriter"),
   };
 }
 
@@ -538,6 +552,9 @@ async function stepAnchor(b: JsonObject, cfg: PinnedConfig, fetch: VerifyOptions
     return [null, `anchor record unavailable (${errorName(e)})`]; // an unreachable chain is not a verdict
   }
   if (isNone(record)) return [null, "anchor record unavailable"];
+  if (cfg.anchorWriter !== null && !(isDict(record) && get(record, "addedBy") === cfg.anchorWriter)) {
+    return [false, "anchor record was not written by the pinned anchor writer"];
+  }
   return recordMatches(record, checkpointHash(cp));
 }
 
