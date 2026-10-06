@@ -37,6 +37,7 @@ from dataclasses import dataclass, field
 from typing import Any
 
 import psycopg
+from witness_core import nesting
 from witness_core.canon import jcs
 from witness_core.codec import (
     DecodeError,
@@ -133,10 +134,10 @@ def json_diff(expected: bytes, actual: bytes) -> dict:
     compared in canonical form so key order and whitespace do not count. Used for the human
     view only; the verdict itself is the exact byte comparison."""
     try:
-        e, a = json.loads(expected), json.loads(actual)
+        e, a = nesting.loads(expected), nesting.loads(actual)
         changes: list[dict] = []
         _walk("$", e, a, changes)
-    except (ValueError, RecursionError):
+    except (ValueError, RecursionError):  # not JSON, past the shared cap, or too deep to walk
         return {"comparable": False}
     out = {"comparable": True, "equal": not changes, "changes": changes[:MAX_JSON_CHANGES]}
     if len(changes) > MAX_JSON_CHANGES:

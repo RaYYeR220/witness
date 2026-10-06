@@ -488,6 +488,26 @@ async def test_receipts_and_healthz(make_cfg, hornet, relay, ids):
         assert health.json()["status"] == "ok"
 
 
+async def test_bodies_nested_too_deep_are_refused(make_cfg, hornet, relay):
+    """Past the shared parse cap the body is refused as such (2501 levels parse with
+    json.loads on every platform); a message too deep for the relay to sign is a 400 too,
+    never a server error."""
+    deep = b'{"tag":"trust.score","message":' + b"[" * 2500 + b"]" * 2500 + b"}"
+    nested: list = []
+    for _ in range(600):
+        nested = [nested]
+    async with relay(make_cfg()) as client:
+        r = await client.post("/upload", params=UPLOAD, content=deep,
+                              headers={"content-type": "application/json"})
+        assert r.status_code == 400
+        assert r.json()["error"] == "body is JSON nested deeper than 2500 levels"
+        r = await client.post("/upload", params=UPLOAD,
+                              json={"tag": "trust.score", "message": {"x": nested}})
+        assert r.status_code == 400
+        assert r.json()["error"].startswith("message cannot be signed")
+    assert hornet.route.call_count == 0
+
+
 async def test_resolver_outage_is_a_temporary_refusal(make_cfg, hornet, relay):
     """A DID resolver that cannot answer (here 401, then 503) refuses with 503 and caches
     nothing; once it answers, the same envelope goes through."""

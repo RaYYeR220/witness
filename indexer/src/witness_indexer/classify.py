@@ -165,7 +165,7 @@ def decode(tag_bytes: bytes, data: bytes, classify: Classifier = schema.classify
     kind = c.kind
     if c.envelope is None and not isinstance(c.json, dict):
         kind = schema.UNKNOWN  # binary, scalars, arrays: no kind can apply
-    if too_deep(c.envelope if c.envelope is not None else c.json):
+    if c.too_deep or too_deep(c.envelope if c.envelope is not None else c.json):
         return Decoded(tag, kind, c, None, None, [], None, too_deep=True)
     body = c.json if c.json is None or storable_json(c.json) else None
 
@@ -240,6 +240,10 @@ async def judge(store: Store, pol: WriterPolicy, keys: Mapping[str, KeyInfo | No
     """The verdict for one message confirmed by a milestone with timestamp `ms_timestamp` (s).
     `keys` comes from `resolve_keys` for the same milestone."""
     env = d.envelope
+    if d.classified.too_deep:
+        # Past the shared parse cap (witness_core.nesting.MAX_JSON_DEPTH), envelope or not:
+        # fails closed on every platform, as the proof verifier's envelope step does.
+        return Judgement(verdicts.MALFORMED, None, TOO_DEEP)
     if env is None:
         if d.kind == schema.UNKNOWN and d.tag in schema.KINDS:
             return Judgement(verdicts.MALFORMED, None, "payload is not a JSON object")

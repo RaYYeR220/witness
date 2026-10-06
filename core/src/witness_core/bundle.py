@@ -15,7 +15,6 @@ Ladder: 1 block_hash, 2 inclusion, 3 milestone_signatures, 4 envelope,
 
 from __future__ import annotations
 
-import json
 import re
 from collections.abc import Callable
 from dataclasses import dataclass
@@ -334,22 +333,18 @@ def _json(data: bytes) -> Any:
     Text nesting deeper than `nesting.MAX_JSON_DEPTH` raises RecursionError, valid JSON or
     not, so the step fails closed: where json.loads itself gives up depends on the
     platform, and "unsigned legacy" (not evaluated) on one verifier against a failure on
-    another would split the verdict. A RecursionError from json.loads is let through the
-    same way (it cannot happen below the cap).
+    another would split the verdict. `nesting.loads` turns a RecursionError from json.loads
+    (it cannot happen below the cap) into the same.
     """
 
     def reject(token: str) -> Any:
         raise ValueError(f"non-finite number {token}")
 
     try:
-        text = data.decode("utf-8")
-    except UnicodeDecodeError:
-        return None
-    if nesting.text_too_deep(text):
-        raise RecursionError(f"JSON nested deeper than {nesting.MAX_JSON_DEPTH} levels")
-    try:
-        return json.loads(text, parse_constant=reject)
-    except ValueError:
+        return nesting.loads(data.decode("utf-8"), parse_constant=reject)
+    except nesting.JsonTooDeep as exc:
+        raise RecursionError(str(exc)) from None
+    except ValueError:  # includes UnicodeDecodeError
         return None
 
 

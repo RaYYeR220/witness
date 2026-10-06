@@ -11,6 +11,7 @@ json.ts, `JCS_MAX_DEPTH` in jcs.ts); keep both sides equal.
 
 from __future__ import annotations
 
+import json
 from typing import Any
 
 # Deepest bracket nesting read from JSON text. Below the C json scanner's own limit on
@@ -50,6 +51,32 @@ def text_too_deep(text: str, limit: int = MAX_JSON_DEPTH) -> bool:
             depth -= 1
     return False
 
+
+
+class JsonTooDeep(ValueError):
+    """JSON text nested deeper than MAX_JSON_DEPTH, valid JSON or not."""
+
+    def __init__(self, limit: int = MAX_JSON_DEPTH) -> None:
+        super().__init__(f"JSON nested deeper than {limit} levels")
+
+
+def loads(data: str | bytes | bytearray, **kw: Any) -> Any:
+    """`json.loads` for untrusted input, behind the shared cap.
+
+    Raises JsonTooDeep (a ValueError) when the text nests deeper than MAX_JSON_DEPTH, so
+    every entry point refuses the same payloads on every platform; json's own
+    RecursionError (which cannot occur below the cap) is turned into the same. Bytes are
+    decoded the way json.loads decodes them (UTF-8/16/32 sniffing). Other errors are
+    json.loads' own.
+    """
+    text = data.decode(json.detect_encoding(data), "surrogatepass") if isinstance(
+        data, (bytes, bytearray)) else data
+    if text_too_deep(text):
+        raise JsonTooDeep
+    try:
+        return json.loads(text, **kw)
+    except RecursionError:
+        raise JsonTooDeep from None
 
 
 def value_too_deep(value: Any, limit: int = MAX_JCS_DEPTH) -> bool:

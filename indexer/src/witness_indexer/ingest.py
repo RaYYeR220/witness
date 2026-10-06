@@ -9,7 +9,6 @@ block id), opens its lifecycle and hands the block to the validator.
 from __future__ import annotations
 
 import asyncio
-import json
 import logging
 import re
 import time
@@ -17,6 +16,8 @@ from collections.abc import AsyncIterator, Awaitable, Callable
 from contextlib import AbstractAsyncContextManager, asynccontextmanager
 from typing import Any, Literal, Protocol
 from urllib.parse import unquote, urlsplit
+
+from witness_core import nesting
 
 from . import events
 from .store import Store, Submission
@@ -290,11 +291,10 @@ class MqttIngest:
     async def _on_payload(self, payload: bytes) -> None:
         self.stats["received"] += 1
         try:
-            obj = json.loads(payload)
-        except (ValueError, RecursionError) as e:
+            obj = nesting.loads(payload)
+        except ValueError as e:  # not JSON, or nested past the shared cap
             self.stats["bad"] += 1
-            log.warning("dropped submission record that is not JSON: %s",
-                        type(e).__name__ if isinstance(e, RecursionError) else e)
+            log.warning("dropped submission record that is not JSON: %s", e)
             return
         try:
             new = await handle_record(self.store, self.validator, obj, source="mqtt")

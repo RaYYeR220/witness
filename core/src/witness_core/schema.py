@@ -4,18 +4,18 @@
 that kind's shape. witness/v1 envelopes are unwrapped first and their `body`
 is what gets checked; a sealed (encrypted) body cannot be inspected and counts
 as well formed. Extra fields are allowed; required ones must have the right type.
-Never raises.
+Data nested past the shared cap (`nesting.MAX_JSON_DEPTH`) is not read at all and
+comes back with `too_deep` set. Never raises.
 """
 
 from __future__ import annotations
 
-import json
 import math
 import re
 from dataclasses import dataclass
 from typing import Any
 
-from . import checkpoint, envelope
+from . import checkpoint, envelope, nesting
 
 KINDS: dict[str, str] = {
     "trust.score": "trust.score",
@@ -44,6 +44,7 @@ class Classified:
     nonce: str | None = None
     prev: str | None = None
     corr: str | None = None
+    too_deep: bool = False  # nested past nesting.MAX_JSON_DEPTH: not read, fails closed
 
 
 class _NotJson:
@@ -51,6 +52,7 @@ class _NotJson:
 
 
 _NOT_JSON = _NotJson()
+_TOO_DEEP = _NotJson()
 
 
 def _parse(data: bytes) -> Any:
@@ -58,8 +60,10 @@ def _parse(data: bytes) -> Any:
         raise ValueError(f"non-finite number {token}")
 
     try:
-        return json.loads(data.decode("utf-8"), parse_constant=reject)
-    except (ValueError, RecursionError):  # includes UnicodeDecodeError, JSONDecodeError
+        return nesting.loads(data.decode("utf-8"), parse_constant=reject)
+    except nesting.JsonTooDeep:
+        return _TOO_DEEP
+    except ValueError:  # includes UnicodeDecodeError, JSONDecodeError
         return _NOT_JSON
 
 
@@ -195,6 +199,8 @@ def classify(tag: str, data: bytes) -> Classified:
 
 def _classify(tag: str, data: bytes) -> Classified:
     obj = _parse(data)
+    if obj is _TOO_DEEP:
+        return Classified(UNKNOWN, None, None, None, False, too_deep=True)
     if obj is _NOT_JSON:
         return Classified(UNKNOWN, None, None, None, False)
     kind = KINDS.get(tag, UNKNOWN)

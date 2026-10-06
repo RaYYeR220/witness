@@ -22,6 +22,7 @@ from psycopg import sql
 from psycopg.rows import dict_row
 from psycopg.types.json import Jsonb
 from psycopg_pool import AsyncConnectionPool
+from witness_core import nesting
 
 from .events import NOTIFY_CHANNEL
 
@@ -139,7 +140,7 @@ def _enc_cursor(parts: list) -> str:
 def _dec_cursor(cur: str) -> list:
     pad = "=" * (-len(cur) % 4)
     try:
-        g, a, b, bid = json.loads(base64.urlsafe_b64decode(cur + pad))
+        g, a, b, bid = nesting.loads(base64.urlsafe_b64decode(cur + pad))
         return [int(g), int(a), int(b), bytes.fromhex(bid)]
     except (ValueError, TypeError) as e:
         raise ValueError("invalid cursor") from e

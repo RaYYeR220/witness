@@ -193,6 +193,10 @@ async def test_lookup_canonical(client, store, vectors):
     big = await client.post("/lookup", content=b'{"a":"' + b"x" * 300_000 + b'"}',
                             headers={"content-type": "application/json"})
     assert big.status_code == 413
+    deep = await client.post("/lookup", content=b'{"a":' + b"[" * 2500 + b"]" * 2500 + b"}",  # 2501 levels
+                             headers={"content-type": "application/json"})
+    assert deep.status_code == 400
+    assert deep.json()["detail"] == "body is JSON nested deeper than 2500 levels"
 
 
 async def test_lookup_blind(client, store):

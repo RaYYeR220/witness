@@ -512,7 +512,7 @@ def test_native_recursion_error_still_fails_closed(vectors, monkeypatch):
 
     s = _synthetic(vectors, _envelope(), claimed=CLAIMED, data=_legacy_nested(3))
     cfg, fetch, registry = _cfg(vectors), _fetch(s.record), _registry()
-    monkeypatch.setattr(bundle.json, "loads", boom)
+    monkeypatch.setattr(json, "loads", boom)
     step = _step(bundle.verify(s.bundle, cfg, fetch, registry), "envelope")
     assert (step.ok, step.detail) == (False, TOO_DEEP)
 

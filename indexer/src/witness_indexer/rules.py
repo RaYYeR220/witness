@@ -61,7 +61,7 @@ from collections.abc import Awaitable, Callable, Iterable
 from dataclasses import dataclass
 from typing import Any, ClassVar
 
-from witness_core import checkpoint, envelope, merkle
+from witness_core import checkpoint, envelope, merkle, nesting
 from witness_core import verdicts as V
 from witness_core.bundle import snapshot_keys
 from witness_core.envelope import KeyInfo
@@ -70,6 +70,7 @@ from witness_core.policy import TagRule, WriterPolicy
 
 from . import events
 from .anchor_client import AnchorClient, AnchorUnavailable
+from .classify import TOO_DEEP
 from .orion import IE, IE_URN, MISSING, OrionClient, OrionUnavailable
 from .resolver import DidResolver, ResolverUnavailable
 from .store import Alert, MessageRow, Store
@@ -192,9 +193,16 @@ def _json(data: bytes | None) -> Any:
     if data is None:
         return None
     try:
-        return json.loads(bytes(data).decode("utf-8"), parse_constant=reject)
-    except (ValueError, RecursionError):
+        return nesting.loads(bytes(data).decode("utf-8"), parse_constant=reject)
+    except ValueError:  # not UTF-8, not JSON, or nested past the shared cap
         return None
+
+
+def _over_cap(data: bytes | None) -> bool:
+    try:
+        return data is not None and nesting.text_too_deep(bytes(data).decode("utf-8"))
+    except UnicodeDecodeError:
+        return False
 
 
 def _envelope_of(row: MessageRow) -> dict | None:
@@ -489,7 +497,7 @@ class RulesEngine:
     async def _malformed(self, row: MessageRow, now: int) -> Alert:
         obj = _json(row.data)
         if obj is None:
-            reason = "data is not JSON"
+            reason = TOO_DEEP if _over_cap(row.data) else "data is not JSON"
         elif envelope.is_envelope(obj):
             check = envelope.verify(obj, row.tag or "", lambda _kid: None)
             reason = (check.reason if check.verdict == V.MALFORMED

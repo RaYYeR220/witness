@@ -510,6 +510,37 @@ async def test_hostile_nesting_is_indexed(store: Store):
     assert await store.get_cursor() == 1
 
 
+def _over_cap(n: int, *, closed: bool = True) -> bytes:
+    """An object nesting `n` containers in all (json.loads parses 2501 on every platform)."""
+    return b'{"a":' + b"[" * (n - 1) + ((b"]" * (n - 1) + b"}") if closed else b"")
+
+
+async def test_payloads_past_the_shared_cap_are_malformed(store: Store):
+    """Past witness_core.nesting.MAX_JSON_DEPTH (2500) a payload is MALFORMED "nesting too
+    deep" whatever its tag, envelope or not, valid JSON or not; at the cap it is read."""
+    shell = json.loads(signed(ALICE, "trust.score", {"x": 1}, 1))
+    shell.pop("body")
+    deep_env = (json.dumps(shell)[:-1] + ', "body": {"a":' + "[" * 2499 + "]" * 2499
+                + "}}").encode()  # 2501 levels in all
+    payloads = [
+        ("deep.legacy", _over_cap(2500)),
+        ("deep.legacy", _over_cap(2501)),
+        ("trust.score", _over_cap(2501)),
+        ("deep.legacy", _over_cap(2501, closed=False)),
+        ("trust.score", deep_env),
+    ]
+    chain = FakeChain()
+    chain.add(payloads)
+    await indexer(FakeSource(chain), store).sync()
+    rows = [await msg(store, chain.block_id(1, n)) for n in range(len(payloads))]
+    assert [r["verdict"] for r in rows] == ["UNSIGNED_LEGACY"] + ["MALFORMED"] * 4
+    assert all(r["json"] is None and r["kind"] == "unknown" for r in rows[1:])
+    reasons = {e["payload"]["blockId"]: e["payload"]["reason"]
+               for e in await store.events_after(0, 100) if e["type"] == "message"}
+    for n in range(1, len(payloads)):
+        assert reasons["0x" + chain.block_id(1, n).hex()] == "nesting too deep", n
+
+
 async def test_sealed_envelope_keeps_blind_tokens(store: Store):
     did = did_key(ALICE)
     sealed = envelope.seal("trust.score", None, iss=did, kid=f"{did}#{did[len('did:key:'):]}",

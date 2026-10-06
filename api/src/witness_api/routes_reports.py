@@ -24,6 +24,7 @@ from typing import Annotated
 from fastapi import APIRouter, Body, Depends, HTTPException, Path, Query
 from fastapi.responses import HTMLResponse, JSONResponse
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
+from witness_core import nesting
 
 from . import models as m
 from . import reports
@@ -164,7 +165,7 @@ def _encode_cursor(row: dict) -> str:
 
 def _decode_cursor(cursor: str) -> tuple[int, bytes]:
     try:
-        gen, h = json.loads(base64.urlsafe_b64decode(cursor + "=" * (-len(cursor) % 4)))
+        gen, h = nesting.loads(base64.urlsafe_b64decode(cursor + "=" * (-len(cursor) % 4)))
         digest = bytes.fromhex(h)
         if not isinstance(gen, int) or len(digest) != 32:
             raise ValueError

@@ -519,6 +519,14 @@ async def test_text_postgres_rejects_is_stored_escaped(engine, store):
     assert (await store.stats()).get("rules") != "error"
 
 
+async def test_malformed_past_the_shared_cap_says_so(engine):
+    data = b'{"a":' + b"[" * 2500 + b"]" * 2500 + b"}"  # 2501 levels: parsed nowhere
+    [a] = await fired(engine, hostile_row(data, V.MALFORMED))
+    assert (a.rule, a.evidence["reason"]) == (V.MALFORMED, "nesting too deep")
+    [b] = await fired(engine, hostile_row(b"not json at all", V.MALFORMED))
+    assert b.evidence["reason"] == "data is not JSON"
+
+
 @pytest.mark.parametrize("verdict", [V.FORGED, V.MALFORMED])
 async def test_deeply_nested_envelope_is_reported_not_fatal(engine, verdict):
     body = f'{{"score":0.8,"id":"{IE}","x":{"[" * 1500}{"]" * 1500}}}'

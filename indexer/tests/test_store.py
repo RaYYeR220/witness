@@ -476,3 +476,15 @@ async def test_confirmation_keeps_stronger_values(store: Store):
     assert await store.put_message(forged) == "confirmed"
     m2 = await store.get_message(bid(2))
     assert m2["verdict"] == "FORGED" and m2["confirmed_at_ms"] == 50_000
+
+
+def test_cursor_past_the_shared_cap_is_invalid():
+    import base64
+
+    from witness_indexer.store import _dec_cursor, _enc_cursor
+
+    good = _enc_cursor([1, 2, 3, "ab"])
+    assert _dec_cursor(good) == [1, 2, 3, b"\xab"]
+    deep = base64.urlsafe_b64encode(b"[" * 2501 + b"]" * 2501).decode().rstrip("=")
+    with pytest.raises(ValueError, match="invalid cursor"):
+        _dec_cursor(deep)

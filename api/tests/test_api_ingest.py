@@ -127,6 +127,10 @@ async def test_ingest_rejects_malformed(client):
         r = await client.post("/ingest", content=body, headers={**AUTH,
                               "content-type": "application/json"})
         assert r.status_code == 400, body
+    deep = await client.post("/ingest", content=b'{"a":' + b"[" * 2500 + b"]" * 2500 + b"}",  # 2501 levels
+                             headers={**AUTH, "content-type": "application/json"})
+    assert deep.status_code == 400
+    assert deep.json()["detail"] == "body is JSON nested deeper than 2500 levels"
     huge = record("sub-3", None, None, message={"x": "y" * 600_000})
     assert (await client.post("/ingest", json=huge, headers=AUTH)).status_code == 413
 

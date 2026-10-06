@@ -95,6 +95,16 @@ def test_replay_bumps_seq_and_retries_once(tmp_path):
 
 
 @respx.mock
+def test_reply_past_the_shared_cap_is_an_error(tmp_path):
+    make = _signer(tmp_path)
+    deep = b'{"witness":' + b"[" * 2500 + b"]" * 2500 + b"}"  # 2501 levels
+    respx.post("http://relay.test/upload").mock(return_value=httpx.Response(200, content=deep))
+    out = make().upload("http://relay.test", "n", "trust.score", {})
+    assert out["error"] == "relay reply is JSON nested deeper than 2500 levels"
+    assert "prev" not in make().seal("trust.score", {})[0]  # the chain did not move
+
+
+@respx.mock
 def test_replay_twice_gives_up(tmp_path):
     s = _signer(tmp_path)()
     replay = httpx.Response(403, json={"error": "x", "verdict": "REPLAY"})

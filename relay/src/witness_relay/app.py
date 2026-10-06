@@ -32,7 +32,7 @@ import httpx
 import psycopg
 from fastapi import FastAPI, Query, Request
 from fastapi.responses import JSONResponse, PlainTextResponse, Response
-from witness_core import envelope, verdicts
+from witness_core import envelope, nesting, verdicts
 
 from .attest import Attestor, block_size, envelope_data, legacy_data, load_signing_key
 from .auth import AuthError, AuthUnavailable, CallerAuth
@@ -243,7 +243,7 @@ async def _handle(
         too_big = (
             relay.attestor.worst_case_size(tag, content, caller=caller) > relay.cfg.max_block_bytes
         )
-    except ValueError as exc:  # not canonicalizable (e.g. integers beyond 2^53)
+    except (ValueError, RecursionError) as exc:  # not canonicalizable: big ints, too deep
         return JSONResponse({"error": f"message cannot be signed: {exc}"}, status_code=400)
     if too_big:
         sub.iss = decision.iss
@@ -433,9 +433,11 @@ def create_app(cfg: RelayConfig, *, forwarders: list[Forwarder] | None = None) -
         if raw is None:
             return _too_large(relay.cfg)
         try:
-            req = json.loads(raw, parse_constant=_reject_constant, parse_float=_finite_float)
+            req = nesting.loads(raw, parse_constant=_reject_constant, parse_float=_finite_float)
             # Lone surrogates parse but can be neither signed, sent nor forwarded.
             json.dumps(req, ensure_ascii=False).encode("utf-8")
+        except nesting.JsonTooDeep as exc:
+            return JSONResponse({"error": f"body is {exc}"}, status_code=400)
         except ValueError:  # includes UnicodeEncodeError
             return JSONResponse(
                 {"error": "body must be JSON with finite numbers and valid Unicode"},

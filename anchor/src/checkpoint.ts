@@ -9,6 +9,7 @@ import {
   toHex,
   type Checkpoint,
 } from "@witness/verify";
+import { parseUntrusted } from "./untrusted.js";
 
 // The checkpoint format itself (fields, JCS bytes, BLAKE2b hash) lives in @witness/verify, the
 // line-by-line port of witness_core.checkpoint; this module adds what the anchor needs around it:
@@ -263,7 +264,7 @@ export function decodeCheckpointRecord(
   const text = typeof data === "string" ? data : Buffer.from(data).toString("utf8");
   let cp: unknown;
   try {
-    cp = JSON.parse(text);
+    cp = parseUntrusted(text);
   } catch {
     throw new RecordMismatchError("record data is not JSON");
   }
@@ -272,7 +273,7 @@ export function decodeCheckpointRecord(
   const hash = checkpointHashHex(cp as Checkpoint);
   let meta: unknown;
   try {
-    meta = metadata === null ? null : JSON.parse(metadata);
+    meta = metadata === null ? null : parseUntrusted(metadata);
   } catch {
     meta = null;
   }

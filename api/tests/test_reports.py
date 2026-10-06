@@ -12,7 +12,8 @@ import respx
 from apiseed import _row, seed_chain
 from conftest import PG
 from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
-from witness_api import reports
+from fastapi import HTTPException
+from witness_api import reports, routes_reports
 from witness_api.app import create_app
 from witness_api.settings import Settings
 from witness_core import canon, envelope, schema
@@ -306,6 +307,13 @@ async def test_list_reports_pages_with_a_cursor(reports_client, store, monkeypat
     seen = {i["reportHash"] for i in first["items"] + second["items"]}
     assert len(seen) == 3
     assert (await reports_client.get("/reports", params={"cursor": "!!"})).status_code == 400
+    # A cursor nested past the shared cap: refused by the length limit over HTTP, and by
+    # the decoder itself should it ever be reached another way.
+    deep = base64.urlsafe_b64encode(b"[" * 2501 + b"]" * 2501).decode().rstrip("=")
+    assert (await reports_client.get("/reports", params={"cursor": deep})).status_code == 422
+    with pytest.raises(HTTPException) as caught:
+        routes_reports._decode_cursor(deep)
+    assert (caught.value.status_code, caught.value.detail) == (400, "invalid cursor")
     assert (await reports_client.get("/reports", params={"limit": 201})).status_code == 422
 
 

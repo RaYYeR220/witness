@@ -44,6 +44,18 @@ describe("decodeStateMetadata", () => {
     expect(() => decodeStateMetadata([...Buffer.from("DID"), 1, 1, 2, 0, ...Buffer.from("{}")])).toThrow(/encoding/);
   });
 
+  it("refuses documents nested past the shared cap (2500 levels)", () => {
+    const pack = (json: string) => {
+      const body = Buffer.from(json);
+      return [...Buffer.from("DID"), 1, 0, body.length & 0xff, body.length >> 8, ...body];
+    };
+    const nest = (n: number) => `{"doc":${"[".repeat(n - 1)}${"]".repeat(n - 1)}}`;
+    expect(decodeStateMetadata(pack(nest(2500)))).not.toBeNull();
+    expect(() => decodeStateMetadata(pack(nest(2501)))).toThrow(DidDecodeError);
+    expect(() => decodeStateMetadata(pack(nest(2501)))).toThrow("document is JSON nested deeper than 2500 levels");
+    expect(() => decodeStateMetadata(pack(`{"doc":${"[".repeat(20000)}`))).toThrow(/nested deeper/);
+  });
+
   it("decodes what the identity library packs", async () => {
     const sig = publicJwk("ed25519");
     const kex = publicJwk("x25519");

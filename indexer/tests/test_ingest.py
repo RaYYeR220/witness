@@ -245,6 +245,15 @@ async def test_mqtt_nesting_bomb_keeps_connection(store):
     assert source.connects == 2
 
 
+async def test_mqtt_record_past_the_shared_cap_is_dropped():
+    deep = b'{"a":' + b"[" * 2500 + b"]" * 2500 + b"}"  # 2501 levels
+    source = FakeSource([deep])
+    validator = RecordingValidator()
+    ingest = MqttIngest(None, validator, "mqtt://broker.test", connect=source.connect)
+    await run_until_idle(ingest, source)
+    assert (ingest.stats["bad"], ingest.stats["accepted"]) == (1, 0)
+
+
 async def test_mqtt_handler_failure_is_contained():
     class Fragile(MqttIngest):
         async def _on_payload(self, payload):

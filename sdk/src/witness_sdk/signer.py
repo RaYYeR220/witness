@@ -12,7 +12,7 @@ from collections.abc import Iterator, Mapping
 from typing import Any
 
 import httpx
-from witness_core import commit, envelope
+from witness_core import commit, envelope, nesting
 
 from .keys import load_component, load_key_file
 
@@ -178,7 +178,9 @@ class WitnessSigner:
                     url, params={"node": node}, json={"tag": tag, "message": env}, timeout=timeout
                 )
                 try:
-                    reply = resp.json()
+                    reply = nesting.loads(resp.content)
+                except nesting.JsonTooDeep as exc:
+                    reply = {"error": f"relay reply is {exc}"}
                 except ValueError:
                     reply = {"error": resp.text}
                 if not isinstance(reply, dict):

@@ -941,6 +941,9 @@ def test_json_diff_handles_any_json():
     assert json_diff(b"7", b"7")["equal"] is True
     assert json_diff(b"not json", b"{}") == {"comparable": False}
     assert json_diff(b"[" * 5000, b"[]") == {"comparable": False}
+    # Past the shared cap (2501 levels parse with json.loads on every platform).
+    assert json_diff(b"[" * 2501 + b"]" * 2501, b"[]") == {"comparable": False}
+    assert json_diff(b"[" * 2500 + b"]" * 2500, b"[]")["comparable"] is True
 
 
 def test_json_diff_caps_changes():

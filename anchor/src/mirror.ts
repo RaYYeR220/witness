@@ -5,6 +5,7 @@ import { sealEnvelope, type Ed25519PrivateJwk, type Envelope, type JsonObject } 
 import { SIG_FRAGMENT, componentKeyDir, type PublicIdentity } from "./did.js";
 import { readJsonIfExists } from "./fsutil.js";
 import type { CheckpointEntry } from "./state.js";
+import { parseUntrusted } from "./untrusted.js";
 
 export const ANCHOR_TAG = "witness.anchor";
 const BLOCK_ID = /^0x[0-9a-f]{64}$/;
@@ -187,7 +188,7 @@ export async function mirrorOnNode(blocks: BlockReader, blockId: string, iss: st
   if (!td || td.tag !== ANCHOR_TAG) return null;
   let env: any;
   try {
-    env = JSON.parse(Buffer.from(td.data).toString("utf8"));
+    env = parseUntrusted(Buffer.from(td.data).toString("utf8"));
   } catch {
     return null;
   }

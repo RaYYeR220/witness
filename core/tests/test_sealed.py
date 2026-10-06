@@ -260,3 +260,19 @@ def test_sealed_vectors(regen):
     for n in data["negative"]:
         with pytest.raises(errors[n["error"]]):
             sealed.decrypt_body(n["jwe"], n["kid"], _priv(n["private_jwk"]))
+
+
+def test_payload_past_the_nesting_cap_is_not_decrypted(monkeypatch):
+    """A body nested 2501 levels deep (which json.loads parses on every platform) is
+    refused like any other unreadable payload, as @witness/verify does."""
+    key = _x(1)
+
+    def sealed_nest(n: int) -> dict:
+        raw = b'{"a":' + b"[" * (n - 1) + b"]" * (n - 1) + b"}"
+        with monkeypatch.context() as m:
+            m.setattr(sealed.canon, "jcs", lambda _body: raw)  # encrypt the bytes as they are
+            return sealed.encrypt_body({}, [_rcpt("a#k", key)])
+
+    assert "a" in sealed.decrypt_body(sealed_nest(2500), "a#k", key)
+    with pytest.raises(sealed.DecryptError, match="decryption failed"):
+        sealed.decrypt_body(sealed_nest(2501), "a#k", key)

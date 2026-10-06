@@ -1,5 +1,7 @@
 // Pure helpers for did:iota documents as they are stored on IOTA Rebased. No network access here.
 
+import { PY_JSON_MAX_DEPTH, textTooDeep } from "@witness/verify";
+
 export class InvalidDidError extends Error {
   constructor(message: string) {
     super(message);
@@ -48,9 +50,18 @@ export function decodeStateMetadata(bytes: Uint8Array | readonly number[] | null
   if (b[4] !== 0) throw new DidDecodeError(`unsupported document encoding ${b[4]}`);
   const len = b[5]! | (b[6]! << 8);
   if (7 + len > b.length) throw new DidDecodeError("document length exceeds the stored bytes");
+  let text: string;
   let parsed: unknown;
   try {
-    parsed = JSON.parse(new TextDecoder("utf-8", { fatal: true }).decode(b.subarray(7, 7 + len)));
+    text = new TextDecoder("utf-8", { fatal: true }).decode(b.subarray(7, 7 + len));
+  } catch {
+    throw new DidDecodeError("document is not valid UTF-8 JSON");
+  }
+  // Untrusted on-chain bytes: the nesting cap every other entry point applies, before
+  // JSON.parse and the recursive walks that follow it (withRealDid).
+  if (textTooDeep(text)) throw new DidDecodeError(`document is JSON nested deeper than ${PY_JSON_MAX_DEPTH} levels`);
+  try {
+    parsed = JSON.parse(text);
   } catch {
     throw new DidDecodeError("document is not valid UTF-8 JSON");
   }

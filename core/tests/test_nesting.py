@@ -84,3 +84,24 @@ def test_jcs_cap_does_not_depend_on_the_callers_stack():
         return at(frames - 1) if frames else canon.jcs(_lists(nesting.MAX_JCS_DEPTH + 1))
 
     assert at(0) == at(350)
+
+
+def test_loads_applies_the_cap_and_decodes_like_json_loads():
+    assert nesting.loads(nest(CAP)) == json.loads(nest(CAP))
+    for text in (nest(CAP + 1), "[" * (CAP + 1), nest(CAP + 1).encode("utf-16")):
+        with pytest.raises(nesting.JsonTooDeep, match="JSON nested deeper than 2500 levels"):
+            nesting.loads(text)
+    assert issubclass(nesting.JsonTooDeep, ValueError)
+    for raw in (b'{"a":1}', b'\xef\xbb\xbf{"a":1}', '{"a":1}'.encode("utf-16")):
+        assert nesting.loads(raw) == json.loads(raw)
+    with pytest.raises(ValueError, match="BOM"):
+        nesting.loads('\ufeff{"a":1}')  # json.loads' own error, unchanged
+
+
+def test_loads_turns_json_recursion_errors_into_the_same_refusal(monkeypatch):
+    def boom(*_args, **_kw):
+        raise RecursionError("maximum recursion depth exceeded")
+
+    monkeypatch.setattr(json, "loads", boom)
+    with pytest.raises(nesting.JsonTooDeep):
+        nesting.loads("[]")

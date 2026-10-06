@@ -115,7 +115,9 @@ def test_classify_aerios_samples(tag, body, kind, ie_id):
 
 def test_classify_field_order():
     fields = [f.name for f in schema.Classified.__dataclass_fields__.values()]
-    assert fields == ["kind", "json", "ie_id", "envelope", "schema_ok", "nonce", "prev", "corr"]
+    assert fields == [
+        "kind", "json", "ie_id", "envelope", "schema_ok", "nonce", "prev", "corr", "too_deep"
+    ]
 
 
 @pytest.mark.parametrize(
@@ -187,6 +189,24 @@ def test_classify_non_json_is_unknown(data):
         c = schema.classify(tag, data)
         assert (c.kind, c.json, c.ie_id, c.envelope, c.schema_ok) == (
             "unknown", None, None, None, False
+        )
+        assert c.too_deep is data.startswith(b"[[[")
+
+
+@pytest.mark.parametrize("closed", [True, False])
+def test_classify_flags_payloads_past_the_shared_cap(closed):
+    """2501 levels parse with json.loads on every platform; the cap decides, not the
+    interpreter, and broken JSON past it is flagged the same way."""
+    def nest(n: int) -> bytes:
+        return b'{"a":' + b"[" * (n - 1) + ((b"]" * (n - 1) + b"}") if closed else b"")
+
+    at_cap = schema.classify("trust.score", nest(2500))
+    assert at_cap.too_deep is False
+    assert (at_cap.json is not None) is closed
+    for tag in ("trust.score", "whatever"):
+        c = schema.classify(tag, nest(2501))
+        assert (c.kind, c.json, c.envelope, c.schema_ok, c.too_deep) == (
+            "unknown", None, None, False, True
         )
 
 

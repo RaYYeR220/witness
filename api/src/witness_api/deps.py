@@ -4,7 +4,6 @@ declarative validation cannot express (dates, JSON bodies)."""
 from __future__ import annotations
 
 import asyncio
-import json
 import re
 from dataclasses import dataclass, field
 from datetime import UTC, date, datetime, time, timedelta
@@ -12,6 +11,7 @@ from typing import TYPE_CHECKING, Annotated, Any
 
 import httpx
 from fastapi import Depends, HTTPException, Path, Request
+from witness_core import nesting
 from witness_core.policy import WriterPolicy
 
 from .settings import Settings
@@ -111,6 +111,8 @@ async def read_json(request: Request, *, max_bytes: int = MAX_BODY) -> Any:
         if len(body) > max_bytes:
             raise HTTPException(413, f"body larger than {max_bytes} bytes")
     try:
-        return json.loads(body)
-    except (ValueError, RecursionError):
+        return nesting.loads(bytes(body))
+    except nesting.JsonTooDeep as exc:
+        raise HTTPException(400, f"body is {exc}") from None
+    except ValueError:
         raise HTTPException(400, "body is not valid JSON") from None

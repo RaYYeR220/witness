@@ -13,7 +13,7 @@ from cryptography.hazmat.primitives.asymmetric.x25519 import X25519PrivateKey
 from jwcrypto import jwe as _jwe
 from jwcrypto import jwk
 
-from . import canon
+from . import canon, nesting
 
 
 class NotARecipient(Exception):
@@ -61,7 +61,7 @@ _RECIPIENT_HEADER_KEYS = {"alg", "kid", "epk"}
 def _check_pinned(jwe: dict, header: dict) -> None:
     """Only the one algorithm suite `encrypt_body` produces is accepted."""
     try:
-        protected = json.loads(
+        protected = nesting.loads(
             base64.urlsafe_b64decode(jwe["protected"] + "=" * (-len(jwe["protected"]) % 4))
         )
     except Exception as exc:
@@ -100,7 +100,7 @@ def decrypt_body(jwe: dict, kid: str, x25519_private: X25519PrivateKey) -> dict:
         single["recipients"] = mine[:1]
         token = _jwe.JWE()
         token.deserialize(json.dumps(single), key)
-        body = json.loads(token.payload)
+        body = nesting.loads(token.payload)
     except Exception as exc:
         raise DecryptError("decryption failed") from exc
     if not isinstance(body, dict):

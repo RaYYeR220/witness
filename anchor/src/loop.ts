@@ -14,6 +14,7 @@ import { log } from "./log.js";
 import { ANCHOR_TAG, RECEIPTS_LIMIT, mirrorOnNode, postMirror, type BlockReader, type MirrorSigner, type RelayClient } from "./mirror.js";
 import { chainProblem, emptyState, type AnchorState, type CheckpointEntry, type StateStore } from "./state.js";
 import type { AppendResult, PendingAppend, ResumeResult, TrailRecord, TrailService } from "./trail.js";
+import { parseUntrusted } from "./untrusted.js";
 
 /** What the loop needs from the trail backend (a TrailService, or a fake in tests). */
 export type LoopTrail = Pick<TrailService, "ensureTrail" | "appendRecordDurable" | "resumeAppend" | "trailHead" | "readRecord" | "findRecordTx">;
@@ -362,7 +363,7 @@ export class AnchorLoop {
       if (!rec || rec.addedBy !== d.writer || rec.metadata === null) continue;
       let meta: { kind?: unknown; seq?: unknown } | null = null;
       try {
-        meta = JSON.parse(rec.metadata);
+        meta = parseUntrusted(rec.metadata) as { kind?: unknown; seq?: unknown } | null;
       } catch {
         continue;
       }
