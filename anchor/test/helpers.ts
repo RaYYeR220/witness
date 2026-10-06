@@ -127,7 +127,10 @@ export class FakeTrail implements LoopTrail {
     return { records: this.records.length, tail: this.records.length - 1 };
   }
 
+  reads = 0;
+  txLookups = 0;
   async readRecord(trailId: string, index: number): Promise<TrailRecord | null> {
+    this.reads++;
     if (this.failReads) throw new Error("rpc down");
     const r = this.records[index];
     if (!r || trailId !== TRAIL) return null;
@@ -146,6 +149,7 @@ export class FakeTrail implements LoopTrail {
   }
 
   async findRecordTx(_trailId: string, index: number): Promise<string | null> {
+    this.txLookups++;
     return this.records[index]?.tx ?? null;
   }
 

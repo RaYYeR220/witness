@@ -67,9 +67,17 @@ indexer's count, committed as reported.
 Each checkpoint is one trail record. Its data is the checkpoint's JCS text (the exact bytes its
 BLAKE2b-256 hash covers); its metadata is `{"kind":"witness.checkpoint","seq":N,"checkpointHash":"0x…"}`,
 so the chain alone says which record holds checkpoint `N`. `GET /checkpoints/:seq` reads that
-record from the trail on every request and answers 502 when it cannot; it never serves a stored
-copy as if it came from the chain. On top of the trail checks above, verifiers should check that
-the record's metadata names the seq they asked for and that `addedBy` is the anchor's writer.
+record from the trail (a read is served again for at most `ANCHOR_CHECKPOINT_CACHE_MS`, 10 s at
+most, and the reply carries `readAtMs`) and answers 502 when it cannot; it never serves a stored
+copy as if it came from the chain. It also answers 502 when the record's metadata does not name
+that seq, when the record was added by another address than the anchor's writer, when the state
+places the checkpoint on another trail than the configured one, or when the chain names another
+transaction for the record than the state. The transaction is confirmed on chain once and then
+remembered (`txVerified`). Error bodies carry short reasons; raw node errors go to the log only.
+On top of the trail checks above, verifiers should still check `addedBy` themselves.
+
+The instance that runs the loop is the one to point the indexer's R11 at: its state maps seqs to
+records. A read-only instance without that state file answers 404 for every seq.
 
 `msgCount` is the number of tagged-data messages referenced by milestones `from`..`to`, as
 indexed (witness-api `/milestones` reports it). A window whose source does not report it is not

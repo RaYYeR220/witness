@@ -74,7 +74,12 @@ async function main(): Promise<void> {
     // Served from the committed public file, so the read-only service needs no secrets volume.
     identities,
     cacheTtlMs: cfg.resolveCacheMs,
-    checkpoints: new CheckpointReader(store, trail, cfg.network, () => trail.knownTrailId()),
+    checkpoints: new CheckpointReader(store, trail, cfg.network, {
+      // Records must come from the writer this deployment uses, on the trail it is configured for.
+      writer: wallet?.address ?? cp.writerAddress ?? (cfg.address?.startsWith("0x") ? cfg.address : null),
+      trailId: () => trail.knownTrailId(),
+      ttlMs: cp.readCacheMs,
+    }),
     loop,
     adminToken: cfg.adminToken,
   });

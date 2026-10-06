@@ -49,6 +49,11 @@ const MAX_CACHE_ENTRIES = 1024;
 const MAX_DID_LENGTH = 128;
 const SEQ = /^[1-9]\d{0,14}$/;
 
+/** A tick result as clients may see it: failures keep their stage, their raw text stays in the log. */
+export function publicTick(r: TickResult | null): unknown {
+  return r && r.status === "error" ? { status: "error", stage: r.stage } : r;
+}
+
 function digest(s: string): Buffer {
   return createHash("sha256").update(s, "utf8").digest();
 }
@@ -100,7 +105,8 @@ export function createAnchorServer(deps: ServerDeps): http.Server {
       if (!bearerMatches(req.headers.authorization, deps.adminToken)) return { status: 401, body: { error: "admin token required" } };
       if (!deps.loop) return { status: 409, body: { error: "this instance does not anchor (ANCHOR_LOOP is off)" } };
       const result = await deps.loop.runOnce();
-      return { status: result.status === "error" ? 502 : 200, body: result };
+      if (result.status === "error") log.warn("admin-triggered anchor tick failed", { stage: result.stage, error: result.error });
+      return { status: result.status === "error" ? 502 : 200, body: publicTick(result) };
     }
     if (req.method !== "GET") return { status: 405, body: { error: "method not allowed" } };
     const cps = deps.checkpoints;
@@ -110,7 +116,8 @@ export function createAnchorServer(deps: ServerDeps): http.Server {
       const limit = raw === null ? 100 : Number(raw);
       if (!Number.isInteger(limit) || limit < 1 || limit > 1000) return { status: 400, body: { error: "limit must be 1..1000" } };
       const list = await cps.list(limit);
-      return { status: 200, body: { ...list, loop: deps.loop ? deps.loop.status() : null } };
+      const loop = deps.loop ? deps.loop.status() : null;
+      return { status: 200, body: { ...list, loop: loop && { ...loop, lastResult: publicTick(loop.lastResult) } } };
     }
     const raw = p.slice("/checkpoints/".length);
     if (!SEQ.test(raw)) return { status: 400, body: { error: "checkpoint seq must be a positive integer" } };
@@ -120,7 +127,7 @@ export function createAnchorServer(deps: ServerDeps): http.Server {
     } catch (err) {
       if (err instanceof CheckpointNotFound) return { status: 404, body: { error: err.message } };
       if (err instanceof ChainReadError) {
-        log.warn("checkpoint read from chain failed", { seq, error: err });
+        log.warn("checkpoint read from chain failed", { seq, error: err.message, detail: err.detail });
         return { status: 502, body: { error: err.message, source: "chain" } };
       }
       log.error("checkpoint read failed", { seq, error: err });

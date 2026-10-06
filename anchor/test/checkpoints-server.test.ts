@@ -18,7 +18,8 @@ afterEach(async () => {
   cleanupDirs();
 });
 
-async function start(opts: { latest?: number; adminToken?: string | null; withLoop?: boolean } = {}) {
+async function start(opts: { latest?: number; adminToken?: string | null; withLoop?: boolean; ttlMs?: number; trailId?: string } = {}) {
+  let clock = 1_000_000;
   const trail = new FakeTrail();
   const tangle = new FakeTangle(opts.latest ?? 12);
   const { signer, keyInfo } = makeSigner();
@@ -47,7 +48,12 @@ async function start(opts: { latest?: number; adminToken?: string | null; withLo
     },
     identities: () => null,
     cacheTtlMs: 0,
-    checkpoints: new CheckpointReader(store, trail, "testnet", () => TRAIL),
+    checkpoints: new CheckpointReader(store, trail, "testnet", {
+      writer: WRITER,
+      trailId: () => opts.trailId ?? TRAIL,
+      ttlMs: opts.ttlMs ?? 0,
+      now: () => clock,
+    }),
     loop: opts.withLoop === false ? null : loop,
     adminToken: opts.adminToken === undefined ? TOKEN : opts.adminToken,
   };
@@ -60,7 +66,10 @@ async function start(opts: { latest?: number; adminToken?: string | null; withLo
   };
   const run = (token: string | null = TOKEN) =>
     call("/checkpoints/run", { method: "POST", headers: token ? { authorization: `Bearer ${token}` } : {} });
-  return { trail, tangle, relay, store, loop, verifier, call, run };
+  const advance = (ms: number) => {
+    clock += ms;
+  };
+  return { trail, tangle, relay, store, loop, verifier, call, run, advance };
 }
 
 describe("POST /checkpoints/run", () => {
@@ -91,7 +100,10 @@ describe("POST /checkpoints/run", () => {
     };
     const r = await s.run();
     expect(r.status).toBe(502);
-    expect(r.body).toMatchObject({ status: "error", stage: "trail" });
+    // The stage is reported; the node's own error text stays in the log.
+    expect(r.body).toEqual({ status: "error", stage: "trail" });
+    const list = await s.call("/checkpoints");
+    expect(list.body.loop.lastResult).toEqual({ status: "error", stage: "trail" });
   });
 });
 
@@ -107,10 +119,12 @@ describe("GET /checkpoints/:seq", () => {
       checkpoint: entry.checkpoint,
       checkpointHash: entry.checkpointHash,
       tx: "Tx1",
+      txVerified: true,
       record: 1,
       network: "testnet",
       trail: TRAIL,
       source: "chain",
+      readAtMs: 1_000_000,
       addedBy: WRITER,
       timestampMs: expect.any(Number),
       links: { tx: "https://explorer.test/txblock/Tx1", trail: `https://explorer.test/object/${TRAIL}` },
@@ -123,8 +137,47 @@ describe("GET /checkpoints/:seq", () => {
     s.trail.failReads = true;
     const r = await s.call("/checkpoints/1");
     expect(r.status).toBe(502);
-    expect(r.body).toEqual({ error: expect.stringMatching(/rpc down/), source: "chain" });
-    expect(r.body.checkpoint).toBeUndefined();
+    expect(r.body).toEqual({ error: "the trail could not be read from IOTA Rebased", source: "chain" });
+    expect(JSON.stringify(r.body)).not.toMatch(/rpc down/);
+  });
+
+  it("answers 502 for a record by another writer, on another trail, or with another transaction", async () => {
+    const s = await start();
+    await s.run();
+    s.trail.records[1]!.addedBy = "0x" + "ee".repeat(32);
+    const foreign = await s.call("/checkpoints/1");
+    expect(foreign.status).toBe(502);
+    expect(foreign.body.error).toMatch(/not by the anchor's writer/);
+    s.trail.records[1]!.addedBy = WRITER;
+    s.trail.records[1]!.tx = "TxSomethingElse";
+    expect((await s.call("/checkpoints/1")).body.error).toMatch(/another transaction/);
+    await new Promise<void>((r) => server!.close(() => r()));
+    const other = await start({ trailId: "0x" + "9".repeat(64) });
+    await other.run();
+    expect((await other.call("/checkpoints/1")).body.error).toMatch(/not the configured trail/);
+  });
+
+  it("serves a read again for a few seconds, shares concurrent reads and checks the transaction once", async () => {
+    const s = await start({ ttlMs: 5_000 });
+    await s.run();
+    const reads = s.trail.reads;
+    const [a, b] = await Promise.all([s.call("/checkpoints/1"), s.call("/checkpoints/1")]);
+    expect(a.body).toEqual(b.body);
+    expect(s.trail.reads).toBe(reads + 1);
+    s.advance(4_000);
+    expect((await s.call("/checkpoints/1")).body.readAtMs).toBe(1_000_000);
+    expect(s.trail.reads).toBe(reads + 1);
+    s.advance(2_000);
+    const fresh = await s.call("/checkpoints/1");
+    expect(fresh.body.readAtMs).toBe(1_006_000);
+    expect(s.trail.reads).toBe(reads + 2);
+    expect(s.trail.txLookups).toBe(1);
+    // A failed read is not cached.
+    s.advance(6_000);
+    s.trail.failReads = true;
+    expect((await s.call("/checkpoints/1")).status).toBe(502);
+    s.trail.failReads = false;
+    expect((await s.call("/checkpoints/1")).status).toBe(200);
   });
 
   it("answers 502 when the record on chain is not that checkpoint", async () => {
@@ -175,7 +228,7 @@ describe("GET /checkpoints", () => {
     const r = await s.call("/checkpoints");
     expect(r.status).toBe(200);
     expect(r.body.chain).toBeNull();
-    expect(r.body.chainError).toMatch(/rpc down/);
+    expect(r.body.chainError).toBe("the trail could not be read from IOTA Rebased");
     expect(r.body.checkpoints).toHaveLength(1);
   });
 });
