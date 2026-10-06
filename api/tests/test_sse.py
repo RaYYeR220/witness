@@ -1,4 +1,5 @@
 import asyncio
+import contextlib
 import json
 
 
@@ -110,4 +111,61 @@ async def test_sse_client_disconnect_releases_the_subscription(app, store):
              "client": ("127.0.0.1", 5000), "server": ("w.test", 80), "root_path": ""}
     await asyncio.wait_for(app(scope, receive, send), 10)
     assert during == [1]
+    assert hub.subscribers == 0
+
+
+async def test_sse_slots_are_reserved_atomically(store, settings):
+    """Concurrent connects cannot all slip under the cap: with K slots, exactly K streams
+    open and the rest get 503; every slot is free again once the streams end."""
+    from dataclasses import replace
+
+    import httpx
+    from witness_api.app import create_app
+
+    cap, tries = 2, 6
+    app = create_app(replace(settings, stream_max_subscribers=cap), store=store)
+    async with app.router.lifespan_context(app):
+        hub = app.state.services.hub
+        transport = httpx.ASGITransport(app=app)
+        async with httpx.AsyncClient(transport=transport, base_url="http://w.test") as c:
+            # no `after`: each request awaits the head event id before taking its slot
+            tasks = [asyncio.create_task(c.get("/stream", params={"limit": 1}))
+                     for _ in range(tries)]
+            for _ in range(100):
+                if hub.subscribers == cap and sum(t.done() for t in tasks) == tries - cap:
+                    break
+                await asyncio.sleep(0.05)
+            assert hub.subscribers == cap
+            await store.emit("alert", {"rule": "FORGED"})
+            done = await asyncio.wait_for(asyncio.gather(*tasks), 10)
+        assert sorted(r.status_code for r in done) == [200] * cap + [503] * (tries - cap)
+        assert all(len(parse_sse(r.text)) == 1 for r in done if r.status_code == 200)
+        assert hub.subscribers == 0
+
+
+async def test_sse_slot_freed_when_client_leaves_before_streaming(app):
+    """A client gone before the stream starts must not keep its reserved slot."""
+    hub = app.state.services.hub
+
+    async def receive():
+        return {"type": "http.disconnect"}
+
+    async def send(message):
+        pass
+
+    scope = {"type": "http", "asgi": {"version": "3.0"}, "http_version": "1.1",
+             "method": "GET", "scheme": "http", "path": "/stream", "raw_path": b"/stream",
+             "query_string": b"", "headers": [(b"host", b"w.test")],
+             "client": ("127.0.0.1", 5001), "server": ("w.test", 80), "root_path": ""}
+    for _ in range(3):
+        await asyncio.wait_for(app(scope, receive, send), 10)
+    assert hub.subscribers == 0
+
+    # the connection is already dead when the response starts: the stream never runs
+    async def broken_send(message):
+        raise OSError("connection reset")
+
+    for _ in range(3):
+        with contextlib.suppress(OSError):
+            await asyncio.wait_for(app(scope, receive, broken_send), 10)
     assert hub.subscribers == 0

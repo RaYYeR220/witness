@@ -13,12 +13,13 @@ import contextlib
 import json
 import logging
 import re
-from collections.abc import AsyncIterator
-from typing import Annotated
+from collections.abc import AsyncIterator, Callable
+from typing import Annotated, Any
 
 from fastapi import APIRouter, Header, HTTPException, Query, Request
 from sse_starlette.event import ServerSentEvent
 from sse_starlette.sse import EventSourceResponse
+from starlette.types import Receive, Scope, Send
 from witness_indexer import events
 
 from .deps import Svc
@@ -52,7 +53,15 @@ class EventHub:
         self._waiters.add(ev)
         return ev
 
+    def reserve(self, limit: int) -> asyncio.Event | None:
+        """Take a slot if fewer than `limit` are taken. Synchronous, so no other request can
+        get in between the check and the subscription."""
+        if len(self._waiters) >= limit:
+            return None
+        return self.subscribe()
+
     def unsubscribe(self, ev: asyncio.Event) -> None:
+        """Idempotent: the stream and its response may both release the same slot."""
         self._waiters.discard(ev)
 
     def _wake(self) -> None:
@@ -95,10 +104,26 @@ def _sse(row: dict) -> ServerSentEvent:
                            id=str(row["id"]))
 
 
-async def tail(store: ExplorerStore, hub: EventHub, after: int, *, types: set[str] | None,
-               limit: int | None, poll_s: float) -> AsyncIterator[ServerSentEvent]:
-    """Every event with id > `after`, then each new one as it is written."""
-    wake = hub.subscribe()
+class _ReservedStream(EventSourceResponse):
+    """An SSE response that gives its stream slot back however it ends, including a client
+    that leaves before the stream ever starts."""
+
+    def __init__(self, *args: Any, release: Callable[[], None], **kwargs: Any) -> None:
+        super().__init__(*args, **kwargs)
+        self._release = release
+
+    async def __call__(self, scope: Scope, receive: Receive, send: Send) -> None:
+        try:
+            await super().__call__(scope, receive, send)
+        finally:
+            self._release()
+
+
+async def tail(store: ExplorerStore, hub: EventHub, wake: asyncio.Event, after: int, *,
+               types: set[str] | None, limit: int | None,
+               poll_s: float) -> AsyncIterator[ServerSentEvent]:
+    """Every event with id > `after`, then each new one as it is written. `wake` is the
+    subscription reserved for this stream; it is released when the stream ends."""
     sent = 0
     try:
         while True:
@@ -146,9 +171,6 @@ async def stream(
     limit: Annotated[int | None, Query(
         ge=1, le=10_000, description="Close the stream after this many events")] = None,
 ) -> EventSourceResponse:
-    if svc.hub.subscribers >= svc.settings.stream_max_subscribers:
-        raise HTTPException(503, "too many open streams; try again shortly",
-                            headers={"Retry-After": "5"})
     start = after
     if last_event_id is not None:
         if not _EVENT_ID.fullmatch(last_event_id.strip()):
@@ -162,8 +184,19 @@ async def stream(
             raise HTTPException(422, f"unknown event types: {', '.join(sorted(unknown))}")
     if start is None:
         start = await svc.store.head_event_id()
-    gen = tail(svc.store, svc.hub, start, types=wanted, limit=limit,
-               poll_s=svc.settings.stream_poll_s)
-    return EventSourceResponse(gen, ping=svc.settings.stream_ping_s,
+    # Last step, with no await between taking the slot and handing it to the response.
+    hub = svc.hub
+    wake = hub.reserve(svc.settings.stream_max_subscribers)
+    if wake is None:
+        raise HTTPException(503, "too many open streams; try again shortly",
+                            headers={"Retry-After": "5"})
+    try:
+        gen = tail(svc.store, hub, wake, start, types=wanted, limit=limit,
+                   poll_s=svc.settings.stream_poll_s)
+        return _ReservedStream(gen, release=lambda: hub.unsubscribe(wake),
+                               ping=svc.settings.stream_ping_s,
                                headers={"Cache-Control": "no-store",
                                         "X-Accel-Buffering": "no"})
+    except BaseException:
+        hub.unsubscribe(wake)
+        raise
