@@ -40,7 +40,7 @@ def hx(data: bytes) -> str:
 
 
 def unhex(s: str) -> bytes:
-    return bytes.fromhex(s[2:] if s.startswith("0x") else s)
+    return bytes.fromhex(s.removeprefix("0x"))
 
 
 def merkle_root(leaves: list[bytes]) -> bytes:
