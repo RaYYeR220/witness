@@ -260,6 +260,8 @@ async def test_r10_revoked_key(make_engine):
     assert (a.rule, a.severity) == ("REVOKED_KEY", "high")
     assert a.evidence["revokedAtMs"] == revoked_at
     assert a.evidence["includedAtMs"] == (T0 + 60) * 1000
+    assert a.evidence["reason"] == (
+        "signed with a key that was revoked before or within the milestone's second")
 
 
 async def test_resolver_unreachable_changes_no_verdict(make_engine, respx_mock, store):

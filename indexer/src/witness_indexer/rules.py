@@ -520,7 +520,9 @@ class RulesEngine:
                     if k.ed25519_public is not None and _signed_by(env, row.tag or "", k):
                         evidence["revokedAtMs"] = k.revoked_at_ms
                         break
-        evidence["reason"] = "signed with a key that was revoked before the block was confirmed"
+        # Same rule as the verdict (classify.judge): milestone time has second precision.
+        evidence["reason"] = ("signed with a key that was revoked before or within the "
+                              "milestone's second")
         return self._alert("REVOKED_KEY", row, evidence, now)
 
     _EXPLAIN: ClassVar[dict[str, Callable[..., Awaitable[Alert]]]] = {
