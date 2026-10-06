@@ -5401,6 +5401,139 @@
           }
         ]
       }
+    },
+    {
+      "name": "envelope_nested_past_jcs_cap",
+      "bundle": {
+        "v": 1,
+        "network": "private_tangle1",
+        "block": {
+          "id": "0x6989d90d6f2846199974670ad9d978fd564eea08e6dc3238fe6b85eb70ad6523",
+          "raw": "0x0202d6119fd6c74c0372206ed5799e22195bfc12e7537ad94600c307155ccea2437adcdd4f45668c81cbe8634b53c1a2f1d28d9e47c8b6bd85df16360f02743679c3f9050000050000000b74727573742e73636f7265e50500007b22617474223a7b226d6f6465223a2270726f6475636572227d2c22626f6479223a7b2261223a5b5b5b5b5b5b5b5b5b5b5b5b5b5b5b5b5b5b5b5b5b5b5b5b5b5b5b5b5b5b5b5b5b5b5b5b5b5b5b5b5b5b5b5b5b5b5b5b5b5b5b5b5b5b5b5b5b5b5b5b5b5b5b5b5b5b5b5b5b5b5b5b5b5b5b5b5b5b5b5b5b5b5b5b5b5b5b5b5b5b5b5b5b5b5b5b5b5b5b5b5b5b5b5b5b5b5b5b5b5b5b5b5b5b5b5b5b5b5b5b5b5b5b5b5b5b5b5b5b5b5b5b5b5b5b5b5b5b5b5b5b5b5b5b5b5b5b5b5b5b5b5b5b5b5b5b5b5b5b5b5b5b5b5b5b5b5b5b5b5b5b5b5b5b5b5b5b5b5b5b5b5b5b5b5b5b5b5b5b5b5b5b5b5b5b5b5b5b5b5b5b5b5b5b5b5b5b5b5b5b5b5b5b5b5b5b5b5b5b5b5b5b5b5b5b5b5b5b5b5b5b5b5b5b5b5b5b5b5b5b5b5b5b5b5b5b5b5b5b5b5b5b5b5b5b5b5b5b5b5b5b5b5b5b5b5b5b5b5b5b5b5b5b5b5b5b5b5b5b5b5b5b5b5b5b5b5b5b5b5b5b5b5b5b5b5b5b5b5b5b5b5b5b5b5b5b5b5b5b5b5b5b5b5b5b5b5b5b5b5b5b5b5b5b5b5b5b5b5b5b5b5b5b5b5b5b5b5b5b5b5b5b5b5b5b5b5b5b5b5b5b5b5b5b5b5b5b5b5b5b5b5b5b5b5b5b5b5b5b5b5b5b5b5b5b5b5b5b5b5b5b5b5b5b5b5b5b5b5b5b5b5b5b5b5b5b5b5b5b5b5b5b5b5b5b5b5b5b5b5b5b5b5b5b5b5b5b5b5b5b5b5b5b5b5b5b5b5b5b5b5b5b5b5b5b5b5b5b5b5b5b5b5b5b5b5b5b5b5b5b5b5b5b5b5b5b5b5b5b5b5b5b5b5b5b5b5b5b5b5b5b5b5b5b5b5b5b5b5b5b5b5b5b5b5b5b5b5b5b5b5b5b5b5b5b5b5b5b5b5b5b5b5b5b5b5b5b5b5b5b5b5b5b5b5b5b5b5b5b5b5b5b5b5b5b5b5b5b5b5b5b5b5b5b5b5b5b5b5b5b5b5b5b5b5b5b5b5b5b5b5b5b5b5b5b5b5b5b5b5b5b5b5b5b5b5b5b5b5b5b5b5b5b5b5b5b5b5b5b5b5b5b5b5b5b5b5b5b5b5b5b5b5b5b5b5b5b5b5d5d5d5d5d5d5d5d5d5d5d5d5d5d5d5d5d5d5d5d5d5d5d5d5d5d5d5d5d5d5d5d5d5d5d5d5d5d5d5d5d5d5d5d5d5d5d5d5d5d5d5d5d5d5d5d5d5d5d5d5d5d5d5d5d5d5d5d5d5d5d5d5d5d5d5d5d5d5d5d5d5d5d5d5d5d5d5d5d5d5d5d5d5d5d5d5d5d5d5d5d5d5d5d5d5d5d5d5d5d5d5d5d5d5d5d5d5d5d5d5d5d5d5d5d5d5d5d5d5d5d5d5d5d5d5d5d5d5d5d5d5d5d5d5d5d5d5d5d5d5d5d5d5d5d5d5d5d5d5d5d5d5d5d5d5d5d5d5d5d5d5d5d5d5d5d5d5d5d5d5d5d5d5d5d5d5d5d5d5d5d5d5d5d5d5d5d5d5d5d5d5d5d5d5d5d5d5d5d5d5d5d5d5d5d5d5d5d5d5d5d5d5d5d5d5d5d5d5d5d5d5d5d5d5d5d5d5d5d5d5d5d5d5d5d5d5d5d5d5d5d5d5d5d5d5d5d5d5d5d5d5d5d5d5d5d5d5d5d5d5d5d5d5d5d5d5d5d5d5d5d5d5d5d5d5d5d5d5d5d5d5d5d5d5d5d5d5d5d5d5d5d5d5d5d5d5d5d5d5d5d5d5d5d5d5d5d5d5d5d5d5d5d5d5d5d5d5d5d5d5d5d5d5d5d5d5d5d5d5d5d5d5d5d5d5d5d5d5d5d5d5d5d5d5d5d5d5d5d5d5d5d5d5d5d5d5d5d5d5d5d5d5d5d5d5d5d5d5d5d5d5d5d5d5d5d5d5d5d5d5d5d5d5d5d5d5d5d5d5d5d5d5d5d5d5d5d5d5d5d5d5d5d5d5d5d5d5d5d5d5d5d5d5d5d5d5d5d5d5d5d5d5d5d5d5d5d5d5d5d5d5d5d5d5d5d5d5d5d5d5d5d5d5d5d5d5d5d5d5d5d5d5d5d5d5d5d5d5d5d5d5d5d5d5d5d5d5d5d5d5d5d5d5d5d5d5d5d5d5d5d5d5d5d5d5d5d5d5d5d5d5d5d5d5d5d5d5d5d5d5d5d5d5d5d5d5d5d5d5d5d5d5d5d5d5d5d5d5d5d5d5d5d5d5d5d5d5d5d5d5d5d5d5d5d5d5d5d5d5d5d5d5d5d5d5d5d5d5d5d5d5d5d5d5d5d5d5d5d5d5d5d5d5d5d5d5d5d5d5d5d5d5d5d5d5d5d5d5d5d5d5d5d5d5d5d5d5d7d2c22636f7272223a22696e636964656e742d37222c22696174223a313739313238333539303030302c22697373223a226469643a696f74613a746573746e65743a307835653166222c226b6964223a226469643a696f74613a746573746e65743a307835653166237369672d31222c226e6f6e6365223a2241414543417751464267634943516f4c4441304f4477222c22736571223a312c22736967223a2246304871385955623357565451714a434b44373830637967444c5158654d475f3355397172444b557254534b5937704c3779586248644f4f6a30452d326134304b3157495756586a6248787179626665744f46514477222c22746167223a2274727573742e73636f7265222c2277223a317d0000000000000000"
+        },
+        "milestone": {
+          "index": 374,
+          "id": "0x1d66c3f740e5054039a172531ece284da05f3be87a32291ac072453e02b0733a",
+          "essence": "0x760100008ad1c46a0262080b3856ac88aefba69a8534dcc1191132b7589338138bb222934b7d8701ac016989d90d6f2846199974670ad9d978fd564eea08e6dc3238fe6b85eb70ad65230383a5650c8b95b06f66ffda158bb830dd52e0ba80581f1242552b30843cecb30e5751c026e543b2e8ab2eb06099daa1d1e5df47778f7787faab45cdf12fe3a8000000",
+          "signatures": [
+            {
+              "pk": "0xed3c3f1a319ff4e909cf2771d79fece0ac9bd9fd2ee49ea6c0885c9cb3b1248c",
+              "sig": "0x78a0246edd150f6d3a084c46e6790c2e5e059b0afaf4740bd16f68840745c4e041c2b4e037f9d3e3089c270ffff59d08579cc1aaf5e76f434e319c5ff6e3a70a"
+            },
+            {
+              "pk": "0xf6752f5f46a53364e2ee9c4d662d762a81efd51010282a75cd6bd03f28ef349c",
+              "sig": "0x139ffa591392c1f0ab7323b0b11b00ffbabae869fb27aadc2b5122fed0b258bde79a12036de4d448ec27ac2f02033cf331df7c39625a5132343b2e8e5b519e0a"
+            }
+          ]
+        },
+        "inclusion": {
+          "leafIndex": 1,
+          "leafCount": 2,
+          "path": [
+            {
+              "side": "L",
+              "hash": "0xdfe6619554b46f911bd4cd3218c8444928389afafa0fef3e15ffe56ab45c1149"
+            }
+          ]
+        },
+        "envelope": {
+          "verdict": "PRODUCER_SIGNED",
+          "didDoc": {
+            "doc": {
+              "id": "did:iota:testnet:0x5e1f"
+            },
+            "version": "4",
+            "keys": [
+              {
+                "kid": "did:iota:testnet:0x5e1f#sig-1",
+                "type": "Ed25519",
+                "publicKeyHex": "0x6e7a1cdd29b0b78fd13af4c5598feff4ef2a97166e3ca6f2e4fbfccd80505bf1",
+                "revokedAtMs": null
+              },
+              {
+                "kid": "did:iota:testnet:0x5e1f#kex-1",
+                "type": "X25519",
+                "publicKeyHex": "0xf5b2d6e60f9477e310c2982daaa6c9136c108a1777c5947e448fa37d68174557",
+                "revokedAtMs": null
+              }
+            ]
+          },
+          "didVersion": "4"
+        },
+        "anchor": {
+          "checkpoint": {
+            "v": 1,
+            "kind": "witness.checkpoint",
+            "network": "private_tangle1",
+            "domain": "MyDomain",
+            "from": {
+              "index": 370,
+              "id": "0x1f67cff6cf5b3978edd0188960acc4b1ef34c8349fe7b3da5d57dac9ec5d7745"
+            },
+            "to": {
+              "index": 374,
+              "id": "0x1d66c3f740e5054039a172531ece284da05f3be87a32291ac072453e02b0733a"
+            },
+            "msRoot": "0xbc33c8e026cf614343daa739be3c209eafc75a12bdbb9090031750798091efc4",
+            "msgCount": 11,
+            "policyHash": "0xf50600b23cbe156f782f4175f28ebac24a2e719b3607b3ea741c58ab02c665ac",
+            "prev": null
+          },
+          "msPath": [
+            {
+              "side": "L",
+              "hash": "0xbdd5ad67fdf2010c667060fd02ef81beb8ce4c26ce40d0cec66d872c75920ff6"
+            }
+          ],
+          "rebased": {
+            "network": "testnet",
+            "trail": "0x7a7a7a7a7a7a7a7a7a7a7a7a7a7a7a7a7a7a7a7a7a7a7a7a7a7a7a7a7a7a7a7a",
+            "record": 3,
+            "tx": "5xGp7rWq2Tz9"
+          }
+        }
+      },
+      "config": {
+        "network": "private_tangle1",
+        "trustedCoordinatorKeys": [
+          "0xed3c3f1a319ff4e909cf2771d79fece0ac9bd9fd2ee49ea6c0885c9cb3b1248c",
+          "0xf6752f5f46a53364e2ee9c4d662d762a81efd51010282a75cd6bd03f28ef349c"
+        ],
+        "threshold": 2,
+        "rebasedNetwork": "testnet",
+        "trailId": "0x7a7a7a7a7a7a7a7a7a7a7a7a7a7a7a7a7a7a7a7a7a7a7a7a7a7a7a7a7a7a7a7a"
+      },
+      "fetcher": {
+        "record": {
+          "checkpointHash": "0xf9880fbb593bf6e27d40be01a3657b896c74992696108b3f00c4448f14099ec3"
+        }
+      },
+      "resolver": "registry",
+      "expected": {
+        "overall": "INVALID",
+        "steps": [
+          {
+            "name": "block_hash",
+            "ok": true
+          },
+          {
+            "name": "inclusion",
+            "ok": true
+          },
+          {
+            "name": "milestone_signatures",
+            "ok": true
+          },
+          {
+            "name": "envelope",
+            "ok": false
+          },
+          {
+            "name": "anchor",
+            "ok": true
+          }
+        ]
+      }
     }
   ]
 }

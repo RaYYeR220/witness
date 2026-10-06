@@ -1,7 +1,7 @@
 import json
 
 import pytest
-from witness_core import nesting
+from witness_core import canon, nesting
 
 CAP = nesting.MAX_JSON_DEPTH
 
@@ -50,3 +50,37 @@ def test_brackets_inside_strings_do_not_count():
     assert not nesting.text_too_deep(escaped)
     # A string left open swallows the rest of the text, brackets included.
     assert not nesting.text_too_deep('["' + "[" * (CAP * 2))
+
+
+def _lists(levels: int) -> list:
+    v: list = []
+    for _ in range(levels - 1):
+        v = [v]
+    return v
+
+
+def test_jcs_cap_is_shared_with_the_ts_port():
+    assert nesting.MAX_JCS_DEPTH == 500  # packages/verify/src/jcs.ts JCS_MAX_DEPTH
+
+
+def test_jcs_cap_counts_every_value_from_depth_zero():
+    cap = nesting.MAX_JCS_DEPTH
+    assert canon.jcs(_lists(cap + 1)) == b"[" * (cap + 1) + b"]" * (cap + 1)
+    with pytest.raises(RecursionError):
+        canon.jcs(_lists(cap + 2))
+    # A scalar counts as a level of its own, dict values like list items.
+    assert not nesting.value_too_deep([_lists(cap - 1)])
+    assert not nesting.value_too_deep({"a": _lists(cap)})
+    assert nesting.value_too_deep({"a": _lists(cap + 1)})
+    inner: object = 1
+    for _ in range(cap):
+        inner = [inner]
+    assert not nesting.value_too_deep(inner)
+    assert nesting.value_too_deep([inner])
+
+
+def test_jcs_cap_does_not_depend_on_the_callers_stack():
+    def at(frames: int) -> bytes:
+        return at(frames - 1) if frames else canon.jcs(_lists(nesting.MAX_JCS_DEPTH + 1))
+
+    assert at(0) == at(350)

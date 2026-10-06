@@ -18,12 +18,26 @@ export class CanonicalizationError extends Error {
 }
 
 /**
- * The reference serializer (`rfc8785`) recurses one Python frame per nesting
- * level under CPython's 1000-frame limit, so it fails a little below 1000 levels
- * depending on its caller's stack. Stopping at 900 keeps this side strictly
- * no more permissive; deeper values raise `RecursionError` as Python does.
+ * Deepest value `jcs` accepts (the top value is at depth 0), shared with the
+ * Python reference (`witness_core.nesting.MAX_JCS_DEPTH`). The reference
+ * serializer (`rfc8785`) recurses one Python frame per level under CPython's
+ * 1000-frame limit, so on its own it would give up at a depth that depends on
+ * its caller's stack; both sides check this fixed cap first instead. Deeper
+ * values raise `RecursionError`.
  */
-export const JCS_MAX_DEPTH = 900;
+export const JCS_MAX_DEPTH = 500;
+
+/** True when any value inside `value` sits deeper than `limit` (Python `nesting.value_too_deep`). */
+function valueTooDeep(value: unknown, limit: number): boolean {
+  const stack: [unknown, number][] = [[value, 0]];
+  while (stack.length > 0) {
+    const [v, depth] = stack.pop()!;
+    if (depth > limit) return true;
+    if (Array.isArray(v)) for (const x of v) stack.push([x, depth + 1]);
+    else if (isDict(v)) for (const key of Object.keys(v)) stack.push([v[key], depth + 1]);
+  }
+  return false;
+}
 
 function floatName(f: number): string {
   return Number.isNaN(f) ? "nan" : f > 0 ? "inf" : "-inf";
@@ -67,6 +81,8 @@ function prepare(v: unknown, depth = 0): unknown {
 
 /** Canonical JSON text of `value` (RFC 8785). Throws `CanonicalizationError`, or `RecursionError` when nested too deep. */
 export function jcs(value: unknown): string {
+  // Depth first, as the reference does, so the error does not depend on key order.
+  if (valueTooDeep(value, JCS_MAX_DEPTH)) throw new RecursionError("maximum recursion depth exceeded while canonicalizing");
   return serialize(prepare(value))!;
 }
 

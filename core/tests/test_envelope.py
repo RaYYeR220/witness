@@ -296,8 +296,37 @@ def test_deep_nesting_is_malformed_not_a_crash(depth):
 def _signing_input(env):
     try:
         return envelope._signing_input(env).decode("utf-8")
-    except (ValueError, KeyError):
+    except (ValueError, KeyError, RecursionError):
         return None
+
+
+def _nested(levels: int) -> list:
+    """`levels` lists, one inside the other."""
+    v: list = []
+    for _ in range(levels - 1):
+        v = [v]
+    return v
+
+
+def _with_stack(frames: int, fn):
+    return _with_stack(frames - 1, fn) if frames else fn()
+
+
+def test_canonicalization_cap_is_exact_and_ignores_the_callers_stack():
+    """The envelope is depth 0, body 1, body.x 2: 499 lists reach depth 500, the cap
+    shared with @witness/verify. Below it a signature verifies even with a deep caller
+    stack (rfc8785 alone would give up there); past it the envelope is MALFORMED."""
+    key = Ed25519PrivateKey.generate()
+    at_cap = envelope.seal("trust.score", {"x": _nested(499)}, iss=DID, kid=KID, sign_key=key,
+                           seq=1, att_mode="producer", now_ms=NOW)
+    for frames in (0, 300):
+        check = _with_stack(frames, lambda: envelope.verify(at_cap, "trust.score",
+                                                            _resolver(key)))
+        assert check.verdict == verdicts.PRODUCER_SIGNED, frames
+    past = {**at_cap, "body": {"x": _nested(500)}}
+    check = envelope.verify(past, "trust.score", _resolver(key))
+    assert (check.verdict, check.reason) == (
+        verdicts.MALFORMED, "not canonicalizable: nested too deeply")
 
 
 def _case(name, env, key, block_tag, expected):

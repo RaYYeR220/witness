@@ -31,10 +31,10 @@ const run = (c: any, extra: Partial<VerifyOptions> = {}) => verifyBundle(...wire
 const marks = (l: Ladder) => l.steps.map((s) => (s.ok === null ? "N" : s.ok ? "T" : "F")).join("") + " " + l.overall;
 
 describe("bundles.json parity", () => {
-  it("has the 40 named cases", () => {
+  it("has the 41 named cases", () => {
     const names = bundles.cases.map((c: any) => c.name);
-    expect(names).toHaveLength(40);
-    expect(new Set(names).size).toBe(40);
+    expect(names).toHaveLength(41);
+    expect(new Set(names).size).toBe(41);
   });
 
   it.each(bundles.cases.map((c: any) => [c.name, c] as const))("%s", async (_name, c: any) => {
@@ -124,6 +124,7 @@ const PYTHON_DETAILS: Record<string, Partial<Record<(typeof STEP_NAMES)[number],
   legacy_hostile_nesting: { envelope: "malformed bundle (RecursionError)" },
   legacy_broken_hostile_nesting: { envelope: "malformed bundle (RecursionError)" },
   legacy_nesting_at_cap: { envelope: "unsigned legacy message" },
+  envelope_nested_past_jcs_cap: { envelope: "MALFORMED: not canonicalizable: nested too deeply" },
 };
 
 describe("ladder details match the Python reference", () => {
@@ -367,7 +368,11 @@ describe("envelope bytes read with Python's json.loads semantics", () => {
     ["whitespace around", ` \n${text}\t`, true, "PRODUCER_SIGNED by did:iota:testnet:0x5e1f#sig-1"],
     ["trailing data", `${text} x`, null, "unsigned legacy message"],
     // Parsed, but deeper than the canonicalizer recurses: the envelope is MALFORMED.
-    // The envelope adds two levels: 2498 is 2500 in all, parsed, then too deep to canonicalize.
+    // The envelope is depth 0 and its body 1, so 499 lists end at depth 500: the
+    // canonicalization cap both sides share. One more is MALFORMED.
+    ["nested 499", text.replace(body, deep(499)), false, "FORGED: signature invalid"],
+    ["nested 500", text.replace(body, deep(500)), false, "MALFORMED: not canonicalizable: nested too deeply"],
+    // 2498 is 2500 in all: parsed, then too deep to canonicalize.
     ["nested 1500", text.replace(body, deep(1500)), false, "MALFORMED: not canonicalizable: nested too deeply"],
     ["nested 2498", text.replace(body, deep(2498)), false, "MALFORMED: not canonicalizable: nested too deeply"],
     // Past the cap both sides share (2500) the step fails closed, on every platform:

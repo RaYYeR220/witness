@@ -464,7 +464,11 @@ def _envelope_step(vectors, data: bytes) -> tuple[bundle.StepResult, str]:
 @pytest.mark.parametrize(
     ("depth", "detail"),
     [
-        # Parsed (the envelope sits 2 levels up), then too deep to canonicalize.
+        # The envelope is depth 0 and its body 1, so 499 lists end at depth 500: the
+        # canonicalization cap both sides share. One more is past it, whatever the
+        # caller's stack.
+        (499, "FORGED: signature invalid"),
+        (500, "MALFORMED: not canonicalizable: nested too deeply"),
         (1500, "MALFORMED: not canonicalizable: nested too deeply"),
         (2498, "MALFORMED: not canonicalizable: nested too deeply"),
         # Past the shared cap of 2500: never "unsigned legacy", on any platform.
@@ -1170,6 +1174,9 @@ def _cases(vectors) -> list[dict]:
         vectors, env, claimed=CLAIMED, data=_legacy_nested(5000, closed=False)
     )
     legacy_at_cap = _synthetic(vectors, env, claimed=CLAIMED, data=_legacy_nested(2500))
+    # 600 levels: past the shared canonicalization cap (500), below where rfc8785 alone
+    # would give up, so this is where the cap decides.
+    past_jcs = _synthetic(vectors, env, claimed=CLAIMED, data=_deeply_nested(598))
     reg = "registry"
     return [
         _case("valid_anchored", b, cfg, rec, reg, "TTTTT VALID"),
@@ -1257,6 +1264,8 @@ def _cases(vectors) -> list[dict]:
               {"record": legacy_broken.record}, reg, "TTTFT INVALID"),
         _case("legacy_nesting_at_cap", legacy_at_cap.bundle, cfg,
               {"record": legacy_at_cap.record}, reg, "TTTNT PARTIAL"),
+        _case("envelope_nested_past_jcs_cap", past_jcs.bundle, cfg, {"record": past_jcs.record},
+              reg, "TTTFT INVALID"),
     ]
 
 
