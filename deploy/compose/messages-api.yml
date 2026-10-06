@@ -7,7 +7,7 @@ services:
     container_name: iota-messages-api
     restart: unless-stopped
     ports:
-      - "${RELAY_PORT:-5555}:5555"
+      - "127.0.0.1:${RELAY_PORT:-5555}:5555"
     networks:
       - iota-net
 

@@ -39,6 +39,8 @@ shows up within a minute or two.
 | Postgres (`witness-postgres`, password `witness`) | 5432 |
 | Mosquitto (`witness-mosquitto`, anonymous) | 1883 MQTT, 9001 websockets |
 
+Our compose files publish ports on 127.0.0.1 only. The organisers' own HORNET compose (vendored, not ours) publishes 14265, 9029 and 31011 on all interfaces; keep that in mind for any deployment.
+
 Check it is alive: `curl -s localhost:14265/api/core/v2/info` and watch
 `confirmedMilestone.index` grow about every 5 seconds. `isHealthy` stays
 `false` on this single-node private Tangle; that is expected.
