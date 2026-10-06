@@ -142,6 +142,41 @@ def test_offline_docs_and_unsupported_ids():
     assert r.resolve_kid(KID).ed25519_public == pub(NEW)
     for kid in ("did:web:example.com#k", "not-a-did", "", None):
         assert r.resolve_kid(kid) is None
-    with pytest.raises(ResolverUnavailable):
-        r.resolve_kid("did:iota:testnet:0xabc#sig-1")  # no registry configured
+    # No registry configured: resolution is disabled, the DID is unknown, never an outage.
+    assert r.resolve_kid("did:iota:testnet:0xabc#sig-1") is None
+    assert r.can_resolve(DID) and not r.can_resolve("did:iota:testnet:0xabc")
     assert not respx.calls
+
+
+@pytest.mark.parametrize("status", [400, 403, 404, 410, 414, 431])
+@respx.mock
+def test_definitive_refusals_are_answers(status):
+    route = respx.get(URL).mock(return_value=httpx.Response(status))
+    r = DidResolver(BASE)
+    assert r.resolve_kid(KID) is None
+    assert r.resolve_kid(KID) is None
+    assert route.call_count == 1  # cached like a 404
+    assert r.status == "ok"
+
+
+@pytest.mark.parametrize("status", [408, 429, 500, 502, 503])
+@respx.mock
+def test_temporary_refusals_decide_nothing(status):
+    respx.get(URL).mock(return_value=httpx.Response(status))
+    r = DidResolver(BASE)
+    with pytest.raises(ResolverUnavailable):
+        r.resolve_kid(KID)
+    assert r.status == "unreachable"
+
+
+async def test_oversized_did_is_unknown_without_asking():
+    did = "did:iota:" + ":" * 6000
+    async with respx.mock(assert_all_called=False) as router:
+        route = router.get(url__startswith=BASE).mock(return_value=httpx.Response(503))
+        r = DidResolver(BASE)
+        assert r.resolve_kid(did + "#sig-1") is None
+        assert await r.aresolve_kid(did + "#sig-1") is None
+        assert r.doc(did) is None and not r.can_resolve(did)
+        assert r.can_resolve("did:iota:" + "a" * (128 - len("did:iota:")))
+        assert not r.can_resolve("did:iota:" + "a" * (129 - len("did:iota:")))
+        assert route.call_count == 0

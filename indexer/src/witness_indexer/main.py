@@ -13,7 +13,8 @@ policy is required; `--allow-any-writer` is the explicit opt-out for development
 Signing keys are resolved through the anchor service (`--resolver`, did:key needs nothing),
 and the integrity rules run on every stored message, every `--periodic-s` seconds
 (drift, stale, anchors, shadow writes) and every `--rescan-s` seconds against the Tangle
-(rows missing from the database). Pass an empty `--resolver` / `--orion` to run without.
+(rows missing from the database). An empty `--orion` turns the Orion rules off; an empty
+`--resolver` disables DID resolution (did:iota signers are then FORGED).
 """
 
 from __future__ import annotations
@@ -114,8 +115,8 @@ def build_rules(args: argparse.Namespace, store: Store, pol: WriterPolicy
                 ) -> tuple[RulesEngine, DidResolver, OrionClient | None]:
     resolver = DidResolver(args.resolver or None)
     if not args.resolver:
-        log.warning("no --resolver: only did:key signers can be checked; a message signed "
-                    "with any other DID holds indexing back (resolver: unreachable)")
+        log.warning("no --resolver: DID resolution disabled; only did:key signers can be "
+                    "verified, any other DID is reported FORGED (resolver: disabled)")
     orion = OrionClient(args.orion) if args.orion else None
     return RulesEngine(store, orion, resolver, pol, RulesConfig()), resolver, orion
 

@@ -7,10 +7,15 @@ Sources, in order: `offline_docs` (resolve-shaped replies pinned by the operator
 was replaced in place appears there once per key; `resolve_kid(kid, at_ms)` picks the one in
 force at `at_ms` (see `witness_core.bundle.snapshot_keys`).
 
-Answers are cached per DID for `cache_ttl_s`, including "no such DID" (404). A registry that
-cannot be asked, or replies with something that is not an answer about the DID, raises
-`ResolverUnavailable` and caches nothing: callers must then decide nothing, rather than treat
-the signer as unknown.
+Answers are cached per DID for `cache_ttl_s`, including "no such DID": a 404 or any other
+definitive 4xx. A registry that cannot be asked (connection error, timeout, 5xx, 408, 429),
+or replies with something that is not an answer about the DID, raises `ResolverUnavailable`
+and caches nothing: callers must then decide nothing, rather than treat the signer as
+unknown.
+
+Without a `base_url` DID resolution is disabled: only `did:key` and `offline_docs` DIDs
+resolve, every other DID is unknown (None), never an outage. DIDs longer than
+MAX_DID_LENGTH are unknown without asking anyone.
 """
 
 from __future__ import annotations
@@ -28,6 +33,7 @@ from witness_core.bundle import snapshot_resolver
 from witness_core.envelope import KeyInfo
 
 DID_RE = re.compile(r"did:(iota|key):[A-Za-z0-9:._%-]+")
+MAX_DID_LENGTH = 128  # the anchor service refuses longer ones
 _B58 = "123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz"
 _ED25519_PUB = b"\xed\x01"  # multicodec ed25519-pub, varint encoded
 _KEY_PREFIX = "did:key:"
@@ -87,7 +93,7 @@ def _split(kid: object) -> tuple[str, str] | None:
     if not isinstance(kid, str):
         return None
     did, sep, _ = kid.partition("#")
-    if not DID_RE.fullmatch(did):
+    if len(did) > MAX_DID_LENGTH or not DID_RE.fullmatch(did):
         return None
     if did.startswith(_KEY_PREFIX) and not sep:
         kid = f"{did}#{did[len(_KEY_PREFIX):]}"
@@ -196,9 +202,16 @@ class DidResolver:
     def _url(self, did: str) -> str:
         return f"{self.base_url}/resolve/{quote(did, safe='')}"
 
+    def can_resolve(self, did: str) -> bool:
+        """Whether `did` can be looked up at all: a well-formed did:key, a pinned document,
+        or any supported DID while a registry is configured."""
+        if not isinstance(did, str) or len(did) > MAX_DID_LENGTH or not DID_RE.fullmatch(did):
+            return False
+        return did.startswith(_KEY_PREFIX) or did in self._offline or self.base_url is not None
+
     def _local(self, did: str) -> object:
         """A reply known without asking the registry, or _MISS."""
-        if not isinstance(did, str) or not DID_RE.fullmatch(did):
+        if not isinstance(did, str) or len(did) > MAX_DID_LENGTH or not DID_RE.fullmatch(did):
             return None
         if did in self._offline:
             return copy.deepcopy(self._offline[did])
@@ -210,13 +223,14 @@ class DidResolver:
                 self._cache.move_to_end(did)
                 return copy.deepcopy(hit[1])
         if self.base_url is None:
-            raise ResolverUnavailable(f"no DID resolver configured for {did}")
+            return None  # resolution disabled: the DID is unknown here, not unreachable
         return _MISS
 
     def _accept(self, did: str, resp: httpx.Response) -> dict | None:
-        if resp.status_code in (400, 404):
-            value = None
-        elif resp.status_code == 200:
+        code = resp.status_code
+        if 400 <= code < 500 and code not in (408, 429):
+            value = None  # the registry says it has no such DID (or refuses this one for good)
+        elif code == 200:
             try:
                 value = resp.json()
             except ValueError as exc:

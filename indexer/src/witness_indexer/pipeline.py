@@ -39,6 +39,7 @@ from .classify import (
     resolve_keys,
 )
 from .didkey import OfflineResolver
+from .resolver import DidResolver
 from .source import (
     BlockSource,
     ConeBlock,
@@ -112,7 +113,8 @@ class Indexer:
         self.rules = rules
         # Without a policy no signer is listed, so every signed message is UNAUTHORIZED_WRITER.
         self.policy = policy if policy is not None else WriterPolicy(version=0)
-        self.policy_mode = policy_mode or ("file" if policy is not None else "none")
+        self.policy_mode = policy_mode or (
+            "none" if policy is None else "allow-any" if policy == ALLOW_ALL else "file")
         self.resolver = as_key_resolver(resolve if resolve is not None else OfflineResolver())
         self._sleep = sleep
         self._now_ms = now_ms
@@ -125,6 +127,8 @@ class Indexer:
         self.last_index = 0
         self._published: dict[str, tuple[str, str | None]] = {}
         self._failing: tuple[int, int] = (0, 0)  # (milestone, consecutive failures)
+        # (milestone, kid, consecutive failures) of the key resolver
+        self._resolver_failing: tuple[int, str, int] = (0, "", 0)
 
     # -- loop -------------------------------------------------------------------------------
 
@@ -134,6 +138,10 @@ class Indexer:
         start = await self.store.get_cursor() + 1
         self.last_index = start - 1
         await self._publish("policy", self.policy_mode)
+        if isinstance(self.resolver, DidResolver) and self.resolver.base_url is None:
+            # A configuration choice, not an outage: only did:key (and pinned) DIDs resolve,
+            # every other signer is FORGED ("signing key not resolvable").
+            await self._publish("resolver", "disabled")
         log.info("indexing from milestone %d via %s", start, self.source.name)
         async for m in self.source.milestones(start):
             if m.index <= self.last_index:
@@ -146,6 +154,7 @@ class Indexer:
                 await self.process_milestone(m)
                 self.last_index = m.index
                 self._failing = (0, 0)
+                self._resolver_failing = (0, "", 0)
                 await self._publish("indexer", "ok")
                 if self._published.get("resolver", ("",))[0] == "unreachable":
                     await self._publish("resolver", "ok")
@@ -218,9 +227,20 @@ class Indexer:
             log.error("refusing milestone %d: %s", index, e)
             await self._publish("indexer", "network changed", str(e)[:500])
         elif isinstance(e, ResolverFailed):
-            log.warning("key resolver unreachable at milestone %d, retrying: %s", index, e)
+            prev, prev_kid, count = self._resolver_failing
+            count = count + 1 if (prev, prev_kid) == (index, e.kid) else 1
+            self._resolver_failing = (index, e.kid, count)
             await self._publish("resolver", "unreachable", detail)
-            await self._publish("indexer", "retrying (resolver unreachable)", detail)
+            if count >= STUCK_AFTER:
+                if count == STUCK_AFTER:
+                    log.error("stuck at milestone %d: key %s unresolvable after %d attempts: %s",
+                              index, e.kid[:120], count, e)
+                await self._publish("indexer", f"stuck at {index} (resolver: {e.kid[:64]})",
+                                    detail)
+            else:
+                log.warning("key resolver unreachable at milestone %d (attempt %d), "
+                            "retrying: %s", index, count, e)
+                await self._publish("indexer", "retrying (resolver unreachable)", detail)
         elif isinstance(e, TRANSIENT):
             what = "database" if isinstance(e, psycopg.OperationalError) else self.source.name
             log.warning("%s unavailable after milestone %d, retrying: %s", what,

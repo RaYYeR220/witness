@@ -744,22 +744,113 @@ async def test_did_resolver_is_asked_at_the_milestone_time(store: Store):
     assert (await msg(store, chain.block_id(2, 1)))["verdict"] == "PRODUCER_SIGNED"
 
 
-async def test_unreachable_did_resolver_stalls_the_milestone(store: Store):
+@pytest.mark.parametrize("failure", [httpx.ConnectError("refused"), httpx.Response(503),
+                                     httpx.Response(429), httpx.ReadTimeout("slow")])
+async def test_unreachable_did_resolver_stalls_the_milestone(store: Store, failure):
     chain = FakeChain()
     chain.add([("trust.score", iota_signed(1))])
     url = f"{ANCHOR}/resolve/{quote(IOTA_DID, safe='')}"
     async with respx.mock() as router:
-        router.get(url).mock(side_effect=httpx.ConnectError("refused"))
+        route = router.get(url)
+        if isinstance(failure, httpx.Response):
+            route.mock(return_value=failure)
+        else:
+            route.mock(side_effect=failure)
         resolver = DidResolver(ANCHOR)
-        with pytest.raises(ResolverFailed):
+        with pytest.raises(ResolverFailed) as caught:
             await indexer(FakeSource(chain), store, resolve=resolver, policy=ALLOW_ALL).sync()
         await resolver.aclose()
+    assert caught.value.kid == IOTA_DID + "#sig-1"
     stats = await store.stats()
     assert (stats["milestones"], stats["messages"], stats["cursor"]) == (0, 0, 0)
-    with pytest.raises(ResolverFailed):  # no registry configured at all: same, never FORGED
-        await indexer(FakeSource(chain), store, resolve=DidResolver(None),
-                      policy=ALLOW_ALL).sync()
+
+
+async def test_disabled_did_resolution_forges_instead_of_stalling(store: Store):
+    chain = FakeChain()
+    chain.add([("trust.score", iota_signed(1)),
+               ("trust.score", signed(ALICE, "trust.score", score("D:aabbccddeeff", 0.5), 1))])
+    await indexer(FakeSource(chain), store, resolve=DidResolver(None), policy=ALLOW_ALL).sync()
+    assert [(await msg(store, chain.block_id(1, n)))["verdict"] for n in (0, 1)] == [
+        "FORGED", "PRODUCER_SIGNED"]  # did:key still needs no registry
+    assert (await store.stats())["resolver"] == "disabled"
+
+
+async def test_unknown_did_is_forged(store: Store):
+    chain = FakeChain()
+    chain.add([("trust.score", iota_signed(1))])
+    url = f"{ANCHOR}/resolve/{quote(IOTA_DID, safe='')}"
+    async with respx.mock() as router:
+        router.get(url).mock(return_value=httpx.Response(404, json={"error": "not found"}))
+        resolver = DidResolver(ANCHOR)
+        await indexer(FakeSource(chain), store, resolve=resolver, policy=ALLOW_ALL).sync()
+        await resolver.aclose()
+    assert (await msg(store, chain.block_id(1, 0)))["verdict"] == "FORGED"
+
+
+async def test_oversized_did_is_forged_without_asking(store: Store):
+    huge = "did:iota:" + ":" * 6000
+    env = envelope.seal("trust.score", score("D:aabbccddeeff", 0.5), iss=huge,
+                        kid=huge + "#sig-1", sign_key=IOTA_KEY, seq=1, att_mode="producer",
+                        now_ms=1, nonce=b"h" * 16)
+    chain = FakeChain()
+    chain.add([("trust.score", json.dumps(env).encode()),
+               ("trust.score", json.dumps(score("D:aabbccddeeff", 0.5)).encode())])
+    async with respx.mock(assert_all_called=False) as router:
+        route = router.get(url__startswith=ANCHOR).mock(return_value=httpx.Response(431))
+        resolver = DidResolver(ANCHOR)
+        await indexer(FakeSource(chain), store, resolve=resolver, policy=ALLOW_ALL).sync()
+        await resolver.aclose()
+    assert route.call_count == 0
+    assert [(await msg(store, chain.block_id(1, n)))["verdict"] for n in (0, 1)] == [
+        "FORGED", "UNSIGNED_LEGACY"]
+    assert await store.get_cursor() == 1
+
+
+async def test_only_checkable_envelopes_are_resolved(store: Store):
+    ie = "D:aabbccddeeff"
+    bad_seq = json.loads(signed(ALICE, "trust.score", score(ie, 0.5), 2))
+    bad_seq["seq"] = -1
+    other_kid = json.loads(signed(ALICE, "trust.score", score(ie, 0.5), 3))
+    other_kid["kid"] = kid_of(BOB)
+    chain = FakeChain()
+    chain.add([("LLO-K8s", signed(ALICE, "trust.score", score(ie, 0.5), 1)),  # tag mismatch
+               ("trust.score", json.dumps(bad_seq).encode()),                 # malformed
+               ("trust.score", json.dumps(other_kid).encode())])              # kid of iss?
+    res = RecordingResolver(store)
+    await indexer(FakeSource(chain), store, resolve=res).sync()
+    assert res.calls == []
+    assert [(await msg(store, chain.block_id(1, n)))["verdict"] for n in range(3)] == [
+        "FORGED", "MALFORMED", "FORGED"]
+
+
+async def test_resolver_failing_on_one_key_is_reported_stuck(store: Store):
+    chain = FakeChain()
+    chain.add([("trust.score", signed(ALICE, "trust.score", score("D:aabbccddeeff", 0.5), 1))])
+    res = RecordingResolver(store, fail=10_000)
+    seen = []
+
+    async def sleep(_s):
+        st = await store.stats()
+        seen.append((st.get("indexer"), st.get("resolver")))
+        await asyncio.sleep(0)
+
+    ix = indexer(FakeSource(chain, tail=True), store, resolve=res, sleep=sleep)
+    task = asyncio.create_task(ix.run())
+    while len(seen) < 6:
+        await asyncio.sleep(0.01)
+    await ix.stop()
+    await task
+    stuck = f"stuck at 1 (resolver: {kid_of(ALICE)[:64]})"
+    assert seen[:6] == [("retrying (resolver unreachable)", "unreachable")] * 4 + [
+        (stuck, "unreachable")] * 2
     assert (await store.stats())["messages"] == 0
+
+
+async def test_allow_all_policy_is_labelled_for_library_callers(store: Store):
+    chain = FakeChain()
+    chain.add([("x", b"{}")])
+    await Indexer(FakeSource(chain), store, policy=ALLOW_ALL).sync()
+    assert (await store.stats())["policy"] == "allow-any"
 
 
 async def test_rules_engine_alerts_are_stored_and_emitted_once(store: Store):

@@ -183,9 +183,9 @@ async def test_r3_replay(engine):
     [a] = await fired(engine, copy)
     assert (a.rule, a.severity) == ("REPLAY", "high")
     reasons = " | ".join(a.evidence["reasons"])
-    assert "seq 1 is not above the last accepted seq 1" in reasons
-    assert "nonce already used" in reasons
-    assert to_hex(original.block_id) in reasons
+    assert f"seq 1 already used by block {to_hex(original.block_id)}" in reasons
+    assert f"nonce already used by block {to_hex(original.block_id)}" in reasons
+    assert a.evidence["earlierBlocks"] == [to_hex(original.block_id)]
 
 
 async def test_r4_unsigned_on_signature_required_tag(engine):
@@ -271,7 +271,8 @@ async def test_resolver_unreachable_changes_no_verdict(make_engine, respx_mock, 
     assert a.rule == "REVOKED_KEY" and a.evidence["revokedAtMs"] is None
     assert "resolver unavailable" in a.evidence["note"]
     assert (await store.get_message(row.block_id))["verdict"] == V.REVOKED_KEY
-    assert (await store.stats())["resolver"] == "unreachable"
+    stats = await store.stats()
+    assert stats["resolver(rules)"] == "unreachable" and "resolver" not in stats
 
 
 async def test_r12_clock_skew(engine):

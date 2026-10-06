@@ -40,7 +40,8 @@ ANCHOR_MISMATCH, and an unreachable DID resolver only leaves evidence incomplete
 content cannot stop them either: every rule runs on its own (inside a savepoint when the
 caller holds a transaction), a failing rule is logged and reported, and evidence is
 sanitised before it is stored. What was last observed is in `Store.stats()`: `orion`,
-`resolver` ("ok" | "unreachable"), `anchor` ("ok" | "pending" | "unverifiable" |
+`resolver(rules)` ("ok" | "unreachable", the rules' own lookups; `resolver` belongs to the
+indexer), `anchor` ("ok" | "pending" | "unverifiable" |
 "unreachable"), `shadow` ("ok" | "no-baseline"), `ledger` ("ok" | "stalled" | "empty") and
 `rules` ("ok" | "error").
 
@@ -410,12 +411,16 @@ class RulesEngine:
         """(resolve reply, None) or (None, why it could not be fetched)."""
         if self.resolver is None:
             return None, "no DID resolver configured"
+        if not self.resolver.can_resolve(did):
+            if self.resolver.base_url is None:
+                return None, f"DID resolution disabled ({did})"
+            return None, f"{did} is not a resolvable DID (unsupported or too long)"
         try:
             doc = await self.resolver.adoc(did)
         except ResolverUnavailable as exc:
-            await self._set_status("resolver", "unreachable", str(exc))
+            await self._set_status("resolver(rules)", "unreachable", str(exc))
             return None, f"DID resolver unavailable ({exc})"
-        await self._set_status("resolver", "ok")
+        await self._set_status("resolver(rules)", "ok")
         return doc, None
 
     # -- R1 R2 R3 R9 R10: verdicts explained ----------------------------------------------------
@@ -457,12 +462,19 @@ class RulesEngine:
 
     async def _replay(self, row: MessageRow, now: int) -> Alert:
         reasons: list[str] = []
+        earlier: list[str] = []
         if row.iss is not None:
-            last, nonces = await self.store.issuer_state(row.iss, exclude_block_id=row.block_id)
-            if row.seq is not None and last is not None and row.seq <= last:
-                reasons.append(f"seq {row.seq} is not above the last accepted seq {last}")
-            if row.nonce is not None and row.nonce in nonces:
-                reasons.append("nonce already used by this issuer")
+            # The indexer's rule: a seq or nonce this issuer already spent in another block.
+            if row.seq is not None:
+                used = await self.store.seq_used(row.iss, row.seq, row.block_id)
+                if used is not None:
+                    earlier.append(to_hex(used))
+                    reasons.append(f"seq {row.seq} already used by block {to_hex(used)}")
+            if row.nonce is not None:
+                used = await self.store.nonce_used(row.iss, row.nonce, row.block_id)
+                if used is not None:
+                    earlier.append(to_hex(used))
+                    reasons.append(f"nonce already used by block {to_hex(used)}")
         if row.canon_hash is not None:
             for m in await self.store.lookup_canon(row.canon_hash):
                 if bytes(m["block_id"]) != row.block_id:
@@ -470,6 +482,7 @@ class RulesEngine:
                                    f"{to_hex(bytes(m['block_id']))}")
                     break
         evidence = {"iss": row.iss, "seq": row.seq, "nonce": row.nonce,
+                    "earlierBlocks": list(dict.fromkeys(earlier)),
                     "reasons": reasons or ["flagged as a replay when indexed"]}
         return self._alert("REPLAY", row, evidence, now)
 

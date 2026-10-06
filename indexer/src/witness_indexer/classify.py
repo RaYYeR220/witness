@@ -31,6 +31,9 @@ MAX_BLIND_TOKEN_LEN = 256
 # are a handful of levels deep. Deeper payloads keep their raw bytes only.
 MAX_DEPTH = 64
 TOO_DEEP = "nesting too deep"
+# Longest DID the resolver is ever asked about (the anchor service's own limit). A longer
+# one cannot exist in the registry, so it is unresolvable without asking.
+MAX_DID_LENGTH = 128
 
 
 @runtime_checkable
@@ -57,6 +60,10 @@ def as_key_resolver(resolve: KeyResolver | Callable[[str], KeyInfo | None]) -> K
 
 class ResolverFailed(Exception):
     """A signing key could not be resolved; nothing about the milestone may be decided."""
+
+    def __init__(self, message: str, kid: str) -> None:
+        super().__init__(message)
+        self.kid = kid
 
 
 def storable_text(v: Any) -> str | None:
@@ -182,14 +189,28 @@ class Judgement:
 
 
 def signing_kid(d: Decoded) -> str | None:
-    """The kid `envelope.verify` will look up for this message, if it gets that far."""
+    """The kid `envelope.verify` will look up for this message, or None when verify settles
+    the verdict before that (malformed envelope, tag or kid/iss mismatch, too deep). Found
+    by running verify itself with a key lookup that only records the question, so the
+    pre-checks are exactly verify's."""
     env = d.envelope
-    if env is None or d.too_deep or not envelope.is_envelope(env):
+    if env is None or d.too_deep:
         return None
-    kid, iss = env.get("kid"), env.get("iss")
-    if not isinstance(kid, str) or not isinstance(iss, str) or kid.split("#", 1)[0] != iss:
-        return None  # verify rejects these before asking for a key
-    return kid
+    asked: list[str] = []
+
+    def probe(kid: str) -> None:
+        asked.append(kid)
+
+    try:
+        envelope.verify(env, d.tag, probe)
+    except Exception:  # noqa: BLE001 - judge reports the same envelope as MALFORMED
+        return None
+    return asked[0] if asked else None
+
+
+def resolvable(kid: str) -> bool:
+    """False for a kid no registry can know (its DID is longer than MAX_DID_LENGTH)."""
+    return len(kid.split("#", 1)[0]) <= MAX_DID_LENGTH
 
 
 async def resolve_keys(resolver: KeyResolver, decoded: Iterable[Decoded],
@@ -201,10 +222,14 @@ async def resolve_keys(resolver: KeyResolver, decoded: Iterable[Decoded],
         kid = signing_kid(d)
         if kid is None or kid in keys:
             continue
+        if not resolvable(kid):
+            keys[kid] = None  # FORGED "signing key not resolvable", without asking anyone
+            continue
         try:
             keys[kid] = await resolver.aresolve_kid(kid, at_ms)
         except Exception as e:
-            raise ResolverFailed(f"resolving {kid[:120]}: {type(e).__name__}: {e}") from e
+            raise ResolverFailed(f"resolving {kid[:120]}: {type(e).__name__}: {e}"[:500],
+                                 kid) from e
     return keys
 
 

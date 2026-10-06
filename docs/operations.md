@@ -119,8 +119,15 @@ uv run witness-indexer --db postgresql://postgres:witness@127.0.0.1:5432/postgre
   stale scores, anchors, shadow writes) and every `--rescan-s` (300 s: up to
   `--rescan-batch` indexed milestones are re-read from the node and any tagged block
   missing from the database is reported as `MISSING_IN_DB`). The periodic passes run
-  in their own tasks, never inside a milestone transaction. An empty `--resolver` or
-  `--orion` turns that service off.
+  in their own tasks, never inside a milestone transaction. An empty `--orion` turns
+  the Orion rules off.
+- Key lookups: only envelopes that pass verify's own pre-checks (structure, tag
+  binding, kid belongs to iss) are looked up. A DID longer than 128 characters, a 404
+  or any other definitive 4xx from the registry means "no such key" and the message is
+  `FORGED`. Timeouts, connection errors, 5xx, 408 and 429 stall the milestone instead
+  (no verdict is guessed), retried with backoff. An empty `--resolver` disables DID
+  resolution on purpose: `did:iota` signers are then `FORGED` and the status says
+  `resolver: disabled`.
 - Ctrl+C / SIGTERM lets the milestone being written (and a rules pass) finish, then exits.
 
 Health shows up in `Store.stats()` (and so in the API's stats):
@@ -128,7 +135,7 @@ Health shows up in `Store.stats()` (and so in the API's stats):
 | Key | Values |
 | --- | --- |
 | `indexer` | `ok`; `retrying (<inx\|rest\|database> unavailable)`; `retrying (resolver unreachable)`; `retrying milestone N (<reason>, attempt k)`; `stuck at N (<reason>)` after 5 failed attempts on the same milestone (e.g. `cone root mismatch`); `network changed` when the node serves a different Tangle than the database holds |
-| `resolver` | `unreachable` while signing keys cannot be resolved (no verdicts are written meanwhile), `ok` once it recovers |
+| `resolver` | `unreachable` while signing keys cannot be resolved (no verdicts are written meanwhile; after 5 failures on the same key `indexer` shows `stuck at N (resolver: <kid>)`), `ok` once it recovers, `disabled` without `--resolver`. Written by the indexer only; the rules' own lookups report as `resolver(rules)` |
 | `policy` | `file`, `allow-any`, or `none` (library default: every signed writer is unauthorized) |
 | `rules`, `orion`, `anchor`, `shadow`, `ledger` | reported by the rules engine (see `indexer/src/witness_indexer/rules.py`) |
 
