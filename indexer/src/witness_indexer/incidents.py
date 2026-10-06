@@ -668,8 +668,8 @@ class IncidentEngine:
             opens = level != UNTRUSTED
             host = self._host(sc)
             target = host if ie is None else ie
-            if (level == UNTRUSTED and rule in ATTACK_RULES and target
-                    and (host is not None or self._resolvable(target))):
+            # Orion's component hosts are part of the IEs it knows (_refresh_orion)
+            if level == UNTRUSTED and rule in ATTACK_RULES and target and self._resolvable(target):
                 # an attack on the record of an IE Orion knows
                 keys, opens, witnessed = {f"ie:{target}"}, True, True
             ie = ie or host

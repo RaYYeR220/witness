@@ -457,6 +457,17 @@ async def test_hostile_orion_component_map(store, pub):
     assert st["status"] == "unreachable" and "more than 2" in st["detail"]
 
 
+async def test_an_unlisted_ie_named_next_to_a_known_component_stays_alert_only(store, engine):
+    # the LLO's component is on X, but the alert names an IE Orion does not list: the IE the
+    # message names wins, and it is not resolvable
+    rogue = llo("Service component failed", ms=10, verdict=V.FORGED)
+    await store_row(store, rogue)
+    await raise_alert(store, Alert("FORGED", "critical", rogue.block_id, "Made:00000000beef",
+                                   {}, rogue.ts * 1000))
+    assert await engine.on_message(rogue) == []
+    assert await store.incidents() == []
+
+
 async def test_attack_alerts_find_the_ie_through_the_component(store, engine):
     # the LLO names only its component; Orion places it on X
     rogue = llo("Service component deployed", ms=10, verdict=V.UNAUTHORIZED_WRITER)
