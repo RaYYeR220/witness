@@ -1,0 +1,173 @@
+{
+  "description": "witness/v1 envelope vectors. verify(envelope, block_tag) using the ed25519 public key (hex) registered for envelope.kid.",
+  "cases": [
+    {
+      "name": "valid_producer",
+      "envelope": {
+        "w": 1,
+        "tag": "trust.score",
+        "iss": "did:iota:testnet:0xabc",
+        "kid": "did:iota:testnet:0xabc#sig-1",
+        "seq": 7,
+        "iat": 1700000000000,
+        "nonce": "AAECAwQFBgcICQoLDA0ODw",
+        "att": {
+          "mode": "producer"
+        },
+        "body": {
+          "score": 0.745,
+          "id": "D:x"
+        },
+        "sig": "mv_WWb__QRVl8wuN92QhlNjChzQBzWkm_B-EvrWtC_wGt8kjRD1Twwi6RYA9hsyKutGnAzuIXs9bt3BtHJ8ECA"
+      },
+      "public_key_hex": "8a88e3dd7409f195fd52db2d3cba5d72ca6709bf1d94121bf3748801b40f6f5c",
+      "block_tag": "trust.score",
+      "expected_verdict": "PRODUCER_SIGNED"
+    },
+    {
+      "name": "valid_relay",
+      "envelope": {
+        "w": 1,
+        "tag": "trust.score",
+        "iss": "did:iota:testnet:0xabc",
+        "kid": "did:iota:testnet:0xabc#sig-1",
+        "seq": 8,
+        "iat": 1700000000000,
+        "nonce": "AAECAwQFBgcICQoLDA0ODw",
+        "att": {
+          "mode": "relay",
+          "sub": "svc"
+        },
+        "body": {
+          "score": 0.745,
+          "id": "D:x"
+        },
+        "sig": "AepbTNcK4O-1jqrOAwlaCYy8fheyT2_KYmgCPfFrpuWCdPl4N33aK23847HX83RlMwWLXWMni-lMuJ0IOTuMAw"
+      },
+      "public_key_hex": "8a88e3dd7409f195fd52db2d3cba5d72ca6709bf1d94121bf3748801b40f6f5c",
+      "block_tag": "trust.score",
+      "expected_verdict": "RELAY_ATTESTED"
+    },
+    {
+      "name": "valid_prev_corr",
+      "envelope": {
+        "w": 1,
+        "tag": "trust.score",
+        "iss": "did:iota:testnet:0xabc",
+        "kid": "did:iota:testnet:0xabc#sig-1",
+        "seq": 9,
+        "iat": 1700000000000,
+        "nonce": "AAECAwQFBgcICQoLDA0ODw",
+        "att": {
+          "mode": "producer"
+        },
+        "body": {
+          "score": 0.745,
+          "id": "D:x"
+        },
+        "prev": "0x1111111111111111111111111111111111111111111111111111111111111111",
+        "corr": "req-1",
+        "sig": "Gp_x494LixvAiNKfUSulnV6LTyADDQzkwKe0QwLviAxFIGCg0_Xy_xWzyggAdB5ylbXGBK8nPZO4G4HfNRjxAg"
+      },
+      "public_key_hex": "8a88e3dd7409f195fd52db2d3cba5d72ca6709bf1d94121bf3748801b40f6f5c",
+      "block_tag": "trust.score",
+      "expected_verdict": "PRODUCER_SIGNED"
+    },
+    {
+      "name": "tampered_body",
+      "envelope": {
+        "w": 1,
+        "tag": "trust.score",
+        "iss": "did:iota:testnet:0xabc",
+        "kid": "did:iota:testnet:0xabc#sig-1",
+        "seq": 7,
+        "iat": 1700000000000,
+        "nonce": "AAECAwQFBgcICQoLDA0ODw",
+        "att": {
+          "mode": "producer"
+        },
+        "body": {
+          "score": 0.1,
+          "id": "D:x"
+        },
+        "sig": "mv_WWb__QRVl8wuN92QhlNjChzQBzWkm_B-EvrWtC_wGt8kjRD1Twwi6RYA9hsyKutGnAzuIXs9bt3BtHJ8ECA"
+      },
+      "public_key_hex": "8a88e3dd7409f195fd52db2d3cba5d72ca6709bf1d94121bf3748801b40f6f5c",
+      "block_tag": "trust.score",
+      "expected_verdict": "FORGED"
+    },
+    {
+      "name": "cross_tag",
+      "envelope": {
+        "w": 1,
+        "tag": "trust.score",
+        "iss": "did:iota:testnet:0xabc",
+        "kid": "did:iota:testnet:0xabc#sig-1",
+        "seq": 7,
+        "iat": 1700000000000,
+        "nonce": "AAECAwQFBgcICQoLDA0ODw",
+        "att": {
+          "mode": "producer"
+        },
+        "body": {
+          "score": 0.745,
+          "id": "D:x"
+        },
+        "sig": "mv_WWb__QRVl8wuN92QhlNjChzQBzWkm_B-EvrWtC_wGt8kjRD1Twwi6RYA9hsyKutGnAzuIXs9bt3BtHJ8ECA"
+      },
+      "public_key_hex": "8a88e3dd7409f195fd52db2d3cba5d72ca6709bf1d94121bf3748801b40f6f5c",
+      "block_tag": "LLO-K8s",
+      "expected_verdict": "FORGED"
+    },
+    {
+      "name": "tampered_prev",
+      "envelope": {
+        "w": 1,
+        "tag": "trust.score",
+        "iss": "did:iota:testnet:0xabc",
+        "kid": "did:iota:testnet:0xabc#sig-1",
+        "seq": 9,
+        "iat": 1700000000000,
+        "nonce": "AAECAwQFBgcICQoLDA0ODw",
+        "att": {
+          "mode": "producer"
+        },
+        "body": {
+          "score": 0.745,
+          "id": "D:x"
+        },
+        "prev": "0x2222222222222222222222222222222222222222222222222222222222222222",
+        "corr": "req-1",
+        "sig": "Gp_x494LixvAiNKfUSulnV6LTyADDQzkwKe0QwLviAxFIGCg0_Xy_xWzyggAdB5ylbXGBK8nPZO4G4HfNRjxAg"
+      },
+      "public_key_hex": "8a88e3dd7409f195fd52db2d3cba5d72ca6709bf1d94121bf3748801b40f6f5c",
+      "block_tag": "trust.score",
+      "expected_verdict": "FORGED"
+    },
+    {
+      "name": "tampered_corr",
+      "envelope": {
+        "w": 1,
+        "tag": "trust.score",
+        "iss": "did:iota:testnet:0xabc",
+        "kid": "did:iota:testnet:0xabc#sig-1",
+        "seq": 9,
+        "iat": 1700000000000,
+        "nonce": "AAECAwQFBgcICQoLDA0ODw",
+        "att": {
+          "mode": "producer"
+        },
+        "body": {
+          "score": 0.745,
+          "id": "D:x"
+        },
+        "prev": "0x1111111111111111111111111111111111111111111111111111111111111111",
+        "corr": "req-2",
+        "sig": "Gp_x494LixvAiNKfUSulnV6LTyADDQzkwKe0QwLviAxFIGCg0_Xy_xWzyggAdB5ylbXGBK8nPZO4G4HfNRjxAg"
+      },
+      "public_key_hex": "8a88e3dd7409f195fd52db2d3cba5d72ca6709bf1d94121bf3748801b40f6f5c",
+      "block_tag": "trust.score",
+      "expected_verdict": "FORGED"
+    }
+  ]
+}

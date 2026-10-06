@@ -1,0 +1,21 @@
+"""Verdict constants and their severities."""
+
+PRODUCER_SIGNED = "PRODUCER_SIGNED"
+RELAY_ATTESTED = "RELAY_ATTESTED"
+UNSIGNED_LEGACY = "UNSIGNED_LEGACY"
+FORGED = "FORGED"
+UNAUTHORIZED_WRITER = "UNAUTHORIZED_WRITER"
+REPLAY = "REPLAY"
+REVOKED_KEY = "REVOKED_KEY"
+MALFORMED = "MALFORMED"
+
+SEVERITY: dict[str, str] = {
+    PRODUCER_SIGNED: "ok",
+    RELAY_ATTESTED: "ok",
+    UNSIGNED_LEGACY: "info",
+    FORGED: "critical",
+    UNAUTHORIZED_WRITER: "critical",
+    REPLAY: "high",
+    REVOKED_KEY: "high",
+    MALFORMED: "medium",
+}
