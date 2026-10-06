@@ -47,7 +47,7 @@ else
 fi
 
 echo "== HORNET + coordinator + dashboard"
-docker compose -f hornet-main.yaml up -d
+docker compose -f hornet-main.yaml -f "$here/hornet-loopback.yml" up -d
 
 echo "== messages relay"
 docker compose -f "$here/messages-api.yml" up -d
