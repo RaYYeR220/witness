@@ -457,20 +457,36 @@ class Store:
             "ORDER BY l.at_ms DESC, l.id DESC LIMIT 1) IN ('SUBMITTED', 'SOLID', 'CONFIRMED') "
             "ORDER BY s.received_at_ms, s.sub_id LIMIT %s", (limit,))
 
-    async def verified_content(self, after: bytes | None, limit: int) -> list[dict]:
-        """Blocks whose content matched the Tangle at least once (a MATCH content check),
-        whatever their status is now, in block id order after `after`, with every copy of
-        their content the explorer holds: the submission's tag/data_hex and the message's
-        tag/data, for whichever of those rows exist."""
+    async def reverify_candidates(self, after: bytes | None, limit: int) -> list[dict]:
+        """Every block any table says the explorer holds or checked: a MATCH content check,
+        a submission with a block id, an indexed message or a CONTENT_VERIFIED lifecycle row
+        (hiding a block takes wiping all four). In block id order after `after`, with every
+        copy of its content (submission tag/data_hex, message tag/data, for whichever rows
+        exist) and what is known about its validation: `verified_once` (a MATCH check or a
+        CONTENT_VERIFIED row), `latest_status` and `has_failed_check` (MISMATCH/NOT_FOUND)."""
         return await self._fetch(
-            "SELECT c.block_id, s.sub_id, s.block_id IS NOT NULL AS has_submission, "
+            "WITH ids AS ("
+            " SELECT block_id FROM content_checks WHERE result = 'MATCH'"
+            " UNION SELECT block_id FROM submissions WHERE block_id IS NOT NULL"
+            " UNION SELECT block_id FROM messages"
+            " UNION SELECT block_id FROM lifecycle"
+            "  WHERE status = 'CONTENT_VERIFIED' AND block_id IS NOT NULL"
+            "), page AS ("
+            " SELECT block_id FROM ids WHERE (%s::bytea IS NULL OR block_id > %s::bytea)"
+            " ORDER BY block_id LIMIT %s) "
+            "SELECT p.block_id, s.sub_id, s.block_id IS NOT NULL AS has_submission, "
             "s.tag AS sub_tag, s.data_hex, m.block_id IS NOT NULL AS has_message, "
-            "m.tag AS msg_tag, m.data AS msg_data "
-            "FROM (SELECT DISTINCT block_id FROM content_checks WHERE result = 'MATCH' "
-            "AND (%s::bytea IS NULL OR block_id > %s::bytea) ORDER BY block_id LIMIT %s) c "
-            "LEFT JOIN submissions s ON s.block_id = c.block_id "
-            "LEFT JOIN messages m ON m.block_id = c.block_id "
-            "ORDER BY c.block_id", (after, after, limit))
+            "m.tag AS msg_tag, m.data AS msg_data, "
+            "(EXISTS (SELECT 1 FROM content_checks c WHERE c.block_id = p.block_id "
+            "AND c.result = 'MATCH') OR EXISTS (SELECT 1 FROM lifecycle l "
+            "WHERE l.block_id = p.block_id AND l.status = 'CONTENT_VERIFIED')) AS verified_once, "
+            "(SELECT l.status FROM lifecycle l WHERE l.block_id = p.block_id "
+            "ORDER BY l.at_ms DESC, l.id DESC LIMIT 1) AS latest_status, "
+            "EXISTS (SELECT 1 FROM content_checks c WHERE c.block_id = p.block_id "
+            "AND c.result <> 'MATCH') AS has_failed_check "
+            "FROM page p LEFT JOIN submissions s ON s.block_id = p.block_id "
+            "LEFT JOIN messages m ON m.block_id = p.block_id "
+            "ORDER BY p.block_id", (after, after, limit))
 
     # -- events -----------------------------------------------------------------------------
 

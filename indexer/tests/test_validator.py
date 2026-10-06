@@ -80,10 +80,11 @@ def binary(raw):
 def serve(bid, raw, metas):
     """Mock HORNET for one block: metadata answers in order, then the raw block."""
     url = f"{BASE}/api/core/v2/blocks/0x{bid.hex()}"
+    name = f"meta-{bid.hex()}"
     if callable(metas):
-        meta_route = respx.get(url + "/metadata").mock(side_effect=metas)
+        meta_route = respx.get(url + "/metadata", name=name).mock(side_effect=metas)
     else:
-        meta_route = respx.get(url + "/metadata").mock(
+        meta_route = respx.get(url + "/metadata", name=name).mock(
             side_effect=[as_response(m) for m in metas])
     block = httpx.Response(404) if raw is None else binary(raw)
     block_route = respx.get(url).mock(return_value=block)
@@ -150,7 +151,7 @@ async def test_validate_again_does_not_repeat_transitions(env):
     assert await v.validate_once(bid, "s-1") == "CONTENT_VERIFIED"
     assert await statuses(store, bid) == [
         "RECEIVED", "SUBMITTED", "SOLID", "CONFIRMED", "CONTENT_VERIFIED"]
-    assert len(await store.content_checks(bid)) == 2
+    assert len(await store.content_checks(bid)) == 1  # an unchanged result is not repeated
 
 
 @respx.mock
@@ -606,6 +607,116 @@ async def test_reverify_stops_when_node_goes_away_mid_pass(env):
     found = await v.reverify_all()
     assert [a.block_id for a in found] == [blocks[0][0]]
     assert blocks[2][2].call_count == calls_before  # not reached
+
+
+async def delete_rows(store, table, bid, extra=""):
+    await store._fetch(f"DELETE FROM {table} WHERE block_id = %s {extra} RETURNING 1", (bid,))
+
+
+def node_says_confirmed(bid):
+    respx.routes[f"meta-{bid.hex()}"].mock(
+        return_value=httpx.Response(200, json=meta(bid, ms=3)))
+
+
+@respx.mock
+async def test_reverify_detects_removed_content(env):
+    store, v, _ = env
+    bid, data, _ = await verified_block(store, v, "a")
+    await delete_rows(store, "submissions", bid)
+    await delete_rows(store, "messages", bid)
+    [alert] = await v.reverify_all()
+    assert (alert.rule, alert.severity) == ("DB_TAMPER", "critical")
+    assert alert.evidence["reason"] == "content removed"
+    assert alert.evidence["fields"] == [
+        {"field": "content", "expected": "0x" + data.hex(), "actual": None}]
+    assert (await store.lifecycle(bid))[-1]["detail"]["reason"] == "content removed"
+
+
+@respx.mock
+async def test_reverify_survives_deleted_match_checks(env):
+    store, v, _ = env
+    bid, data, _ = await verified_block(store, v, "a")
+    await delete_rows(store, "content_checks", bid)  # the lifecycle still says verified
+    await tamper_submission(store, bid, "0x" + data.replace(b"0.5", b"0.9").hex())
+    [alert] = await v.reverify_all()
+    assert alert.rule == "DB_TAMPER"
+
+
+@respx.mock
+async def test_reverify_survives_wiped_validation_history(env):
+    store, v, _ = env
+    bid, data, _ = await verified_block(store, v, "a", with_message=False)
+    await delete_rows(store, "content_checks", bid)
+    await delete_rows(store, "lifecycle", bid)
+    await tamper_submission(store, bid, "0x" + data.replace(b"0.5", b"0.9").hex())
+    node_says_confirmed(bid)  # never verified as far as the DB shows: confirmation first
+    [alert] = await v.reverify_all()
+    assert alert.rule == "DB_TAMPER"
+    assert [f["field"] for f in alert.evidence["fields"]] == ["submissions.data_hex"]
+
+
+@respx.mock
+async def test_partly_wiped_history_goes_back_to_the_validator(env):
+    store, v, _ = env
+    bid, data, _ = await verified_block(store, v, "a", with_message=False)
+    await delete_rows(store, "content_checks", bid)
+    await delete_rows(store, "lifecycle", bid, "AND status = 'CONTENT_VERIFIED'")
+    await tamper_submission(store, bid, "0x" + data.replace(b"0.5", b"0.9").hex())
+    node_says_confirmed(bid)
+    assert await v.reverify_all() == []  # latest status CONFIRMED: the validator's block
+    assert await v.resume() == 1  # ... which the periodic resume hands back to it
+    assert await v.validate_once(bid, "s-a") == "CONTENT_MISMATCH"
+    assert [a["rule"] for a in await store.alerts()] == ["CONTENT_MISMATCH"]
+
+
+@respx.mock
+async def test_reverify_leaves_unverified_blocks_to_the_validator(env):
+    store, v, _ = env
+    # Pending: forwarded bytes differ from the Tangle, validation not run yet.
+    raw_p, pending, data_p = make_block({"id": "pending"})
+    serve(pending, raw_p, [meta(pending, ms=3)])
+    await handle_record(store, v, rec("s-p", pending, data_p.replace(b"pending", b"PENDING")),
+                        source="mqtt")
+    # Validated as CONTENT_MISMATCH: the difference is already reported as such.
+    raw_m, mism, data_m = make_block({"id": "mismatch"})
+    serve(mism, raw_m, [meta(mism, ms=3)])
+    await handle_record(store, v, rec("s-m", mism, data_m.replace(b"mismatch", b"MISMATCH")),
+                        source="mqtt")
+    assert await v.validate_once(mism, "s-m") == "CONTENT_MISMATCH"
+    # Indexed but not (yet) confirmed according to the node.
+    raw_u, unconf, data_u = make_block({"id": "unconfirmed"})
+    serve(unconf, raw_u, lambda request: httpx.Response(200, json=meta(unconf, solid=True)))
+    await store.put_message(MessageRow(block_id=unconf, tag="trust.score", data=data_u + b" "))
+
+    calls = len(respx.calls)
+    assert await v.reverify_all() == []
+    assert [a["rule"] for a in await store.alerts()] == ["CONTENT_MISMATCH"]
+    assert len(respx.calls) - calls == 1  # only the unconfirmed block's metadata
+
+
+@respx.mock
+async def test_reverify_judges_confirmed_indexed_message(env):
+    store, v, _ = env
+    raw, bid, data = make_block({"id": "indexed"})
+    serve(bid, raw, lambda request: httpx.Response(200, json=meta(bid, ms=3)))
+    await store.put_message(MessageRow(block_id=bid, tag="trust.score", data=data + b" "))
+    [alert] = await v.reverify_all()
+    assert [f["field"] for f in alert.evidence["fields"]] == ["messages.data"]
+
+
+@respx.mock
+async def test_reverify_does_not_repeat_unchanged_findings(env):
+    store, v, _ = env
+    bid, data, _ = await verified_block(store, v, "a")
+    await tamper_submission(store, bid, "0x" + data.replace(b"0.5", b"0.9").hex())
+    assert len(await v.reverify_all()) == 1
+    rows = len(await store.content_checks(bid))
+    assert await v.reverify_all() == []
+    assert await v.reverify_all() == []
+    assert len(await store.content_checks(bid)) == rows
+    await tamper_submission(store, bid, "0x" + data.replace(b"0.5", b"0.1").hex())
+    assert len(await v.reverify_all()) == 1
+    assert len(await store.content_checks(bid)) == rows + 1
 
 
 @respx.mock

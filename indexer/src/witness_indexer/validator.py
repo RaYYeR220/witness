@@ -58,6 +58,9 @@ BLOCK_VIA = "GET /api/core/v2/blocks/{blockId}"
 OUTCOMES = frozenset({"CONTENT_VERIFIED", "CONTENT_MISMATCH", "NOT_FOUND", "ORPHANED"})
 # A worker stops retrying a block once its status is one of these.
 TERMINAL = OUTCOMES | {"RECEIVED"}
+# Statuses of a block whose content verdict belongs to the validator (pending or reported).
+VALIDATOR_OWNED = frozenset({"RECEIVED", "SUBMITTED", "SOLID", "CONFIRMED", "CONTENT_MISMATCH",
+                             "NOT_FOUND", "ORPHANED"})
 MAX_JSON_CHANGES = 200
 _PLAIN_KEY = re.compile(r"[A-Za-z_][A-Za-z0-9_]*")
 
@@ -327,6 +330,8 @@ class Validator:
         status = None
         try:
             status = await self.validate_once(block_id, sub_id)
+        except LookupError as e:  # nothing stored to compare with; retried, no traceback
+            log.warning("validation of block %s cannot run: %s", _hex(block_id), e)
         except Exception:
             log.exception("validation of block %s failed", _hex(block_id))
         finally:
@@ -532,11 +537,16 @@ class Validator:
     async def _conclude(self, run: _Run, status: str, at: int, detail: dict, *,
                         check: tuple[str, dict | None] | None = None,
                         alert: Alert | None = None) -> bool:
-        """Write one outcome atomically; returns whether the alert was new."""
+        """Write one outcome atomically; returns whether the alert was new. A content check
+        identical to the block's latest one (same result and diff) is not written again, so
+        repeated passes over an unchanged block leave no trail of duplicate rows."""
         write = run.should_write(status)
         async with self.store.transaction():
             if check is not None:
-                await self.store.put_content_check(run.block_id, at, check[0], check[1])
+                previous = await self.store.content_checks(run.block_id)
+                if not previous or (previous[-1]["result"], _canon(previous[-1]["diff"])) != (
+                        check[0], _canon(check[1])):
+                    await self.store.put_content_check(run.block_id, at, check[0], check[1])
             if write:
                 await self.store.set_lifecycle(block_id=run.block_id, sub_id=run.sub_id,
                                                status=status, at_ms=at, detail=detail)
@@ -558,8 +568,20 @@ class Validator:
     # -- re-verification of the parallel database -------------------------------------------
 
     async def reverify_all(self, limit: int | None = None) -> list[Alert]:
-        """Re-fetch every block whose content ever matched (a MATCH content check) and compare
-        it with the content stored for it now.
+        """Re-fetch the blocks the explorer holds and compare them with every copy of their
+        content stored now.
+
+        Candidates come from four tables (MATCH content checks, submissions, messages and
+        CONTENT_VERIFIED lifecycle rows), so deleting one kind of row does not hide a block.
+        A block that was verified once is always judged, and all its copies being gone is
+        itself DB_TAMPER ("content removed"). A block never verified is left to the validator
+        while it owns it (validation pending, or its verdict already recorded); otherwise it is
+        judged only once the node confirms it is referenced by a milestone, so a pending block
+        can never raise DB_TAMPER.
+
+        The parallel DB is not the trust root: an attacker who wipes every copy of a block from
+        all four tables leaves nothing to re-verify here. That is detected by re-indexing the
+        Tangle (Task 9 SHADOW / re-scan) and by the public anchor.
 
         Returns the DB_TAMPER alerts raised by this pass. Stops early, keeping what it found,
         if the node becomes unreachable.
@@ -571,7 +593,7 @@ class Validator:
             size = self.cfg.reverify_batch
             if limit is not None:
                 size = min(size, limit - checked)
-            rows = await self.store.verified_content(after, size)
+            rows = await self.store.reverify_candidates(after, size)
             for row in rows:
                 after = bytes(row["block_id"])
                 checked += 1
@@ -592,6 +614,13 @@ class Validator:
             return await self._reverify_block(bid, row)
 
     async def _reverify_block(self, bid: bytes, row: dict) -> Alert | None:
+        verified = row["verified_once"]
+        if not verified:
+            if row["has_failed_check"] or row["latest_status"] in VALIDATOR_OWNED:
+                return None  # the validator is on it, or has already reported its verdict
+            meta = await self.hornet.block_metadata(bid)
+            if meta is None or _referenced_index(meta) is None:
+                return None  # not confirmed on the Tangle: nothing to hold the copies to
         raw = await self.hornet.block_raw(bid)
         if raw is None:
             log.info("block %s is no longer served by the node (pruned?)", _hex(bid))
@@ -606,22 +635,28 @@ class Validator:
             return None
         if not isinstance(payload, TaggedData):
             return None
-        fields = _stored_differences(row, payload)
+        if verified and not row["has_submission"] and not row["has_message"]:
+            reason = "content removed"
+            fields = [{"field": "content", "expected": _hex(payload.data), "actual": None}]
+        else:
+            reason = "stored copy differs from the Tangle"
+            fields = _stored_differences(row, payload)
         if not fields:
             return None
         at = self._now_ms()
         stored = blake2b256(_canon({f["field"]: f["actual"] for f in fields})).hex()
         evidence = {"subId": row["sub_id"], "via": BLOCK_VIA, "reference": "tangle",
-                    "fields": fields}
+                    "reason": reason, "fields": fields}
         alert = Alert("DB_TAMPER", "critical", bid, None, evidence, at,
                       dedupe_key=f"{bid.hex()}:{stored}")
         run = _Run(bid, row["sub_id"])
         for r in await self.store.lifecycle(bid):
             run.note(r["status"])
-        detail = {"cause": "DB_TAMPER", "via": BLOCK_VIA, "fields": [f["field"] for f in fields]}
-        new = await self._conclude(run, "CONTENT_MISMATCH", at, detail,
-                                   check=("MISMATCH", {"cause": "DB_TAMPER", "fields": fields}),
-                                   alert=alert)
+        detail = {"cause": "DB_TAMPER", "reason": reason, "via": BLOCK_VIA,
+                  "fields": [f["field"] for f in fields]}
+        new = await self._conclude(
+            run, "CONTENT_MISMATCH", at, detail, alert=alert,
+            check=("MISMATCH", {"cause": "DB_TAMPER", "reason": reason, "fields": fields}))
         return alert if new else None
 
 
