@@ -79,8 +79,9 @@ Delivery: each change (opened / attached / updated / closed) is emitted as an `i
 in the same transaction. A configured `AlertPublisher` sends committed ones, as compact JSON,
 to MQTT `witness/alerts/{severity}` (QoS 1): `flush()` reads the events log from a persisted
 cursor, so nothing is published for a transaction that rolls back and a broker outage only
-delays alerts. Publishing never breaks indexing (`alerts-mqtt: ok | unreachable` in
-`Store.stats()`).
+delays alerts. Only the publisher task (`run_publisher`) talks to the broker; message and
+periodic processing just wake it. Publishing never breaks indexing (`alerts-mqtt: ok |
+unreachable` in `Store.stats()`).
 
 Robustness, as in rules.py: text from messages is sanitised before it is stored or published,
 every step runs in a savepoint, a failure is logged and reported (`incident-engine: error`;
@@ -368,12 +369,13 @@ class IncidentEngine:
         except Exception as exc:  # noqa: BLE001 - the indexer goes on whatever a message does
             changes = []
             await self._failed("message", exc)
-        await self.flush()
+        self._notify()
         return changes
 
     async def periodic(self, *, now_ms: int) -> list[dict]:
-        """Alerts raised since the last pass (validator, periodic rules), quiet closes, and
-        delivery of pending alerts. Returns the incident changes."""
+        """Alerts raised since the last pass (validator, periodic rules) and quiet closes.
+        Returns the incident changes. Like on_message, it never talks to the broker itself:
+        it wakes the publisher task (`run_publisher`)."""
         changes: list[dict] = []
         if not self.store.in_transaction():
             await self._refresh_orion()
@@ -392,7 +394,7 @@ class IncidentEngine:
                 changes += step.changes
             except Exception as exc:  # noqa: BLE001 - one step must not stop the other
                 await self._failed(name, exc)
-        await self.flush()
+        self._notify()
         last = self._last_error_ms
         if last is None or self._now() - last > self.cfg.error_hold_s * 1000:
             with contextlib.suppress(Exception):
@@ -448,6 +450,11 @@ class IncidentEngine:
                 await asyncio.wait_for(self._wake.wait(), self.cfg.publish_poll_s)
             self._wake.clear()
         await self.flush()
+
+    def _notify(self) -> None:
+        """Wake the publisher: there may be committed changes to deliver."""
+        if self._wake is not None:
+            self._wake.set()
 
     async def stop_publisher(self) -> None:
         self._stopping = True

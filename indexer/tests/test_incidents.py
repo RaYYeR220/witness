@@ -700,6 +700,7 @@ async def test_publisher_failure_never_breaks_indexing(store, engine, pub):
     pub.fail = True
     await feed(store, engine, score(0.9, ms=10))
     assert actions(await feed(store, engine, score(0.3, ms=11))) == ["opened"]
+    assert await engine.flush() == 0
     assert (await store.service_status())["alerts-mqtt"]["status"] == "unreachable"
     assert pub.sent == []
     pub.fail = False
@@ -731,11 +732,37 @@ async def test_publisher_cursor_survives_a_restart(store, pub):
     eng = IncidentEngine(store, None, IncidentConfig(), pub)
     await feed(store, eng, score(0.9, ms=10))
     await feed(store, eng, score(0.3, ms=11))
-    assert len(pub.sent) == 1
+    assert await eng.flush() == 1
     again = IncidentEngine(store, None, IncidentConfig(), pub)
     assert await again.flush() == 0
     await feed(store, again, so_error("restart", ms=12))
+    assert await again.flush() == 1
     assert [p["action"] for _, p in pub.sent] == ["opened", "attached"]
+
+
+async def until(cond, timeout_s: float = 3.0) -> None:
+    async def poll() -> None:
+        while not cond():
+            await asyncio.sleep(0.02)
+
+    await asyncio.wait_for(poll(), timeout_s)
+
+
+async def test_only_the_publisher_task_talks_to_the_broker(store, pub):
+    eng = IncidentEngine(store, None, IncidentConfig(publish_poll_s=60), pub)
+    await feed(store, eng, score(0.9, ms=10))
+    assert actions(await feed(store, eng, score(0.3, ms=11))) == ["opened"]
+    await eng.periodic(now_ms=(T0 + 400) * 1000)
+    assert pub.sent == []  # neither the message path nor the periodic pass published
+    task = asyncio.create_task(eng.run_publisher())
+    try:
+        await until(lambda: len(pub.sent) == 1)
+        # it would sleep for a minute; a new change wakes it at once
+        assert actions(await feed(store, eng, so_error("restart", ms=12))) == ["attached"]
+        await until(lambda: len(pub.sent) == 2)
+    finally:
+        await eng.stop_publisher()
+        await asyncio.wait_for(task, 5)
 
 
 # -- timeline -------------------------------------------------------------------------------------
@@ -791,6 +818,7 @@ async def test_hostile_strings_are_sanitised(store, engine, pub):
     for inc in incs:
         assert _printable(inc["title"]) and len(inc["title"]) <= 200
         assert all(_printable(k) and len(k) <= 200 for k in inc["keys"])
+    assert await engine.flush() == 2
     for _, payload in pub.sent:
         assert _printable(payload["title"])
     tl = await engine.timeline(incs[-1]["id"])
@@ -880,6 +908,7 @@ async def test_unreachable_broker_is_reported_not_raised(store):
     eng = IncidentEngine(store, None, IncidentConfig(), pub)
     await feed(store, eng, score(0.9, ms=10))
     assert actions(await feed(store, eng, score(0.3, ms=11))) == ["opened"]
+    assert await eng.flush() == 0
     assert (await store.service_status())["alerts-mqtt"]["status"] == "unreachable"
     await eng.aclose()
 
@@ -901,6 +930,7 @@ async def test_alerts_reach_mosquitto(store):
         eng = IncidentEngine(store, None, IncidentConfig(mqtt_topic_prefix=prefix), pub)
         await feed(store, eng, score(0.9, ms=10))
         await feed(store, eng, score(0.3, ms=11))
+        assert await eng.flush() == 1
         msg = await asyncio.wait_for(anext(aiter(sub.messages)), 10)
         await eng.aclose()
     assert str(msg.topic) == f"{prefix}/high" and msg.qos == 1
