@@ -329,12 +329,19 @@ def _uint(v: Any) -> bool:
 
 
 def _json(data: bytes) -> Any:
+    """Tagged-data JSON; None only when the bytes are not UTF-8 or not JSON.
+
+    Hostile nesting (RecursionError) propagates so the step fails closed: the depth
+    json.loads gives up at depends on the platform, and "unsigned legacy" (not evaluated)
+    would let the same bundle come out PARTIAL on one verifier and INVALID on another.
+    """
+
     def reject(token: str) -> Any:
         raise ValueError(f"non-finite number {token}")
 
     try:
         return json.loads(data.decode("utf-8"), parse_constant=reject)
-    except (UnicodeDecodeError, ValueError, RecursionError):
+    except (UnicodeDecodeError, ValueError):
         return None
 
 

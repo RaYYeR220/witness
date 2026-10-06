@@ -31,10 +31,10 @@ const run = (c: any, extra: Partial<VerifyOptions> = {}) => verifyBundle(...wire
 const marks = (l: Ladder) => l.steps.map((s) => (s.ok === null ? "N" : s.ok ? "T" : "F")).join("") + " " + l.overall;
 
 describe("bundles.json parity", () => {
-  it("has the 36 named cases", () => {
+  it("has the 37 named cases", () => {
     const names = bundles.cases.map((c: any) => c.name);
-    expect(names).toHaveLength(36);
-    expect(new Set(names).size).toBe(36);
+    expect(names).toHaveLength(37);
+    expect(new Set(names).size).toBe(37);
   });
 
   it.each(bundles.cases.map((c: any) => [c.name, c] as const))("%s", async (_name, c: any) => {
@@ -120,6 +120,7 @@ const PYTHON_DETAILS: Record<string, Partial<Record<(typeof STEP_NAMES)[number],
       "milestone 374 0xa6bc3be7eaa3cca15b859dd8c812b370f47e964f3df400a7d2962a04ebcd5f55: 1 valid signature(s) by pinned keys, threshold 2",
   },
   small_order_signer_key: { envelope: "FORGED: weak public key" },
+  envelope_hostile_nesting: { envelope: "malformed bundle (RecursionError)" },
 };
 
 describe("ladder details match the Python reference", () => {
@@ -360,11 +361,12 @@ describe("envelope bytes read with Python's json.loads semantics", () => {
     ["w true", text.replace('"w":1', '"w":true'), null, "unsigned legacy message"],
     ["whitespace around", ` \n${text}\t`, true, "PRODUCER_SIGNED by did:iota:testnet:0x5e1f#sig-1"],
     ["trailing data", `${text} x`, null, "unsigned legacy message"],
-    ["nested 1500", text.replace(body, deep(1500)), false, "malformed bundle (RecursionError)"],
-    ["nested 2995", text.replace(body, deep(2995)), false, "malformed bundle (RecursionError)"],
+    // Parsed, but deeper than the canonicalizer recurses: the envelope is MALFORMED.
+    ["nested 1500", text.replace(body, deep(1500)), false, "MALFORMED: not canonicalizable: nested too deeply"],
+    ["nested 2995", text.replace(body, deep(2995)), false, "MALFORMED: not canonicalizable: nested too deeply"],
     // Past the parser's nesting cap the step fails closed. CPython's own json limit
     // depends on the platform (about 3000 on Windows, 10000 on Linux), so no depth
-    // may ever turn into "not evaluated".
+    // may ever turn into "not evaluated" (the reference re-raises RecursionError too).
     ["nested 2996", text.replace(body, deep(2996)), false, "malformed bundle (RecursionError)"],
     ["nested 12000", text.replace(body, deep(12000)), false, "malformed bundle (RecursionError)"],
   ] as const)("%s", async (_name, altered, ok, detail) => {

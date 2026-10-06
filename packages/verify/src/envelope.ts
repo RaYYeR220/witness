@@ -9,7 +9,7 @@
 import { b64urlDecode, b64urlEncode, isBytes } from "./bytes.js";
 import { ed25519Sign, ed25519Verify, isWeakPublicKey } from "./ed25519.js";
 import { CanonicalizationError, jcsBytes } from "./jcs.js";
-import { get, has, isDict, isUint, type Json, type JsonObject } from "./json.js";
+import { get, has, isDict, isUint, RecursionError, type Json, type JsonObject } from "./json.js";
 import { FORGED, MALFORMED, PRODUCER_SIGNED, RELAY_ATTESTED, type Verdict } from "./verdicts.js";
 
 export interface KeyInfo {
@@ -103,6 +103,8 @@ export function verifyEnvelope(env: unknown, blockTag: string, resolve: KeyResol
     input = signingInput(e);
   } catch (err) {
     if (err instanceof CanonicalizationError) return malformed(`not canonicalizable: ${err.message}`);
+    // Nesting the parser accepts but JCS will not recurse through (Python catches RecursionError).
+    if (err instanceof RecursionError) return malformed("not canonicalizable: nested too deeply");
     throw err;
   }
 

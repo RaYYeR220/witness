@@ -142,6 +142,7 @@ def _synthetic(
     snapshot: dict | None = None,
     claimed: EnvelopeCheck | None = None,
     window_override: list[bytes] | None = None,
+    data: bytes | None = None,
 ) -> Synthetic:
     """A tagged block carrying `env`, confirmed by a coordinator-signed milestone 374.
 
@@ -160,7 +161,8 @@ def _synthetic(
         )
     )
     tip = from_hex(vectors("cones")[-1]["blockIdsWhiteFlagOrder"][-1])
-    raw = codec.serialize_tagged_block(sorted([ms373_block, tip]), b"trust.score", canon.jcs(env))
+    payload = canon.jcs(env) if data is None else data
+    raw = codec.serialize_tagged_block(sorted([ms373_block, tip]), b"trust.score", payload)
     bid = codec.block_id(raw)
     cone = [ms373_block, bid]
     essence = MilestoneEssence(
@@ -433,6 +435,29 @@ def test_small_order_signer_key_is_forged(vectors):
     s = _synthetic(vectors, _weak_signed(), snapshot=weak, claimed=claimed)
     step = _step(bundle.verify(s.bundle, _cfg(vectors), resolve_did=_registry(weak)), "envelope")
     assert (step.ok, step.detail) == (False, "FORGED: weak public key")
+
+
+def _deeply_nested(depth: int) -> bytes:
+    """The tagged data of a valid envelope with its body nested `depth` arrays deep."""
+    text = canon.jcs(_envelope()).decode()
+    body = canon.jcs({"score": 0.82, "id": "MyDomain:fa163e5e25ef"}).decode()
+    assert text.count(body) == 1
+    return text.replace(body, '{"a":' + "[" * depth + "]" * depth + "}").encode()
+
+
+@pytest.mark.parametrize("depth", [1500, 5000, 12000])
+def test_hostile_nesting_fails_the_envelope_step(vectors, depth):
+    """Whichever of json.loads and the canonicalizer gives up first (that depends on the
+    platform), the step fails: deep nesting is never "unsigned legacy"."""
+    claimed = EnvelopeCheck(verdicts.PRODUCER_SIGNED, DID, KID, 1, NOW_MS, None)
+    s = _synthetic(vectors, _envelope(), claimed=claimed, data=_deeply_nested(depth))
+    ladder = bundle.verify(s.bundle, _cfg(vectors), _fetch(s.record), _registry())
+    step = _step(ladder, "envelope")
+    assert step.ok is False, step.detail
+    assert step.detail in (
+        "malformed bundle (RecursionError)", "MALFORMED: not canonicalizable: nested too deeply"
+    )
+    assert _ok(ladder) == "TTTFT INVALID"
 
 
 def test_milestone_claims_must_match_essence(vectors):
@@ -1086,6 +1111,12 @@ def _cases(vectors) -> list[dict]:
         snapshot=_weak_signer_snapshot(),
         claimed=EnvelopeCheck(verdicts.PRODUCER_SIGNED, DID, KID, 1, NOW_MS, None),
     )
+    hostile = _synthetic(
+        vectors,
+        env,
+        claimed=EnvelopeCheck(verdicts.PRODUCER_SIGNED, DID, KID, 1, NOW_MS, None),
+        data=_deeply_nested(12000),
+    )
     reg = "registry"
     return [
         _case("valid_anchored", b, cfg, rec, reg, "TTTTT VALID"),
@@ -1165,6 +1196,8 @@ def _cases(vectors) -> list[dict]:
               reg, "TTFTT INVALID"),
         _case("small_order_signer_key", weak_signer.bundle, cfg, {"record": weak_signer.record},
               "registry_weak_key", "TTTFT INVALID"),
+        _case("envelope_hostile_nesting", hostile.bundle, cfg, {"record": hostile.record}, reg,
+              "TTTFT INVALID"),
     ]
 
 
