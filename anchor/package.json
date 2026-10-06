@@ -11,7 +11,8 @@
     "start": "node --env-file-if-exists=.env dist/main.js",
     "dev": "tsx --env-file-if-exists=.env src/main.ts",
     "bootstrap:identities": "tsx --env-file-if-exists=.env scripts/bootstrap-identities.ts",
-    "trail:smoke": "tsx --env-file-if-exists=.env scripts/trail-smoke.ts"
+    "trail:smoke": "tsx --env-file-if-exists=.env scripts/trail-smoke.ts",
+    "milestones:hornet": "tsx scripts/hornet-milestones.ts"
   },
   "dependencies": {
     "@iota/audit-trails": "0.1.3",
