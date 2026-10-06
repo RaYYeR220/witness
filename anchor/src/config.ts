@@ -1,4 +1,5 @@
 import path from "node:path";
+import { fileURLToPath } from "node:url";
 
 export type NetworkName = "testnet" | "mainnet";
 
@@ -25,6 +26,8 @@ export interface AnchorConfig {
   /** Keystore entry to use as sender and gas owner: a 0x address or a keystore alias. */
   address: string | null;
   secretsDir: string;
+  /** Public identity file (DIDs, keys, links) written by bootstrap-identities and served at /identities. */
+  identitiesFile: string;
   host: string;
   port: number;
   adminToken: string | null;
@@ -76,6 +79,9 @@ export const DEFAULT_PORT = 7300;
 export const DEFAULT_GAS_BUDGET = 50_000_000n;
 const MAX_GAS_BUDGET = 1_000_000_000n;
 const MIN_ADMIN_TOKEN_LENGTH = 16;
+
+/** `deploy/identity/` of the repository, from either `anchor/src` or `anchor/dist`. */
+export const DEPLOY_IDENTITY_DIR = fileURLToPath(new URL("../../deploy/identity/", import.meta.url));
 
 const OBJECT_ID = /^0x[0-9a-f]{64}$/;
 const ALIAS = /^[A-Za-z0-9][A-Za-z0-9_.-]{0,63}$/;
@@ -165,6 +171,8 @@ export function loadConfig(env: Env = process.env, cwd: string = process.cwd()):
   }
 
   const secretsDir = path.resolve(cwd, opt(env, "SECRETS_DIR") ?? "secrets");
+  const identitiesRaw = opt(env, "ANCHOR_IDENTITIES_FILE");
+  const identitiesFile = identitiesRaw ? path.resolve(cwd, identitiesRaw) : path.join(DEPLOY_IDENTITY_DIR, `${network}.json`);
   const host = opt(env, "ANCHOR_HOST") ?? "127.0.0.1";
   const portRaw = opt(env, "ANCHOR_PORT");
   const port = portRaw === undefined ? DEFAULT_PORT : integer(issues, "ANCHOR_PORT", portRaw, 1, 65535);
@@ -203,6 +211,7 @@ export function loadConfig(env: Env = process.env, cwd: string = process.cwd()):
     keystorePath,
     address,
     secretsDir,
+    identitiesFile,
     host,
     port,
     adminToken,

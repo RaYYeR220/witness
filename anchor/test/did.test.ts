@@ -1,6 +1,9 @@
+import { existsSync, mkdirSync, mkdtempSync, readdirSync, rmSync, writeFileSync } from "node:fs";
+import os from "node:os";
+import path from "node:path";
 import { describe, expect, it } from "vitest";
 import { NETWORKS } from "../src/config.js";
-import { DidNotFoundError, InvalidDidError, resolveDid, resolvedKeys, type DidRpc } from "../src/did.js";
+import { DidNotFoundError, InvalidDidError, loadIdentityRegistry, methodFragment, resolveDid, resolvedKeys, retireIdentities, type DidRpc } from "../src/did.js";
 
 const PKG = NETWORKS.testnet.packages.identityOriginal;
 const CFG = { didNetwork: "testnet", packages: NETWORKS.testnet.packages };
@@ -15,9 +18,9 @@ const sigMethod = { id: "did:0:0#sig-1", controller: "did:0:0", type: "JsonWebKe
 const kexMethod = (x = KEX_X, frag = "kex-1") => ({ id: `did:0:0#${frag}`, controller: "did:0:0", type: "JsonWebKey2020", publicKeyJwk: { kty: "OKP", crv: "X25519", x } });
 
 /** Packs a document the way the Identity package stores it: "DID" | 1 | 0 | u16 LE length | JSON. */
-function pack(doc: Record<string, unknown> | null): number[] | null {
+function pack(doc: Record<string, unknown> | null, meta: Record<string, unknown> = {}): number[] | null {
   if (doc === null) return null;
-  const json = Buffer.from(JSON.stringify({ doc: { id: "did:0:0", ...doc }, meta: { created: "2026-10-06T10:27:58Z" } }));
+  const json = Buffer.from(JSON.stringify({ doc: { id: "did:0:0", ...doc }, meta: { created: "2026-10-06T10:27:58Z", ...meta } }));
   const len = Buffer.alloc(2);
   len.writeUInt16LE(json.length);
   return [...Buffer.concat([Buffer.from("DID"), Buffer.from([1, 0]), len, json])];
@@ -28,6 +31,7 @@ interface Version {
   tx: string;
   ts: number | null;
   doc: Record<string, unknown> | null;
+  meta?: Record<string, unknown>;
   created?: boolean;
 }
 
@@ -42,7 +46,7 @@ function identityObject(v: Version, updatedMs: number) {
       dataType: "moveObject" as const,
       type: `${PKG}::identity::Identity`,
       hasPublicTransfer: false,
-      fields: { created: "1000", updated: String(updatedMs), deleted: false, did_doc: { fields: { controlled_value: pack(v.doc) } } },
+      fields: { created: "1000", updated: String(updatedMs), deleted: false, did_doc: { fields: { controlled_value: pack(v.doc, v.meta) } } },
     },
   };
 }
@@ -63,13 +67,14 @@ function fakeRpc(
       const o = identityObject(latest, 5000);
       return { data: { ...o, type: opts.type ?? o.type } };
     },
-    async queryTransactionBlocks(input: { cursor?: string | null; filter?: unknown; order?: string }) {
+    async queryTransactionBlocks(input: { cursor?: string | null; filter?: unknown; order?: string; limit?: number }) {
       calls.query++;
       expect(input.filter).toEqual({ ChangedObject: OBJ });
       expect(input.order).toBe("ascending");
+      const size = Math.min(input.limit ?? pageSize, pageSize);
       const start = input.cursor ? Number(input.cursor) : 0;
-      const slice = indexed.slice(start, start + pageSize);
-      const next = start + pageSize;
+      const slice = indexed.slice(start, start + size);
+      const next = start + size;
       return {
         data: slice.map((v) => {
           const ref = { owner: { Shared: { initial_shared_version: 1 } }, reference: { objectId: OBJ, version: Number(v.version), digest: "x" } };
@@ -156,10 +161,56 @@ describe("resolveDid", () => {
     expect(r.revokedMethods.every((m) => m.revokedAtMs === 3_000)).toBe(true);
   });
 
-  it("uses the live object when the transaction index lags behind", async () => {
+  it("dates a change hidden by index lag just after the last transaction seen", async () => {
     const { rpc } = fakeRpc([created, kexRemoved], { indexed: 1 });
     const r = await resolveDid(rpc, CFG, DID);
-    expect(r.revokedMethods).toEqual([expect.objectContaining({ kid: `${DID}#kex-1`, revokedAtMs: 5_000, tx: "TxRevoke" })]);
+    expect(r.historyComplete).toBe(false);
+    expect(r.revokedMethods).toEqual([expect.objectContaining({ kid: `${DID}#kex-1`, revokedAtMs: 1_001, tx: "TxRevoke", exact: false })]);
+  });
+
+  it("dates a removal across an unreadable version at the earliest transaction of the gap", async () => {
+    // v100 readable with kex-1, v200 pruned (kex-1 removed here), v300 readable without kex-1.
+    const noop: Version = { version: "300", tx: "TxLater", ts: 3_000, doc: kexRemoved.doc };
+    const { rpc } = fakeRpc([created, kexRemoved, noop], { pruned: ["200"] });
+    const r = await resolveDid(rpc, CFG, DID);
+    expect(r.historyComplete).toBe(false);
+    expect(r.revokedMethods).toEqual([expect.objectContaining({ kid: `${DID}#kex-1`, revokedAtMs: 2_000, tx: "TxRevoke", exact: false })]);
+    expect(resolvedKeys(r).find((k) => k.kid.endsWith("#kex-1"))?.revokedAtMs).toBe(2_000);
+  });
+
+  it("dates a removal behind the page cap at the first unread transaction", async () => {
+    const noop: Version = { version: "300", tx: "TxLater", ts: 3_000, doc: kexRemoved.doc };
+    const { rpc } = fakeRpc([created, kexRemoved, noop], { pageSize: 1 });
+    const r = await resolveDid(rpc, CFG, DID, { maxPages: 1, pageSize: 1 });
+    expect(r.historyComplete).toBe(false);
+    expect(r.revokedMethods).toEqual([expect.objectContaining({ kid: `${DID}#kex-1`, revokedAtMs: 2_000, tx: "TxRevoke", exact: false })]);
+  });
+
+  it("revokes the old key when a method is replaced under the same id", async () => {
+    const SIG2_X = Buffer.alloc(32, 4).toString("base64url");
+    const rotated: Version = {
+      version: "200",
+      tx: "TxRotate",
+      ts: 2_000,
+      doc: { verificationMethod: [{ ...sigMethod, publicKeyJwk: { ...sigMethod.publicKeyJwk, x: SIG2_X } }], keyAgreement: [kexMethod()] },
+    };
+    const { rpc } = fakeRpc([created, rotated]);
+    const keys = resolvedKeys(await resolveDid(rpc, CFG, DID));
+    expect(keys).toEqual([
+      { kid: `${DID}#sig-1`, type: "Ed25519", publicKeyHex: "04".repeat(32), revokedAtMs: null },
+      { kid: `${DID}#kex-1`, type: "X25519", publicKeyHex: "02".repeat(32), revokedAtMs: null },
+      { kid: `${DID}#sig-1`, type: "Ed25519", publicKeyHex: "01".repeat(32), revokedAtMs: 2_000 },
+    ]);
+  });
+
+  it("revokes every key when the document is deactivated", async () => {
+    const deactivated: Version = { version: "200", tx: "TxDeactivate", ts: 2_000, doc: created.doc, meta: { deactivated: true } };
+    const { rpc } = fakeRpc([created, deactivated]);
+    const r = await resolveDid(rpc, CFG, DID);
+    expect(r.meta.deactivated).toBe(true);
+    const keys = resolvedKeys(r);
+    expect(keys).toHaveLength(2);
+    expect(keys.every((k) => k.revokedAtMs === 2_000)).toBe(true);
   });
 
   it("ignores history newer than the document it read", async () => {
@@ -190,5 +241,45 @@ describe("resolveDid", () => {
     await expect(resolveDid(fakeRpc([created], { type: "0x2::coin::Coin<0x2::iota::IOTA>" }).rpc, CFG, DID)).rejects.toBeInstanceOf(
       DidNotFoundError,
     );
+  });
+});
+
+describe("methodFragment", () => {
+  it("accepts a full kid, #fragment or a bare fragment", () => {
+    expect(methodFragment(DID, `${DID}#kex-1`)).toBe("kex-1");
+    expect(methodFragment(DID, "#kex-1")).toBe("kex-1");
+    expect(methodFragment(DID, "kex-1")).toBe("kex-1");
+    expect(methodFragment(DID, `did:iota:testnet:${OBJ.toUpperCase().replace("0X", "0x")}#kex-1`)).toBe("kex-1");
+  });
+
+  it("refuses a kid of another DID and malformed fragments", () => {
+    expect(() => methodFragment(DID, `did:iota:testnet:0x${"1".repeat(64)}#kex-1`)).toThrow(InvalidDidError);
+    expect(() => methodFragment(DID, "#")).toThrow(/fragment/);
+    expect(() => methodFragment(DID, "kex 1")).toThrow(/fragment/);
+  });
+});
+
+describe("retireIdentities", () => {
+  it("moves the registry and every component's keys aside without deleting them", () => {
+    const dir = mkdtempSync(path.join(os.tmpdir(), "anchor-retire-"));
+    try {
+      const cfg = { secretsDir: dir, network: "testnet" as const };
+      const entry = (name: string) => ({ name, did: `did:iota:testnet:0x${"1".repeat(64)}`, objectId: `0x${"1".repeat(64)}` });
+      writeFileSync(path.join(dir, "identities.json"), JSON.stringify({ network: "testnet", identities: { domain: entry("domain"), relay: entry("relay") } }));
+      for (const n of ["domain", "relay"]) {
+        mkdirSync(path.join(dir, n));
+        writeFileSync(path.join(dir, n, "sig-1.jwk.json"), "{}");
+      }
+      const retired = retireIdentities(cfg);
+      expect(retired.map((e) => e.name)).toEqual(["domain", "relay"]);
+      expect(existsSync(path.join(dir, "identities.json"))).toBe(false);
+      expect(existsSync(path.join(dir, "relay"))).toBe(false);
+      const [stale] = readdirSync(path.join(dir, ".stale"));
+      expect(readdirSync(path.join(dir, ".stale", stale!)).sort()).toEqual(["domain", "identities.json", "relay"]);
+      expect(loadIdentityRegistry(cfg).identities).toEqual({});
+      expect(retireIdentities(cfg)).toEqual([]);
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
   });
 });

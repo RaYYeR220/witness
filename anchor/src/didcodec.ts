@@ -121,6 +121,20 @@ export function collectMethods(doc: unknown): Map<string, MethodJson> {
   return out;
 }
 
+/**
+ * Identity of a method for history comparison: its id plus its public key material. A key
+ * replaced in place under the same id counts as a different method, so the old key is revoked.
+ */
+export function methodIdentity(kid: string, method: MethodJson): string {
+  const jwk = method.publicKeyJwk;
+  const material = jwk
+    ? ["jwk", jwk.kty, jwk.crv, jwk.x, jwk.y, jwk.n, jwk.e].map((v) => (typeof v === "string" ? v : "")).join(":")
+    : typeof method.publicKeyMultibase === "string"
+      ? `multibase:${method.publicKeyMultibase}`
+      : `type:${method.type ?? ""}`;
+  return `${kid}\n${material}`;
+}
+
 export type KeyType = "Ed25519" | "X25519";
 
 /** Extracts a raw OKP public key from a JWK-based method. Other key formats yield null. */

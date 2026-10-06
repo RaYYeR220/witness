@@ -1,0 +1,47 @@
+# Anchor service: trust and key custody
+
+What a holder of each key can do, and what verifiers have to check because of it.
+
+## Keys
+
+| Key | Where | Controls |
+|---|---|---|
+| Gas / sender address (`ANCHOR_ADDRESS` in the IOTA keystore) | anchor host | the domain DID's ControllerCap, the Audit Trail's initial-admin capability, the trail's `writer` capability, gas |
+| Domain identity | on chain | the ControllerCaps of every component DID (`trust-manager`, `llo-k8s`, `self-orchestrator`, `relay`, `anchor`) |
+| Component `#sig-1` / `#kex-1` | `${SECRETS_DIR}/<component>/` | signing envelopes / receiving encrypted payloads for that component only |
+
+Component DIDs are controlled by the domain identity, not by any address. Changing a component
+document (rotating or revoking a key) goes through the domain identity
+(`accessSubIdentity`), so it needs a controller of the domain DID. Today the only controller of
+the domain DID is the gas address. Whoever holds that key can therefore rewrite every
+component document. Moving the domain DID to a multi-controller threshold, or to a cold key, is
+the next hardening step.
+
+## Audit Trail admin capability on a hot key
+
+The trail is created with a 100-year time-based record delete lock, an infinite trail delete
+lock and no write lock. The `writer` role may only add records. The **initial-admin
+capability, however, also sits on the gas address**, which is an online key. With it, an attacker could:
+
+- create a role with locking and delete permissions, issue it to themselves, shorten the delete
+  window and delete records;
+- issue extra writer capabilities and add records of their own.
+
+They cannot change or reorder existing records, and sequence numbers are never reused.
+
+**Verifiers must therefore:**
+
+1. check that record sequence numbers are contiguous from the genesis record (0) up to the
+   checkpoint they verify, since a deleted record leaves a gap;
+2. check `added_by` of every checkpoint record against the anchor's known writer address;
+3. check that each checkpoint's `prev` hash links to the previous record's checkpoint.
+
+The admin capability should move to a cold key once the deployment is stable.
+
+## Resolver guarantees
+
+`GET /resolve/:did` dates a revoked key at the checkpoint time of the transaction that removed
+it. When that transaction cannot be identified (pruned object versions, the page cap, or index
+lag), the date is the **earliest** time the removal could have happened, never a later one. The
+response then carries `historyComplete: false`. A key replaced under the same id counts as
+revoked at the replacement time. A deactivated document revokes all of its keys.

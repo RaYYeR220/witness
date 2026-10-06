@@ -389,11 +389,10 @@ export class TrailService {
         order: "descending",
       });
       for (const t of res.data) {
-        for (const ev of recordAddedEvents(t.events, this.#cfg.packages, trailId)) {
-          const seq = Number(ev.sequence_number);
-          if (seq === index) return t.digest;
-          if (seq < index) return null;
-        }
+        // One transaction can add several records; look at all of them before giving up.
+        const seqs = recordAddedEvents(t.events, this.#cfg.packages, trailId).map((ev) => Number(ev.sequence_number));
+        if (seqs.includes(index)) return t.digest;
+        if (seqs.length > 0 && Math.max(...seqs) < index) return null;
       }
       if (!res.hasNextPage || !res.nextCursor) break;
       cursor = res.nextCursor;

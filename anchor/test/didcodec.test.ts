@@ -70,6 +70,16 @@ describe("decodeStateMetadata", () => {
   }, 120_000); // first use compiles the identity WASM module
 });
 
+describe("buildComponentDocument", () => {
+  it("names the controlling DID in the document", async () => {
+    const domain = `did:iota:testnet:0x${"d0".repeat(32)}`;
+    const doc = await buildComponentDocument("testnet", { ...publicJwk("ed25519"), alg: "EdDSA" }, publicJwk("x25519"), domain);
+    const real = withRealDid(decodeStateMetadata(doc.pack())!.doc, `did:iota:testnet:${OBJ}`) as DidDocumentJson;
+    expect(real.controller).toBe(domain);
+    expect(real.verificationMethod![0]!.controller).toBe(`did:iota:testnet:${OBJ}`);
+  }, 120_000);
+});
+
 describe("withRealDid", () => {
   it("swaps only the placeholder DID and DID URLs built on it", () => {
     const out = withRealDid({ id: "did:0:0", a: ["did:0:0#k", "did:0:0x", "x did:0:0"], b: { c: "did:0:0?q=1" } }, "did:iota:testnet:0x1");

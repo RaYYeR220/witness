@@ -23,6 +23,7 @@ const resolved: ResolvedDid = {
       kid: `${DID}#kex-1`,
       revokedAtMs: 1_791_282_482_045,
       tx: "GWDrDKNuawyYaAtyuuD5fYK1afzb6iUs5LyAMbvuyuDA",
+      exact: true,
       method: { id: `${DID}#kex-1`, type: "JsonWebKey2020", publicKeyJwk: { kty: "OKP", crv: "X25519", x: Buffer.alloc(32, 9).toString("base64url") } },
     },
   ],
@@ -40,7 +41,7 @@ async function start(overrides: Partial<ServerDeps> = {}) {
       calls.push(did);
       return resolved;
     },
-    identities: () => [],
+    identities: () => null,
     cacheTtlMs: 60_000,
     now: () => clock,
     ...overrides,
@@ -67,12 +68,13 @@ afterEach(async () => {
 });
 
 describe("GET /resolve/:did", () => {
-  it("returns exactly {doc, version, keys} with the indexer's key shape", async () => {
+  it("returns {doc, version, keys, historyComplete} with the indexer's key shape", async () => {
     const s = await start();
     const { status, body, headers } = await s.get(`/resolve/${DID}`);
     expect(status).toBe(200);
     expect(headers.get("content-type")).toBe("application/json");
-    expect(Object.keys(body).sort()).toEqual(["doc", "keys", "version"]);
+    expect(Object.keys(body).sort()).toEqual(["doc", "historyComplete", "keys", "version"]);
+    expect(body.historyComplete).toBe(true);
     expect(body.doc).toEqual(resolved.doc);
     expect(body.version).toBe("1129706989");
     expect(body.keys).toEqual([
@@ -85,6 +87,14 @@ describe("GET /resolve/:did", () => {
   it("accepts a percent-encoded DID", async () => {
     const s = await start();
     expect((await s.get(`/resolve/${encodeURIComponent(DID)}`)).status).toBe(200);
+    expect(s.calls).toEqual([DID]);
+  });
+
+  it("normalises the DID, so differently cased hex shares one cache entry", async () => {
+    const s = await start();
+    const upper = `did:iota:testnet:0x${"CD".repeat(32)}`;
+    expect((await s.get(`/resolve/${upper}`)).status).toBe(200);
+    expect((await s.get(`/resolve/${DID}`)).status).toBe(200);
     expect(s.calls).toEqual([DID]);
   });
 
@@ -130,7 +140,12 @@ describe("GET /resolve/:did", () => {
         throw new Error("ECONNRESET");
       },
     });
+    // Not a did:iota DID at all: rejected before resolving.
     expect((await s.get("/resolve/did:web:example.com")).status).toBe(400);
+    expect(count).toBe(0);
+    // Well-formed but refused by the resolver (another network).
+    expect((await s.get(`/resolve/did:iota:0x${"cd".repeat(32)}`)).status).toBe(400);
+    expect(count).toBe(1);
     mode = "missing";
     expect((await s.get(`/resolve/${DID}`)).status).toBe(404);
     expect((await s.get(`/resolve/${DID}`)).status).toBe(404);
@@ -158,18 +173,25 @@ describe("other routes", () => {
     expect(await s.get("/healthz")).toMatchObject({ status: 200, body: { status: "ok", network: "testnet" } });
   });
 
-  it("lists the managed identities", async () => {
+  it("lists the identities from the public identity file", async () => {
     const ident: PublicIdentity = {
       name: "relay",
       did: DID,
       objectId: resolved.objectId,
+      controller: { kind: "identity", did: `did:iota:testnet:0x${"ab".repeat(32)}`, objectId: `0x${"ab".repeat(32)}` },
       keys: [],
       createdTx: "Tx",
       createdAt: "2026-10-06T00:00:00.000Z",
       links: { identity: "https://explorer.iota.org/object/x?network=testnet", createdTx: "https://explorer.iota.org/txblock/Tx?network=testnet" },
     };
-    const s = await start({ identities: () => [ident] });
-    expect((await s.get("/identities")).body).toEqual({ network: "testnet", identities: [ident] });
+    const retired = { ...ident, did: `did:iota:testnet:0x${"ee".repeat(32)}`, retiredAt: "2026-10-06T13:00:00.000Z" };
+    const s = await start({ identities: () => ({ identities: [ident], previous: [retired] }) });
+    expect((await s.get("/identities")).body).toEqual({ network: "testnet", identities: [ident], previous: [retired] });
+  });
+
+  it("lists nothing before identities are bootstrapped", async () => {
+    const s = await start();
+    expect((await s.get("/identities")).body).toEqual({ network: "testnet", identities: [], previous: [] });
   });
 
   it("returns 404 for unknown paths and 405 for writes", async () => {

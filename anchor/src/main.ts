@@ -1,8 +1,9 @@
 import { ChainMismatchError, assertChain, createIotaClient, preferIpv4 } from "./client.js";
 import { ConfigError, loadConfig } from "./config.js";
-import { DidService, publicIdentity } from "./did.js";
+import { DidService } from "./did.js";
+import { readJsonIfExists } from "./fsutil.js";
 import { log } from "./log.js";
-import { createAnchorServer } from "./server.js";
+import { createAnchorServer, type IdentitiesBody } from "./server.js";
 
 async function main(): Promise<void> {
   preferIpv4();
@@ -20,7 +21,8 @@ async function main(): Promise<void> {
   const server = createAnchorServer({
     network: cfg.network,
     resolve: (did) => dids.resolve(did),
-    identities: () => Object.values(dids.registry().identities).map((e) => publicIdentity(cfg, e)),
+    // Served from the committed public file, so the read-only service needs no secrets volume.
+    identities: () => readJsonIfExists<IdentitiesBody>(cfg.identitiesFile),
     cacheTtlMs: cfg.resolveCacheMs,
   });
 

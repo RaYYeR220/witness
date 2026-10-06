@@ -30,6 +30,12 @@ describe("loadConfig", () => {
     expect(cfg.address).toBeNull();
     expect(cfg.gasBudget).toBe(50_000_000n);
     expect(cfg.resolveCacheMs).toBe(60_000);
+    expect(cfg.identitiesFile).toBe(path.resolve(import.meta.dirname, "..", "..", "deploy", "identity", "testnet.json"));
+  });
+
+  it("reads the identities file location from ANCHOR_IDENTITIES_FILE", () => {
+    expect(loadConfig({ ANCHOR_IDENTITIES_FILE: "pub/ids.json" }, "/srv/anchor").identitiesFile).toBe(path.resolve("/srv/anchor", "pub/ids.json"));
+    expect(loadConfig({ IOTA_NETWORK: "mainnet" }, "/srv/anchor").identitiesFile.endsWith(`identity${path.sep}mainnet.json`)).toBe(true);
   });
 
   it("switches every network default for mainnet", () => {

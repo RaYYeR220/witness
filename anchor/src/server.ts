@@ -1,15 +1,21 @@
 import http from "node:http";
 import { DidNotFoundError, InvalidDidError, resolvedKeys, type PublicIdentity, type ResolvedDid, type ResolvedKey } from "./did.js";
-import type { DidDocumentJson } from "./didcodec.js";
+import { parseDid, type DidDocumentJson } from "./didcodec.js";
 import { log } from "./log.js";
 
 export interface ServerDeps {
   network: string;
   resolve: (did: string) => Promise<ResolvedDid>;
-  identities: () => PublicIdentity[];
+  /** Contents of the public identity file; null when it has not been written yet. */
+  identities: () => IdentitiesBody | null;
   /** How long a resolution (found or not found) is served from memory. */
   cacheTtlMs: number;
   now?: () => number;
+}
+
+export interface IdentitiesBody {
+  identities: PublicIdentity[];
+  previous?: unknown[];
 }
 
 /** Body of `GET /resolve/:did`, consumed by the Python indexer's resolver client. */
@@ -17,10 +23,12 @@ export interface ResolveResponse {
   doc: DidDocumentJson;
   version: string;
   keys: ResolvedKey[];
+  /** False when revocation times may be early bounds rather than exact (see resolveDid). */
+  historyComplete: boolean;
 }
 
 export function toResolveResponse(r: ResolvedDid): ResolveResponse {
-  return { doc: r.doc, version: r.version, keys: resolvedKeys(r) };
+  return { doc: r.doc, version: r.version, keys: resolvedKeys(r), historyComplete: r.historyComplete };
 }
 
 interface Reply {
@@ -69,7 +77,10 @@ export function createAnchorServer(deps: ServerDeps): http.Server {
     const url = new URL(req.url ?? "/", "http://anchor.local");
     const p = url.pathname;
     if (p === "/healthz") return { status: 200, body: { status: "ok", network: deps.network } };
-    if (p === "/identities") return { status: 200, body: { network: deps.network, identities: deps.identities() } };
+    if (p === "/identities") {
+      const file = deps.identities();
+      return { status: 200, body: { network: deps.network, identities: file?.identities ?? [], previous: file?.previous ?? [] } };
+    }
     if (p.startsWith("/resolve/")) {
       let did: string;
       try {
@@ -77,8 +88,14 @@ export function createAnchorServer(deps: ServerDeps): http.Server {
       } catch {
         return { status: 400, body: { error: "malformed DID in path" } };
       }
-      if (did.length === 0 || did.length > MAX_DID_LENGTH) return { status: 400, body: { error: "not a did:iota DID" } };
-      return resolveReply(did);
+      if (did.length > MAX_DID_LENGTH) return { status: 400, body: { error: "not a did:iota DID" } };
+      try {
+        // One cache entry per DID, however the hex is cased.
+        return await resolveReply(parseDid(did).did);
+      } catch (err) {
+        if (err instanceof InvalidDidError) return { status: 400, body: { error: err.message } };
+        throw err;
+      }
     }
     return { status: 404, body: { error: "not found" } };
   }

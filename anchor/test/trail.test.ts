@@ -83,8 +83,10 @@ describe("parseRecordFields", () => {
 /** Fake node: the trail object, its records table and its transaction history. */
 function fakeNode() {
   const executed: Transaction[] = [];
+  const added = (seq: number) => ({ type: RECORD_ADDED, parsedJson: { trail_id: TRAIL, sequence_number: String(seq), added_by: "0xd4", timestamp: String(seq * 100) } });
   const history = [
-    { digest: "TxRec3", events: [{ type: RECORD_ADDED, parsedJson: { trail_id: TRAIL, sequence_number: "3", added_by: "0xd4", timestamp: "300" } }] },
+    { digest: "TxBatch", events: [added(4), added(5)] },
+    { digest: "TxRec3", events: [added(3)] },
     { digest: "TxOther", events: [{ type: `${PKGS.tfComponents}::role_map::CapabilityIssued`, parsedJson: {} }] },
     { digest: "TxRec2", events: [{ type: RECORD_ADDED, parsedJson: { trail_id: TRAIL, sequence_number: "2", added_by: "0xd4", timestamp: "200" } }] },
     { digest: "TxCreate", events: [] },
@@ -171,6 +173,14 @@ describe("TrailService", () => {
     const svc = new TrailService(config(), node, null);
     expect(await svc.findRecordTx(TRAIL, 0)).toBe("TxCreate");
     expect(await svc.findRecordTx(TRAIL, 1)).toBeNull();
+  });
+
+  it("finds a record added as the second of several in one transaction", async () => {
+    const { node } = fakeNode();
+    const svc = new TrailService(config(), node, null);
+    expect(await svc.findRecordTx(TRAIL, 5)).toBe("TxBatch");
+    expect(await svc.findRecordTx(TRAIL, 4)).toBe("TxBatch");
+    expect(await svc.findRecordTx(TRAIL, 3)).toBe("TxRec3");
   });
 
   it("appends through the hand-built transaction and reports the new record", async () => {

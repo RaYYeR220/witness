@@ -2,13 +2,14 @@ import { generateKeyPairSync, type JsonWebKey } from "node:crypto";
 import { existsSync, mkdirSync, renameSync } from "node:fs";
 import path from "node:path";
 import type { IotaClient, IotaObjectData, IotaTransactionBlockResponse } from "@iota/iota-sdk/client";
-import type { IdentityClient, IotaDocument } from "@iota/identity-wasm/node/index.js";
+import type { ControllerToken, IdentityClient, IotaDocument, OnChainIdentity } from "@iota/identity-wasm/node/index.js";
 import { assertSuccess, forWasm, type AnchorWallet } from "./client.js";
 import { explorerLink, type AnchorConfig, type NetworkName } from "./config.js";
 import {
   InvalidDidError,
   collectMethods,
   decodeStateMetadata,
+  methodIdentity,
   methodPublicKey,
   parseDid,
   withRealDid,
@@ -41,9 +42,16 @@ export class DidNotFoundError extends Error {
 
 export interface RevokedMethod {
   kid: string;
-  /** Timestamp of the checkpoint that included the transaction removing the method. */
+  /**
+   * When the method stopped being valid. Errs early: when the removing transaction cannot be
+   * pinned down (unreadable versions, page cap, index lag), this is the earliest time it could
+   * have happened, never a later one.
+   */
   revokedAtMs: number;
+  /** The removing transaction, or the first transaction of the window it happened in. */
   tx: string;
+  /** True when the removal was seen between two consecutive readable versions. */
+  exact: boolean;
   /** The method as it was published before removal (carries the public key). */
   method: MethodJson;
 }
@@ -56,7 +64,7 @@ export interface ResolvedDid {
   /** Identity object version the document was read at. */
   version: string;
   revokedMethods: RevokedMethod[];
-  /** False when part of the history could not be read (pruned versions, page cap). */
+  /** False when part of the history could not be read (pruned versions, page cap, index lag). */
   historyComplete: boolean;
 }
 
@@ -94,6 +102,16 @@ function documentAt(fields: IdentityFields, did: string): { doc: DidDocumentJson
   return { doc, deactivated: meta?.deactivated === true };
 }
 
+type MethodSet = Map<string, { kid: string; method: MethodJson }>;
+
+/** Methods valid in a document version, keyed by id plus key material. A deactivated document has none. */
+function validMethods(state: { doc: DidDocumentJson | null; deactivated: boolean }): MethodSet {
+  const out: MethodSet = new Map();
+  if (state.deactivated || !state.doc) return out;
+  for (const [kid, method] of collectMethods(state.doc)) out.set(methodIdentity(kid, method), { kid, method });
+  return out;
+}
+
 function refFor(tx: IotaTransactionBlockResponse, objectId: string): { version: string; gone: boolean } | null {
   const effects = tx.effects;
   if (!effects) return null;
@@ -107,16 +125,18 @@ function refFor(tx: IotaTransactionBlockResponse, objectId: string): { version: 
   return gone ? { version: String(gone.version), gone: true } : null;
 }
 
-function diffInto(
-  revoked: Map<string, RevokedMethod>,
-  before: Map<string, MethodJson>,
-  after: Map<string, MethodJson>,
-  atMs: number,
-  tx: string,
-): void {
-  for (const [kid, method] of before) if (!after.has(kid)) revoked.set(kid, { kid, revokedAtMs: atMs, tx, method });
-  // A method that comes back under the same id is current again.
-  for (const kid of after.keys()) revoked.delete(kid);
+interface ChangePoint {
+  ms: number;
+  tx: string;
+  exact: boolean;
+}
+
+function diffInto(revoked: Map<string, RevokedMethod>, before: MethodSet, after: MethodSet, at: ChangePoint): void {
+  for (const [key, { kid, method }] of before) {
+    if (!after.has(key)) revoked.set(key, { kid, revokedAtMs: at.ms, tx: at.tx, exact: at.exact, method });
+  }
+  // The same key coming back under the same id is valid again.
+  for (const key of after.keys()) revoked.delete(key);
 }
 
 /**
@@ -124,8 +144,11 @@ function diffInto(
  *
  * The current document comes from the Identity object. Revocations come from its history: every
  * transaction that changed the object (`iotax_queryTransactionBlocks` with `ChangedObject`), the
- * object as it was after each of them (`iota_tryGetPastObject`), and a diff of the method sets of
- * consecutive versions. A method that disappears is revoked at that transaction's checkpoint time.
+ * object as it was after each of them (`iota_tryGetPastObject`), and a diff of the valid method
+ * sets of consecutive versions. Methods are compared by id and key material, so a key replaced
+ * under the same id revokes the old key. A method that disappears is revoked at the checkpoint
+ * time of the transaction that removed it; when that transaction cannot be identified, at the
+ * earliest transaction of the window it must have happened in.
  */
 export async function resolveDid(
   rpc: DidRpc,
@@ -149,65 +172,82 @@ export async function resolveDid(
   const fields = identityFields(current.data);
   if (!fields) throw new DidNotFoundError(`${did} has no readable content`);
   const now = documentAt(fields, did);
-  const currentMethods = collectMethods(now.doc);
+  const currentMethods = validMethods(now);
   const currentVersion = BigInt(current.data.version);
 
   const revoked = new Map<string, RevokedMethod>();
   let complete = true;
-  let previous: Map<string, MethodJson> | null = null;
-  let lastVersion: string | null = null;
+  let previous: MethodSet | null = null;
+  let lastVersion: bigint | null = null;
+  let lastMs: number | null = null;
+  // First transaction after the last readable version whose own version could not be read.
+  let gap: ChangePoint | null = null;
   let cursor: string | null | undefined = null;
   const maxPages = opts.maxPages ?? 20;
+  const pageSize = opts.pageSize ?? 50;
+  const after = (ms: number | null) => (ms ?? 0) + 1;
+
   for (let page = 0; ; page++) {
     if (page === maxPages) {
       complete = false;
+      // The earliest unread transaction bounds any change hidden behind the page cap.
+      const next = await rpc.queryTransactionBlocks({ filter: { ChangedObject: objectId }, cursor, limit: 1, order: "ascending" });
+      const first = next.data[0];
+      const firstMs = Number(first?.timestampMs ?? NaN);
+      gap ??= { ms: Number.isFinite(firstMs) ? firstMs : after(lastMs), tx: first?.digest ?? "unknown", exact: false };
       break;
     }
     const res = await rpc.queryTransactionBlocks({
       filter: { ChangedObject: objectId },
       options: { showEffects: true },
       cursor,
-      limit: opts.pageSize ?? 50,
+      limit: pageSize,
       order: "ascending",
     });
     for (const tx of res.data) {
       const ref = refFor(tx, objectId);
       // Changes newer than the document read above belong to the next resolution.
       if (!ref || BigInt(ref.version) > currentVersion) continue;
-      let methods: Map<string, MethodJson>;
+      const txMs = Number(tx.timestampMs ?? NaN);
+      const at: ChangePoint = { ms: Number.isFinite(txMs) ? txMs : after(lastMs), tx: tx.digest, exact: true };
+      let methods: MethodSet | null = null;
       if (ref.gone) {
         methods = new Map();
       } else {
         const past = await rpc.tryGetPastObject({ id: objectId, version: Number(ref.version), options: { showContent: true } });
         const pastFields = past.status === "VersionFound" ? identityFields(past.details) : null;
-        if (!pastFields) {
-          complete = false;
-          continue;
-        }
-        try {
-          methods = collectMethods(documentAt(pastFields, did).doc);
-        } catch (err) {
-          log.warn("skipping undecodable DID version", { did, version: ref.version, error: err });
-          complete = false;
-          continue;
+        if (pastFields) {
+          try {
+            methods = validMethods(documentAt(pastFields, did));
+          } catch (err) {
+            log.warn("undecodable DID version", { did, version: ref.version, error: err });
+          }
         }
       }
-      if (previous) {
-        const atMs = Number(tx.timestampMs ?? NaN);
-        diffInto(revoked, previous, methods, Number.isFinite(atMs) ? atMs : Number(fields.updated ?? 0), tx.digest);
+      if (methods === null) {
+        complete = false;
+        gap ??= { ...at, exact: false };
+        continue;
       }
+      if (previous) diffInto(revoked, previous, methods, gap ?? at);
+      gap = null;
       previous = methods;
-      lastVersion = ref.version;
+      lastVersion = BigInt(ref.version);
+      lastMs = at.ms;
     }
     if (!res.hasNextPage || !res.nextCursor) break;
     cursor = res.nextCursor;
   }
 
-  // The transaction index can lag behind the object itself; close the gap with the live version.
-  if (previous && lastVersion !== null && BigInt(lastVersion) < currentVersion) {
-    diffInto(revoked, previous, currentMethods, Number(fields.updated ?? 0), current.data.previousTransaction ?? "unknown");
+  // Close the window between the last readable version and the live object. The transaction
+  // index can lag behind the object, so a change there is dated just after the last one seen.
+  if (previous && lastVersion !== null && lastVersion < currentVersion) {
+    complete = false;
+    const at = gap ?? { ms: after(lastMs), tx: current.data.previousTransaction ?? "unknown", exact: false };
+    diffInto(revoked, previous, currentMethods, at);
   }
-  for (const kid of currentMethods.keys()) revoked.delete(kid);
+  if (previous === null) complete = false;
+  for (const key of currentMethods.keys()) revoked.delete(key);
 
   return {
     did,
@@ -223,9 +263,11 @@ export async function resolveDid(
 /** Flattens a resolution into the key list served by `GET /resolve/:did`. */
 export function resolvedKeys(r: ResolvedDid): ResolvedKey[] {
   const keys: ResolvedKey[] = [];
-  for (const [kid, method] of collectMethods(r.doc)) {
-    const k = methodPublicKey(method);
-    if (k) keys.push({ kid, type: k.type, publicKeyHex: k.publicKeyHex, revokedAtMs: null });
+  if (!r.meta.deactivated) {
+    for (const [kid, method] of collectMethods(r.doc)) {
+      const k = methodPublicKey(method);
+      if (k) keys.push({ kid, type: k.type, publicKeyHex: k.publicKeyHex, revokedAtMs: null });
+    }
   }
   for (const rm of r.revokedMethods) {
     const k = methodPublicKey(rm.method);
@@ -238,6 +280,9 @@ export function resolvedKeys(r: ResolvedDid): ResolvedKey[] {
 // Component identities: creation, key storage, registry
 // ---------------------------------------------------------------------------------------------
 
+/** Who holds the ControllerCap of an identity: an address (the domain) or another identity. */
+export type IdentityController = { kind: "address"; address: string } | { kind: "identity"; did: string; objectId: string };
+
 export interface ComponentIdentity {
   name: string;
   did: string;
@@ -246,6 +291,7 @@ export interface ComponentIdentity {
   kexKid: string;
   sigPublicJwk: PublicJwk;
   kexPublicJwk: PublicJwk;
+  controller: IdentityController;
   createdTx: string;
   createdAt: string;
 }
@@ -259,13 +305,14 @@ export interface PublicIdentity {
   name: string;
   did: string;
   objectId: string;
+  controller: IdentityController | null;
   keys: { kid: string; type: KeyType; relationships: string[]; publicKeyHex: string; publicKeyJwk: PublicJwk }[];
   createdTx: string;
   createdAt: string;
   links: { identity: string; createdTx: string };
 }
 
-/** The shareable view of a component identity: DID, public keys and explorer links. */
+/** The shareable view of a component identity: DID, controller, public keys and explorer links. */
 export function publicIdentity(cfg: Pick<AnchorConfig, "explorerUrl" | "network">, entry: ComponentIdentity): PublicIdentity {
   const key = (kid: string, jwk: PublicJwk, relationships: string[]) => {
     const k = methodPublicKey({ id: kid, publicKeyJwk: jwk });
@@ -276,6 +323,7 @@ export function publicIdentity(cfg: Pick<AnchorConfig, "explorerUrl" | "network"
     name: entry.name,
     did: entry.did,
     objectId: entry.objectId,
+    controller: entry.controller ?? null,
     keys: [
       key(entry.sigKid, entry.sigPublicJwk, ["authentication", "assertionMethod"]),
       key(entry.kexKid, entry.kexPublicJwk, ["keyAgreement"]),
@@ -309,6 +357,38 @@ export function componentKeyDir(secretsDir: string, name: string): string {
   return path.join(secretsDir, name);
 }
 
+/**
+ * Moves the registry and every registered component's keys to `${SECRETS_DIR}/.stale/retired-<ts>/`.
+ * Nothing is deleted. Returns the retired entries so their public records can be kept.
+ */
+export function retireIdentities(cfg: Pick<AnchorConfig, "secretsDir" | "network">): ComponentIdentity[] {
+  const registry = loadIdentityRegistry(cfg);
+  const retired = Object.values(registry.identities);
+  if (retired.length === 0) return [];
+  const dest = path.join(cfg.secretsDir, ".stale", `retired-${new Date().toISOString().replace(/[:.]/g, "-")}`);
+  mkdirSync(dest, { recursive: true, mode: 0o700 });
+  for (const entry of retired) {
+    const dir = componentKeyDir(cfg.secretsDir, entry.name);
+    if (existsSync(dir)) renameSync(dir, path.join(dest, entry.name));
+  }
+  renameSync(registryPath(cfg.secretsDir), path.join(dest, "identities.json"));
+  return retired;
+}
+
+/** Splits `did#frag`, `#frag` or `frag` into a fragment, checking that a full kid names `did`. */
+export function methodFragment(did: string, method: string): string {
+  let fragment = method;
+  const hash = method.indexOf("#");
+  if (hash > 0) {
+    if (parseDid(method.slice(0, hash)).did !== did) throw new InvalidDidError(`${method} is not a method of ${did}`);
+    fragment = method.slice(hash + 1);
+  } else if (hash === 0) {
+    fragment = method.slice(1);
+  }
+  if (!FRAGMENT.test(fragment)) throw new Error(`invalid method fragment "${fragment}"`);
+  return fragment;
+}
+
 function generateOkp(curve: "ed25519" | "x25519"): { publicJwk: PublicJwk; privateJwk: JsonWebKey } {
   const { privateKey } = generateKeyPairSync(curve as "ed25519");
   const jwk = privateKey.export({ format: "jwk" });
@@ -328,9 +408,15 @@ export function identityWasm(): Promise<IdentityWasm> {
 
 /**
  * Builds an unpublished DID document with an Ed25519 `#sig-1` method (authentication and
- * assertionMethod) and an X25519 `#kex-1` keyAgreement method, both as public JWKs.
+ * assertionMethod) and an X25519 `#kex-1` keyAgreement method, both as public JWKs. With
+ * `controllerDid`, the document's `controller` property names the controlling DID.
  */
-export async function buildComponentDocument(network: string, sigPublicJwk: PublicJwk, kexPublicJwk: PublicJwk): Promise<IotaDocument> {
+export async function buildComponentDocument(
+  network: string,
+  sigPublicJwk: PublicJwk,
+  kexPublicJwk: PublicJwk,
+  controllerDid?: string,
+): Promise<IotaDocument> {
   const w = await identityWasm();
   const doc = new w.IotaDocument(network);
   const sig = w.VerificationMethod.newFromJwk(doc.id(), w.Jwk.fromJSON(sigPublicJwk), `#${SIG_FRAGMENT}`);
@@ -339,12 +425,15 @@ export async function buildComponentDocument(network: string, sigPublicJwk: Publ
   doc.attachMethodRelationship(doc.id().join(`#${SIG_FRAGMENT}`), w.MethodRelationship.AssertionMethod);
   const kex = w.VerificationMethod.newFromJwk(doc.id(), w.Jwk.fromJSON(kexPublicJwk), `#${KEX_FRAGMENT}`);
   doc.insertMethod(kex, w.MethodScope.KeyAgreement());
+  if (controllerDid) doc.setController([w.IotaDID.parse(controllerDid)]);
   return doc;
 }
 
 export interface RevokeResult {
   tx: string;
   link: string;
+  /** Identity whose controller token authorized the update: the DID itself or its controlling identity. */
+  via: string;
   /** True when the update became a proposal that still needs other controllers' approval. */
   pendingProposal: boolean;
 }
@@ -370,9 +459,18 @@ export class DidService {
     return loadIdentityRegistry(this.#cfg);
   }
 
+  #requireWallet(): AnchorWallet {
+    if (!this.#wallet) throw new Error("DID writes need ANCHOR_KEYSTORE_PATH and ANCHOR_ADDRESS");
+    return this.#wallet;
+  }
+
   #identityClient(): Promise<IdentityClient> {
-    const wallet = this.#wallet;
-    if (!wallet) return Promise.reject(new Error("DID writes need ANCHOR_KEYSTORE_PATH and ANCHOR_ADDRESS"));
+    let wallet: AnchorWallet;
+    try {
+      wallet = this.#requireWallet();
+    } catch (err) {
+      return Promise.reject(err);
+    }
     this.#client ??= (async () => {
       const w = await identityWasm();
       const ro = await w.IdentityClientReadOnly.create(forWasm(this.#iota));
@@ -393,16 +491,20 @@ export class DidService {
   }
 
   /**
-   * Creates and publishes a DID for a component. Private keys are written under
+   * Creates and publishes a DID for a component. Without `controller` the identity is controlled
+   * by the wallet address (the domain DID); with it, the ControllerCap goes to the controlling
+   * identity and the document names it as `controller`. Private keys are written under
    * `${SECRETS_DIR}/<name>/` before the transaction is sent, so a crash can never leave a
    * published DID without its keys. Returns public information only.
    */
-  async createComponentDid(name: string): Promise<ComponentIdentity> {
+  async createComponentDid(name: string, controller?: { did: string; objectId: string }): Promise<ComponentIdentity> {
     const dir = componentKeyDir(this.#cfg.secretsDir, name);
     const registry = loadIdentityRegistry(this.#cfg);
     const existing = registry.identities[name];
     if (existing) throw new Error(`component "${name}" already has ${existing.did}`);
+    const wallet = this.#requireWallet();
     const client = await this.#identityClient();
+    if (controller) parseDid(controller.did);
 
     if (existsSync(dir)) {
       // Keys without a registry entry come from an interrupted run. Keep them, out of the way.
@@ -419,19 +521,27 @@ export class DidService {
     writeJsonAtomic(sigFile, sig.privateJwk, { secret: true });
     writeJsonAtomic(kexFile, kex.privateJwk, { secret: true });
 
-    const doc = await buildComponentDocument(client.network(), sig.publicJwk, kex.publicJwk);
-    const { output: identity, response } = await this.#wallet!.exclusive(() =>
-      client.createIdentity(doc).finish().withGasBudget(this.#cfg.gasBudget).buildAndExecute(client),
-    );
+    const doc = await buildComponentDocument(client.network(), sig.publicJwk, kex.publicJwk, controller?.did);
+    const { output: identity, response } = await wallet.exclusive(() => {
+      const builder = client.createIdentity(doc);
+      return (controller ? builder.controller(controller.objectId, 1n) : builder)
+        .finish()
+        .withGasBudget(this.#cfg.gasBudget)
+        .buildAndExecute(client);
+    });
     assertSuccess(response as IotaTransactionBlockResponse);
 
     const published = identity.didDocument();
     const did = published.id().toString();
     const sigKid = `${did}#${SIG_FRAGMENT}`;
     const kexKid = `${did}#${KEX_FRAGMENT}`;
-    const methods = collectMethods((published.toJSON() as { doc: unknown }).doc);
+    const json = (published.toJSON() as { doc: DidDocumentJson }).doc;
+    const methods = collectMethods(json);
     if (methods.get(sigKid)?.publicKeyJwk?.x !== sig.publicJwk.x || methods.get(kexKid)?.publicKeyJwk?.x !== kex.publicJwk.x) {
       throw new Error(`published document of ${did} does not carry the generated keys`);
+    }
+    if (controller && json.controller !== controller.did && !(Array.isArray(json.controller) && json.controller.includes(controller.did))) {
+      throw new Error(`published document of ${did} does not name ${controller.did} as controller`);
     }
 
     writeJsonAtomic(sigFile, { ...sig.privateJwk, kid: sigKid }, { secret: true });
@@ -445,6 +555,7 @@ export class DidService {
       kexKid,
       sigPublicJwk: sig.publicJwk,
       kexPublicJwk: kex.publicJwk,
+      controller: controller ? { kind: "identity", did: controller.did, objectId: controller.objectId } : { kind: "address", address: wallet.address },
       createdTx: response.digest,
       createdAt: new Date().toISOString(),
     };
@@ -453,11 +564,45 @@ export class DidService {
     return entry;
   }
 
-  /** Removes a verification method from a DID document. The removal time becomes its revocation time. */
-  async revokeMethod(didInput: string, fragment: string): Promise<RevokeResult> {
+  /**
+   * Finds an identity that holds a ControllerCap of `objectId` and that the wallet controls.
+   * ControllerCaps are listed in the identity's `controllers` map; one transferred to another
+   * identity is owned by that identity's object address.
+   */
+  async #controllingIdentity(client: IdentityClient, objectId: string): Promise<{ identity: OnChainIdentity; token: ControllerToken } | null> {
+    const obj = await this.#iota.getObject({ id: objectId, options: { showContent: true } });
+    const fields = obj.data?.content?.dataType === "moveObject" ? (obj.data.content.fields as Record<string, any>) : null;
+    const entries: unknown[] = fields?.did_doc?.fields?.controllers?.fields?.contents ?? [];
+    for (const entry of entries) {
+      const capId = (entry as { fields?: { key?: unknown } })?.fields?.key;
+      if (typeof capId !== "string") continue;
+      const cap = await this.#iota.getObject({ id: capId, options: { showOwner: true } });
+      const owner = cap.data?.owner;
+      const holder = owner && typeof owner === "object" && "AddressOwner" in owner ? owner.AddressOwner : null;
+      if (!holder || holder === this.#wallet?.address) continue;
+      let parent: OnChainIdentity | undefined;
+      try {
+        parent = (await client.getIdentity(holder)).toFullFledged();
+      } catch {
+        continue;
+      }
+      if (!parent) continue;
+      const token = await parent.getControllerToken(client);
+      if (token) return { identity: parent, token };
+    }
+    return null;
+  }
+
+  /**
+   * Removes a verification method (`did#frag`, `#frag` or `frag`) from a DID document; the
+   * removal time becomes its revocation time. Component DIDs are updated through their
+   * controlling (domain) identity.
+   */
+  async revokeMethod(didInput: string, method: string): Promise<RevokeResult> {
     const parsed: ParsedDid = parseDid(didInput);
     if (parsed.network !== this.#cfg.didNetwork) throw new InvalidDidError(`DID does not belong to ${this.#cfg.network}`);
-    if (!FRAGMENT.test(fragment)) throw new Error(`invalid method fragment "${fragment}"`);
+    const fragment = methodFragment(parsed.did, method);
+    const wallet = this.#requireWallet();
     const w = await identityWasm();
     const client = await this.#identityClient();
 
@@ -467,17 +612,32 @@ export class DidService {
 
     const identity = (await client.getIdentity(parsed.objectId)).toFullFledged();
     if (!identity) throw new Error(`${parsed.did} is not an IOTA Rebased identity`);
-    const token = await identity.getControllerToken(client);
-    if (!token) throw new Error(`${this.#wallet?.address} is not a controller of ${parsed.did}`);
+    const gas = this.#cfg.gasBudget;
 
-    const { output, response } = await this.#wallet!.exclusive(() =>
-      identity.updateDidDocument(doc.clone(), token).withGasBudget(this.#cfg.gasBudget).buildAndExecute(client),
-    );
-    assertSuccess(response as IotaTransactionBlockResponse);
+    let via = parsed.did;
+    let result: { output: unknown; response: unknown };
+    const direct = await identity.getControllerToken(client);
+    if (direct) {
+      result = await wallet.exclusive(() => identity.updateDidDocument(doc.clone(), direct).withGasBudget(gas).buildAndExecute(client));
+    } else {
+      const parent = await this.#controllingIdentity(client, parsed.objectId);
+      if (!parent) throw new Error(`${wallet.address} controls neither ${parsed.did} nor an identity that controls it`);
+      via = parent.identity.didDocument().id().toString();
+      const updated = doc.clone();
+      result = await wallet.exclusive(() =>
+        parent.identity
+          .accessSubIdentity(parent.token, identity, async (sub, subToken) => sub.updateDidDocument(updated.clone(), subToken).transaction)
+          .withGasBudget(gas)
+          .buildAndExecute(client),
+      );
+    }
+    const response = result.response as IotaTransactionBlockResponse;
+    assertSuccess(response);
     return {
       tx: response.digest,
       link: explorerLink(this.#cfg, "txblock", response.digest),
-      pendingProposal: output != null,
+      via,
+      pendingProposal: result.output != null,
     };
   }
 }
