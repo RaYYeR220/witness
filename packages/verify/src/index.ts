@@ -81,6 +81,7 @@ export {
   BUNDLE_VERSION,
   DidSnapshotError,
   pinnedSignatures,
+  snapshotKeys,
   snapshotResolver,
   STEP_NAMES,
   UNRESOLVED_SIGNER,
@@ -90,6 +91,7 @@ export {
   type Overall,
   type StepName,
   type StepResult,
+  type TimedKeyResolver,
   type VerifierConfig,
   type VerifyOptions,
 } from "./bundle.js";

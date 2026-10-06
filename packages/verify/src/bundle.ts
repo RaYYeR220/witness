@@ -28,7 +28,7 @@ import {
   type MilestoneEssence,
 } from "./codec.js";
 import { ed25519Verify } from "./ed25519.js";
-import { isEnvelope, verifyEnvelope, type KeyInfo, type KeyResolver } from "./envelope.js";
+import { isEnvelope, verifyEnvelope, type KeyInfo } from "./envelope.js";
 import { get, has, isDict, isNone, isUint, JsonParseError, parseJson, pyRepr, type Json, type JsonObject } from "./json.js";
 import { verifyPath, type PathStep } from "./merkle.js";
 import { FORGED, MALFORMED, PRODUCER_SIGNED, RELAY_ATTESTED } from "./verdicts.js";
@@ -143,13 +143,21 @@ function keyBytes(entry: JsonObject): Uint8Array | null {
   }
 }
 
+/** `kid` -> key, optionally as it stood at `atMs` (epoch ms); the current key when omitted. */
+export type TimedKeyResolver = (kid: string, atMs?: number | null) => KeyInfo | null;
+
 /**
- * Key lookup over a DID document in the anchor service's resolve shape:
- * `{doc: {id}, version, keys: [{kid, type, publicKeyHex, revokedAtMs}]}`.
- * Fragment kids (`#sig-1`) are expanded against `doc.id`; keys naming another
- * DID are ignored. Throws `DidSnapshotError` if the document is not usable.
+ * Every key entry of a DID document in the anchor service's resolve shape, per
+ * kid (Python `bundle.snapshot_keys`): `{doc: {id}, version, keys: [{kid, type,
+ * publicKeyHex, revokedAtMs}]}`. The lists cover the key history: a kid whose
+ * key was replaced in place appears once per key, each entry with its own
+ * revocation time (null while current), in document order. Fragment kids
+ * (`#sig-1`) are expanded against `doc.id`; entries naming another DID are
+ * ignored. Fails closed: a kid with any entry that cannot be read (unknown
+ * type, bad key, bad revocation time) is left out entirely. Throws
+ * `DidSnapshotError` if the document is not usable at all.
  */
-export function snapshotResolver(snapshot: unknown): (kid: string) => KeyInfo | null {
+export function snapshotKeys(snapshot: unknown): Map<string, KeyInfo[]> {
   const entries = isDict(snapshot) ? get(snapshot, "keys") : undefined;
   if (!isDict(snapshot) || !Array.isArray(entries)) {
     throw new DidSnapshotError("DID snapshot must be an object with a keys list");
@@ -157,7 +165,8 @@ export function snapshotResolver(snapshot: unknown): (kid: string) => KeyInfo | 
   const doc = get(snapshot, "doc");
   const rawDid = isDict(doc) ? get(doc, "id") : undefined;
   const did = typeof rawDid === "string" ? rawDid : null;
-  const table = new Map<string, { ed: Uint8Array | null; x: Uint8Array | null; revoked: number | null }>();
+  const table = new Map<string, KeyInfo[]>();
+  const unreadable = new Set<string>();
   for (const entry of entries) {
     if (!isDict(entry) || typeof get(entry, "kid") !== "string") continue;
     let kid = entry.kid as string;
@@ -167,19 +176,66 @@ export function snapshotResolver(snapshot: unknown): (kid: string) => KeyInfo | 
     const slot = type === "Ed25519" ? "ed" : type === "X25519" ? "x" : null;
     const publicKey = keyBytes(entry);
     const revoked = get(entry, "revokedAtMs");
-    if (slot === null || publicKey === null || !(isNone(revoked) || isUint(revoked))) continue;
-    let row = table.get(kid);
-    if (row === undefined) {
-      row = { ed: null, x: null, revoked: null };
-      table.set(kid, row);
+    if (slot === null || publicKey === null || !(isNone(revoked) || isUint(revoked))) {
+      unreadable.add(kid);
+      continue;
     }
-    if (row[slot] !== null) throw new DidSnapshotError(`DID snapshot lists ${kid} twice`);
-    row[slot] = publicKey;
-    if (isUint(revoked)) row.revoked = row.revoked === null ? revoked : Math.min(row.revoked, revoked);
+    const keys = table.get(kid) ?? [];
+    keys.push({
+      kid,
+      ed25519Public: slot === "ed" ? publicKey : null,
+      x25519Public: slot === "x" ? publicKey : null,
+      revokedAtMs: isUint(revoked) ? revoked : null,
+    });
+    table.set(kid, keys);
   }
-  return (kid: string) => {
-    const row = typeof kid === "string" ? table.get(kid) : undefined;
-    return row === undefined ? null : { kid, ed25519Public: row.ed, x25519Public: row.x, revokedAtMs: row.revoked };
+  for (const kid of unreadable) table.delete(kid);
+  return table;
+}
+
+/**
+ * The key in force at `atMs`, or the current one when `atMs` is null (Python
+ * `bundle._in_force`). Valid at `atMs`: not revoked, or revoked at or after it.
+ * Among the valid keys the one that expires first was in force; ties go to the
+ * entry listed last. With nothing valid, the key revoked last, so the caller
+ * sees the revocation instead of nothing.
+ */
+function inForce(keys: KeyInfo[], atMs: number | null): KeyInfo | null {
+  if (keys.length === 0) return null;
+  const expiry = (k: KeyInfo) => (k.revokedAtMs === null ? Infinity : k.revokedAtMs);
+  const valid = keys.filter((k) => k.revokedAtMs === null || (atMs !== null && k.revokedAtMs >= atMs));
+  const pool = valid.length > 0 ? valid : keys;
+  // Scan from the last entry so ties keep the one listed last, as Python's min/max over reversed().
+  let best = pool[pool.length - 1]!;
+  for (let i = pool.length - 2; i >= 0; i--) {
+    const k = pool[i]!;
+    if (valid.length > 0 ? expiry(k) < expiry(best) : expiry(k) > expiry(best)) best = k;
+  }
+  return best;
+}
+
+/**
+ * Key lookup over a DID document (see `snapshotKeys`), time-aware for replaced
+ * keys (Python `bundle.snapshot_resolver`): `resolve(kid)` serves the current
+ * key, `resolve(kid, atMs)` the key in force at that time. A kid listing both
+ * an Ed25519 and an X25519 key gets both, each chosen by time; `revokedAtMs` is
+ * the earlier revocation of the two. Throws `DidSnapshotError` if the document
+ * is not usable.
+ */
+export function snapshotResolver(snapshot: unknown): TimedKeyResolver {
+  const table = snapshotKeys(snapshot);
+  return (kid: string, atMs: number | null = null) => {
+    const keys = typeof kid === "string" ? table.get(kid) : undefined;
+    if (keys === undefined || keys.length === 0) return null;
+    const ed = inForce(keys.filter((k) => k.ed25519Public !== null), atMs);
+    const x = inForce(keys.filter((k) => k.x25519Public !== null), atMs);
+    const revoked = [ed, x].flatMap((k) => (k !== null && k.revokedAtMs !== null ? [k.revokedAtMs] : []));
+    return {
+      kid,
+      ed25519Public: ed === null ? null : ed.ed25519Public,
+      x25519Public: x === null ? null : x.x25519Public,
+      revokedAtMs: revoked.length > 0 ? Math.min(...revoked) : null,
+    };
   };
 }
 
@@ -329,7 +385,7 @@ function stepSignatures(b: JsonObject, cfg: PinnedConfig): Outcome {
 }
 
 /** Keys of `iss` from the trusted resolver; null if it cannot be resolved. */
-async function trustedKeys(resolveDid: VerifyOptions["resolveDid"], iss: string): Promise<KeyResolver | null> {
+async function trustedKeys(resolveDid: VerifyOptions["resolveDid"], iss: string): Promise<TimedKeyResolver | null> {
   if (!resolveDid) return null;
   let resolved: unknown;
   try {
@@ -349,13 +405,13 @@ async function trustedKeys(resolveDid: VerifyOptions["resolveDid"], iss: string)
 }
 
 /** The bundle's snapshot is display-only, but it must not contradict the registry. */
-function snapshotMatches(b: JsonObject, kid: string, trusted: KeyInfo): void {
+function snapshotMatches(b: JsonObject, kid: string, trusted: KeyInfo, atMs: number | null): void {
   const section = get(b, "envelope");
   const snapshot = isDict(section) ? get(section, "didDoc") : undefined;
   if (isNone(snapshot)) return;
   let claimed: KeyInfo | null;
   try {
-    claimed = snapshotResolver(snapshot)(kid);
+    claimed = snapshotResolver(snapshot)(kid, atMs);
   } catch (e) {
     if (!(e instanceof DidSnapshotError)) throw e;
     claimed = null;
@@ -394,23 +450,26 @@ async function stepEnvelope(b: JsonObject, resolveDid: VerifyOptions["resolveDid
   // Signer keys come only from the trusted resolver, never from the bundle.
   const trusted = await trustedKeys(resolveDid, iss);
   if (trusted === null) return [null, UNRESOLVED_SIGNER];
-  const check = verifyEnvelope(env, tag, trusted);
+  // A key replaced in place has several entries; use the one in force through the whole
+  // inclusion second (milestone timestamps have second precision).
+  let ts: number | null;
+  try {
+    ts = essenceOf(b)[1].timestamp;
+  } catch (e) {
+    if (!(e instanceof Fail)) throw e;
+    ts = null;
+  }
+  const atMs = ts === null ? null : (ts + 1) * 1000;
+  const check = verifyEnvelope(env, tag, (k) => trusted(k, atMs));
   if (check.verdict !== PRODUCER_SIGNED && check.verdict !== RELAY_ATTESTED) return [false, `${check.verdict}: ${check.reason}`];
-  const info = trusted(kid);
+  const info = trusted(kid, atMs);
   if (!info) return [false, "signing key not resolvable"]; // unreachable: verifyEnvelope just resolved it
-  snapshotMatches(b, kid, info);
+  snapshotMatches(b, kid, info, atMs);
   if (info.revokedAtMs !== null) {
-    let essence: MilestoneEssence;
-    try {
-      [, essence] = essenceOf(b);
-    } catch (e) {
-      if (e instanceof Fail) return [false, "key revoked; inclusion time unknown"];
-      throw e;
-    }
-    // Milestone timestamps have second precision: a revocation anywhere in the inclusion
-    // second, or before it, revokes (Python `valid_through_second`).
-    if (info.revokedAtMs < essence.timestamp * 1000) return [false, "key revoked before inclusion"];
-    if (info.revokedAtMs < (essence.timestamp + 1) * 1000) return [false, "key revoked within the inclusion second"];
+    if (ts === null) return [false, "key revoked; inclusion time unknown"];
+    // A revocation anywhere in the inclusion second, or before it, revokes (Python `valid_through_second`).
+    if (info.revokedAtMs < ts * 1000) return [false, "key revoked before inclusion"];
+    if (info.revokedAtMs < (ts + 1) * 1000) return [false, "key revoked within the inclusion second"];
   }
   return [true, `${check.verdict} by ${kid}`];
 }

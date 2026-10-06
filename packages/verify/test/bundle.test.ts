@@ -1,11 +1,14 @@
 import { describe, expect, it } from "vitest";
 
 import { fromHex, toHex } from "../src/bytes.js";
+import { ed25519PublicKey } from "../src/ed25519.js";
 import {
   blockId,
   checkpointHash,
   JsonNumber,
   parseBlock,
+  snapshotKeys,
+  snapshotResolver,
   STEP_NAMES,
   UNRESOLVED_SIGNER,
   verifyBundle,
@@ -31,10 +34,10 @@ const run = (c: any, extra: Partial<VerifyOptions> = {}) => verifyBundle(...wire
 const marks = (l: Ladder) => l.steps.map((s) => (s.ok === null ? "N" : s.ok ? "T" : "F")).join("") + " " + l.overall;
 
 describe("bundles.json parity", () => {
-  it("has the 41 named cases", () => {
+  it("has the 43 named cases", () => {
     const names = bundles.cases.map((c: any) => c.name);
-    expect(names).toHaveLength(41);
-    expect(new Set(names).size).toBe(41);
+    expect(names).toHaveLength(43);
+    expect(new Set(names).size).toBe(43);
   });
 
   it.each(bundles.cases.map((c: any) => [c.name, c] as const))("%s", async (_name, c: any) => {
@@ -125,6 +128,8 @@ const PYTHON_DETAILS: Record<string, Partial<Record<(typeof STEP_NAMES)[number],
   legacy_broken_hostile_nesting: { envelope: "malformed bundle (RecursionError)" },
   legacy_nesting_at_cap: { envelope: "unsigned legacy message" },
   envelope_nested_past_jcs_cap: { envelope: "MALFORMED: not canonicalizable: nested too deeply" },
+  key_replaced_old_msg: { envelope: "PRODUCER_SIGNED by did:iota:testnet:0x5e1f#sig-1" },
+  key_replaced_within_second: { envelope: "FORGED: signature invalid" },
 };
 
 describe("ladder details match the Python reference", () => {
@@ -291,9 +296,30 @@ describe("trusted lookups", () => {
     expect(marks(none)).toBe("TTTNN PARTIAL");
   });
 
+  // Milestone 374's timestamp (s) and a second key, for documents where #sig-1 was replaced.
+  const TS = 1791283594;
+  const OTHER = toHex(ed25519PublicKey(new Uint8Array(32).fill(7)));
+  const replacedAt = (at: number) => (d: any) => {
+    d.keys[0].revokedAtMs = at;
+    d.keys.unshift({ kid: "#sig-1", type: "Ed25519", publicKeyHex: OTHER, revokedAtMs: null });
+  };
+  const SIGNED = "PRODUCER_SIGNED by did:iota:testnet:0x5e1f#sig-1";
+
   it.each([
-    ["duplicate kid", (d: any) => d.keys.push(clone(d.keys[0])), false,
-      "resolved DID document is malformed: DID snapshot lists did:iota:testnet:0x5e1f#sig-1 twice"],
+    // A kid listed once per key is its key history, never an error.
+    ["duplicate kid", (d: any) => d.keys.push(clone(d.keys[0])), true, SIGNED],
+    ["replaced at the next second", replacedAt((TS + 1) * 1000), true, SIGNED],
+    ["replaced within the inclusion second", replacedAt(TS * 1000 + 500), false, "FORGED: signature invalid"],
+    ["replaced before inclusion", replacedAt(TS * 1000 - 1), false, "FORGED: signature invalid"],
+    ["all revoked: the key revoked last is reported", (d: any) => {
+      d.keys[0].revokedAtMs = TS * 1000 - 5;
+      d.keys.push({ kid: "#sig-1", type: "Ed25519", publicKeyHex: OTHER, revokedAtMs: TS * 1000 - 10 });
+    }, false, "key revoked before inclusion"],
+    // Any unreadable entry drops the whole kid (fail closed); other kids are unaffected.
+    ["unreadable entry for the kid", (d: any) => d.keys.push({ kid: "#sig-1", type: "Ed25519", publicKeyHex: "0xzz", revokedAtMs: null }),
+      false, "FORGED: signing key not resolvable"],
+    ["unreadable entry for another kid", (d: any) => d.keys.push({ kid: "#sig-9", type: "RSA", publicKeyHex: OTHER, revokedAtMs: null }),
+      true, SIGNED],
     ["keys not a list", (d: any) => (d.keys = {}), false,
       "resolved DID document is malformed: DID snapshot must be an object with a keys list"],
     ["doc of another DID", (d: any) => (d.doc.id = "did:iota:testnet:0xother"), false,
@@ -312,6 +338,32 @@ describe("trusted lookups", () => {
     const [bundle, cfg, opts] = wire(caseByName("valid_anchored"));
     const ladder = await verifyBundle(bundle, cfg, { ...opts, resolveDid: (did) => docs[did] ?? null });
     expect(ladder.steps[3]).toEqual({ name: "envelope", ok, detail });
+  });
+
+  it("snapshotResolver picks replaced keys by time, like bundle.snapshot_resolver", () => {
+    const DID = "did:iota:testnet:0x5e1f";
+    const key = (n: number) => toHex(ed25519PublicKey(new Uint8Array(32).fill(n)));
+    const ed = (n: number, revokedAtMs: number | null, kid = "#sig-1") => ({ kid, type: "Ed25519", publicKeyHex: key(n), revokedAtMs });
+    const pub = (info: { ed25519Public: Uint8Array | null } | null) => (info?.ed25519Public ? toHex(info.ed25519Public) : null);
+    // Replaced at 1000: the current key first, then the one it replaced (the anchor's order).
+    const replaced = snapshotResolver({ doc: { id: DID }, keys: [ed(1, null), ed(2, 1000), { kid: "#kex-1", type: "X25519", publicKeyHex: key(3), revokedAtMs: null }] });
+    expect([pub(replaced(`${DID}#sig-1`)), replaced(`${DID}#sig-1`)!.revokedAtMs]).toEqual([key(1), null]);
+    for (const at of [0, 999, 1000]) expect(pub(replaced(`${DID}#sig-1`, at)), String(at)).toBe(key(2));
+    expect(pub(replaced(`${DID}#sig-1`, 1001))).toBe(key(1));
+    expect(toHex(replaced(`${DID}#kex-1`, 5)!.x25519Public!)).toBe(key(3));
+    // Nothing valid: the key revoked last. Equal validity: the entry listed last.
+    const revoked = snapshotResolver({ doc: { id: DID }, keys: [ed(4, 10), ed(5, 20)] });
+    expect(pub(revoked(`${DID}#sig-1`, 5))).toBe(key(4));
+    expect(pub(revoked(`${DID}#sig-1`, 15))).toBe(key(5));
+    for (const at of [null, 25]) expect([pub(revoked(`${DID}#sig-1`, at)), revoked(`${DID}#sig-1`, at)!.revokedAtMs]).toEqual([key(5), 20]);
+    expect(pub(snapshotResolver({ doc: { id: DID }, keys: [ed(4, null), ed(6, null)] })(`${DID}#sig-1`))).toBe(key(6));
+    // One unreadable entry drops the kid entirely; snapshotKeys lists the history in order.
+    const poisoned = snapshotResolver({ doc: { id: DID }, keys: [ed(1, null), { ...ed(2, 1000), revokedAtMs: -1 }, ed(3, null, "#sig-2")] });
+    expect(poisoned(`${DID}#sig-1`)).toBeNull();
+    expect(poisoned(`${DID}#sig-1`, 5)).toBeNull();
+    expect(pub(poisoned(`${DID}#sig-2`))).toBe(key(3));
+    const history = snapshotKeys({ doc: { id: DID }, keys: [ed(1, null), ed(2, 1000)] }).get(`${DID}#sig-1`)!;
+    expect(history.map((k) => [pub(k), k.revokedAtMs])).toEqual([[key(1), null], [key(2), 1000]]);
   });
 
   it("malformed on-chain records fail the anchor step", async () => {

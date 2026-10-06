@@ -176,6 +176,62 @@
           }
         ]
       }
+    },
+    "registry_key_replaced_next_second": {
+      "did:iota:testnet:0x5e1f": {
+        "doc": {
+          "id": "did:iota:testnet:0x5e1f"
+        },
+        "version": "4",
+        "keys": [
+          {
+            "kid": "did:iota:testnet:0x5e1f#sig-1",
+            "type": "Ed25519",
+            "publicKeyHex": "0x6e7a1cdd29b0b78fd13af4c5598feff4ef2a97166e3ca6f2e4fbfccd80505bf1",
+            "revokedAtMs": null
+          },
+          {
+            "kid": "did:iota:testnet:0x5e1f#kex-1",
+            "type": "X25519",
+            "publicKeyHex": "0xf5b2d6e60f9477e310c2982daaa6c9136c108a1777c5947e448fa37d68174557",
+            "revokedAtMs": null
+          },
+          {
+            "kid": "did:iota:testnet:0x5e1f#sig-1",
+            "type": "Ed25519",
+            "publicKeyHex": "0xea4a6c63e29c520abef5507b132ec5f9954776aebebe7b92421eea691446d22c",
+            "revokedAtMs": 1791283595000
+          }
+        ]
+      }
+    },
+    "registry_key_replaced_within_second": {
+      "did:iota:testnet:0x5e1f": {
+        "doc": {
+          "id": "did:iota:testnet:0x5e1f"
+        },
+        "version": "4",
+        "keys": [
+          {
+            "kid": "did:iota:testnet:0x5e1f#sig-1",
+            "type": "Ed25519",
+            "publicKeyHex": "0x6e7a1cdd29b0b78fd13af4c5598feff4ef2a97166e3ca6f2e4fbfccd80505bf1",
+            "revokedAtMs": null
+          },
+          {
+            "kid": "did:iota:testnet:0x5e1f#kex-1",
+            "type": "X25519",
+            "publicKeyHex": "0xf5b2d6e60f9477e310c2982daaa6c9136c108a1777c5947e448fa37d68174557",
+            "revokedAtMs": null
+          },
+          {
+            "kid": "did:iota:testnet:0x5e1f#sig-1",
+            "type": "Ed25519",
+            "publicKeyHex": "0xea4a6c63e29c520abef5507b132ec5f9954776aebebe7b92421eea691446d22c",
+            "revokedAtMs": 1791283594500
+          }
+        ]
+      }
     }
   },
   "cases": [
@@ -5509,6 +5565,284 @@
         }
       },
       "resolver": "registry",
+      "expected": {
+        "overall": "INVALID",
+        "steps": [
+          {
+            "name": "block_hash",
+            "ok": true
+          },
+          {
+            "name": "inclusion",
+            "ok": true
+          },
+          {
+            "name": "milestone_signatures",
+            "ok": true
+          },
+          {
+            "name": "envelope",
+            "ok": false
+          },
+          {
+            "name": "anchor",
+            "ok": true
+          }
+        ]
+      }
+    },
+    {
+      "name": "key_replaced_old_msg",
+      "bundle": {
+        "v": 1,
+        "network": "private_tangle1",
+        "block": {
+          "id": "0x9412a8e2e3efa6b6cb8e2fb1d8473290a3faae7c62fb5cc3f44f12dd990578e6",
+          "raw": "0x0202d6119fd6c74c0372206ed5799e22195bfc12e7537ad94600c307155ccea2437adcdd4f45668c81cbe8634b53c1a2f1d28d9e47c8b6bd85df16360f02743679c372010000050000000b74727573742e73636f72655e0100007b22617474223a7b226d6f6465223a2270726f6475636572227d2c22626f6479223a7b226964223a224d79446f6d61696e3a666131363365356532356566222c2273636f7265223a302e38327d2c22636f7272223a22696e636964656e742d37222c22696174223a313739313238333539303030302c22697373223a226469643a696f74613a746573746e65743a307835653166222c226b6964223a226469643a696f74613a746573746e65743a307835653166237369672d31222c226e6f6e6365223a2241414543417751464267634943516f4c4441304f4477222c22736571223a312c22736967223a224c4c3562714d445f66663559396353375955666346514851544e4273586164644c50586237493979344f3469384f705862735869486f71457755626a4776586f776e423058655f686b424742514b4a4458546a4a4377222c22746167223a2274727573742e73636f7265222c2277223a317d0000000000000000"
+        },
+        "milestone": {
+          "index": 374,
+          "id": "0xd421510082613ad4eac2d35caaa88ad9222415d570804687291b9ffac06a3bc0",
+          "essence": "0x760100008ad1c46a0262080b3856ac88aefba69a8534dcc1191132b7589338138bb222934b7d8701ac019412a8e2e3efa6b6cb8e2fb1d8473290a3faae7c62fb5cc3f44f12dd990578e62374c723e6b6cf48b8096e3be9a6412f3d8cd15f5803cfaecc231c72d14ac7990e5751c026e543b2e8ab2eb06099daa1d1e5df47778f7787faab45cdf12fe3a8000000",
+          "signatures": [
+            {
+              "pk": "0xed3c3f1a319ff4e909cf2771d79fece0ac9bd9fd2ee49ea6c0885c9cb3b1248c",
+              "sig": "0xc2a73f3db625910ccb860b080b59a66d74c1168339f114fcfb68d503c71684272bf36987e40e79c6c7d7700b3fdf588f858f375591d2431dabbbf6103b711301"
+            },
+            {
+              "pk": "0xf6752f5f46a53364e2ee9c4d662d762a81efd51010282a75cd6bd03f28ef349c",
+              "sig": "0x3ad2a473aab4be5c682d5ace5d3482192709fc3a79d67e8b8e3ccd06e66413b8d4575afbe6da40e4b72e4056be120c0650170bdf670fb04a3a12769f6c48dc07"
+            }
+          ]
+        },
+        "inclusion": {
+          "leafIndex": 1,
+          "leafCount": 2,
+          "path": [
+            {
+              "side": "L",
+              "hash": "0xdfe6619554b46f911bd4cd3218c8444928389afafa0fef3e15ffe56ab45c1149"
+            }
+          ]
+        },
+        "envelope": {
+          "verdict": "FORGED",
+          "didDoc": {
+            "doc": {
+              "id": "did:iota:testnet:0x5e1f"
+            },
+            "version": "4",
+            "keys": [
+              {
+                "kid": "did:iota:testnet:0x5e1f#sig-1",
+                "type": "Ed25519",
+                "publicKeyHex": "0x6e7a1cdd29b0b78fd13af4c5598feff4ef2a97166e3ca6f2e4fbfccd80505bf1",
+                "revokedAtMs": null
+              },
+              {
+                "kid": "did:iota:testnet:0x5e1f#kex-1",
+                "type": "X25519",
+                "publicKeyHex": "0xf5b2d6e60f9477e310c2982daaa6c9136c108a1777c5947e448fa37d68174557",
+                "revokedAtMs": null
+              },
+              {
+                "kid": "did:iota:testnet:0x5e1f#sig-1",
+                "type": "Ed25519",
+                "publicKeyHex": "0xea4a6c63e29c520abef5507b132ec5f9954776aebebe7b92421eea691446d22c",
+                "revokedAtMs": 1791283595000
+              }
+            ]
+          },
+          "didVersion": "4"
+        },
+        "anchor": {
+          "checkpoint": {
+            "v": 1,
+            "kind": "witness.checkpoint",
+            "network": "private_tangle1",
+            "domain": "MyDomain",
+            "from": {
+              "index": 370,
+              "id": "0x1f67cff6cf5b3978edd0188960acc4b1ef34c8349fe7b3da5d57dac9ec5d7745"
+            },
+            "to": {
+              "index": 374,
+              "id": "0xd421510082613ad4eac2d35caaa88ad9222415d570804687291b9ffac06a3bc0"
+            },
+            "msRoot": "0x0b2ec43e7dbcbdc7c2294b7e4670098edb2441b7e2b9971089172791eb814acb",
+            "msgCount": 11,
+            "policyHash": "0xf50600b23cbe156f782f4175f28ebac24a2e719b3607b3ea741c58ab02c665ac",
+            "prev": null
+          },
+          "msPath": [
+            {
+              "side": "L",
+              "hash": "0xbdd5ad67fdf2010c667060fd02ef81beb8ce4c26ce40d0cec66d872c75920ff6"
+            }
+          ],
+          "rebased": {
+            "network": "testnet",
+            "trail": "0x7a7a7a7a7a7a7a7a7a7a7a7a7a7a7a7a7a7a7a7a7a7a7a7a7a7a7a7a7a7a7a7a",
+            "record": 3,
+            "tx": "5xGp7rWq2Tz9"
+          }
+        }
+      },
+      "config": {
+        "network": "private_tangle1",
+        "trustedCoordinatorKeys": [
+          "0xed3c3f1a319ff4e909cf2771d79fece0ac9bd9fd2ee49ea6c0885c9cb3b1248c",
+          "0xf6752f5f46a53364e2ee9c4d662d762a81efd51010282a75cd6bd03f28ef349c"
+        ],
+        "threshold": 2,
+        "rebasedNetwork": "testnet",
+        "trailId": "0x7a7a7a7a7a7a7a7a7a7a7a7a7a7a7a7a7a7a7a7a7a7a7a7a7a7a7a7a7a7a7a7a"
+      },
+      "fetcher": {
+        "record": {
+          "checkpointHash": "0x2108880a63583ddd131270a7e425e0997c8ca03a00e9965d3384aec9af87a771"
+        }
+      },
+      "resolver": "registry_key_replaced_next_second",
+      "expected": {
+        "overall": "VALID",
+        "steps": [
+          {
+            "name": "block_hash",
+            "ok": true
+          },
+          {
+            "name": "inclusion",
+            "ok": true
+          },
+          {
+            "name": "milestone_signatures",
+            "ok": true
+          },
+          {
+            "name": "envelope",
+            "ok": true
+          },
+          {
+            "name": "anchor",
+            "ok": true
+          }
+        ]
+      }
+    },
+    {
+      "name": "key_replaced_within_second",
+      "bundle": {
+        "v": 1,
+        "network": "private_tangle1",
+        "block": {
+          "id": "0x9412a8e2e3efa6b6cb8e2fb1d8473290a3faae7c62fb5cc3f44f12dd990578e6",
+          "raw": "0x0202d6119fd6c74c0372206ed5799e22195bfc12e7537ad94600c307155ccea2437adcdd4f45668c81cbe8634b53c1a2f1d28d9e47c8b6bd85df16360f02743679c372010000050000000b74727573742e73636f72655e0100007b22617474223a7b226d6f6465223a2270726f6475636572227d2c22626f6479223a7b226964223a224d79446f6d61696e3a666131363365356532356566222c2273636f7265223a302e38327d2c22636f7272223a22696e636964656e742d37222c22696174223a313739313238333539303030302c22697373223a226469643a696f74613a746573746e65743a307835653166222c226b6964223a226469643a696f74613a746573746e65743a307835653166237369672d31222c226e6f6e6365223a2241414543417751464267634943516f4c4441304f4477222c22736571223a312c22736967223a224c4c3562714d445f66663559396353375955666346514851544e4273586164644c50586237493979344f3469384f705862735869486f71457755626a4776586f776e423058655f686b424742514b4a4458546a4a4377222c22746167223a2274727573742e73636f7265222c2277223a317d0000000000000000"
+        },
+        "milestone": {
+          "index": 374,
+          "id": "0xd421510082613ad4eac2d35caaa88ad9222415d570804687291b9ffac06a3bc0",
+          "essence": "0x760100008ad1c46a0262080b3856ac88aefba69a8534dcc1191132b7589338138bb222934b7d8701ac019412a8e2e3efa6b6cb8e2fb1d8473290a3faae7c62fb5cc3f44f12dd990578e62374c723e6b6cf48b8096e3be9a6412f3d8cd15f5803cfaecc231c72d14ac7990e5751c026e543b2e8ab2eb06099daa1d1e5df47778f7787faab45cdf12fe3a8000000",
+          "signatures": [
+            {
+              "pk": "0xed3c3f1a319ff4e909cf2771d79fece0ac9bd9fd2ee49ea6c0885c9cb3b1248c",
+              "sig": "0xc2a73f3db625910ccb860b080b59a66d74c1168339f114fcfb68d503c71684272bf36987e40e79c6c7d7700b3fdf588f858f375591d2431dabbbf6103b711301"
+            },
+            {
+              "pk": "0xf6752f5f46a53364e2ee9c4d662d762a81efd51010282a75cd6bd03f28ef349c",
+              "sig": "0x3ad2a473aab4be5c682d5ace5d3482192709fc3a79d67e8b8e3ccd06e66413b8d4575afbe6da40e4b72e4056be120c0650170bdf670fb04a3a12769f6c48dc07"
+            }
+          ]
+        },
+        "inclusion": {
+          "leafIndex": 1,
+          "leafCount": 2,
+          "path": [
+            {
+              "side": "L",
+              "hash": "0xdfe6619554b46f911bd4cd3218c8444928389afafa0fef3e15ffe56ab45c1149"
+            }
+          ]
+        },
+        "envelope": {
+          "verdict": "FORGED",
+          "didDoc": {
+            "doc": {
+              "id": "did:iota:testnet:0x5e1f"
+            },
+            "version": "4",
+            "keys": [
+              {
+                "kid": "did:iota:testnet:0x5e1f#sig-1",
+                "type": "Ed25519",
+                "publicKeyHex": "0x6e7a1cdd29b0b78fd13af4c5598feff4ef2a97166e3ca6f2e4fbfccd80505bf1",
+                "revokedAtMs": null
+              },
+              {
+                "kid": "did:iota:testnet:0x5e1f#kex-1",
+                "type": "X25519",
+                "publicKeyHex": "0xf5b2d6e60f9477e310c2982daaa6c9136c108a1777c5947e448fa37d68174557",
+                "revokedAtMs": null
+              },
+              {
+                "kid": "did:iota:testnet:0x5e1f#sig-1",
+                "type": "Ed25519",
+                "publicKeyHex": "0xea4a6c63e29c520abef5507b132ec5f9954776aebebe7b92421eea691446d22c",
+                "revokedAtMs": 1791283594500
+              }
+            ]
+          },
+          "didVersion": "4"
+        },
+        "anchor": {
+          "checkpoint": {
+            "v": 1,
+            "kind": "witness.checkpoint",
+            "network": "private_tangle1",
+            "domain": "MyDomain",
+            "from": {
+              "index": 370,
+              "id": "0x1f67cff6cf5b3978edd0188960acc4b1ef34c8349fe7b3da5d57dac9ec5d7745"
+            },
+            "to": {
+              "index": 374,
+              "id": "0xd421510082613ad4eac2d35caaa88ad9222415d570804687291b9ffac06a3bc0"
+            },
+            "msRoot": "0x0b2ec43e7dbcbdc7c2294b7e4670098edb2441b7e2b9971089172791eb814acb",
+            "msgCount": 11,
+            "policyHash": "0xf50600b23cbe156f782f4175f28ebac24a2e719b3607b3ea741c58ab02c665ac",
+            "prev": null
+          },
+          "msPath": [
+            {
+              "side": "L",
+              "hash": "0xbdd5ad67fdf2010c667060fd02ef81beb8ce4c26ce40d0cec66d872c75920ff6"
+            }
+          ],
+          "rebased": {
+            "network": "testnet",
+            "trail": "0x7a7a7a7a7a7a7a7a7a7a7a7a7a7a7a7a7a7a7a7a7a7a7a7a7a7a7a7a7a7a7a7a",
+            "record": 3,
+            "tx": "5xGp7rWq2Tz9"
+          }
+        }
+      },
+      "config": {
+        "network": "private_tangle1",
+        "trustedCoordinatorKeys": [
+          "0xed3c3f1a319ff4e909cf2771d79fece0ac9bd9fd2ee49ea6c0885c9cb3b1248c",
+          "0xf6752f5f46a53364e2ee9c4d662d762a81efd51010282a75cd6bd03f28ef349c"
+        ],
+        "threshold": 2,
+        "rebasedNetwork": "testnet",
+        "trailId": "0x7a7a7a7a7a7a7a7a7a7a7a7a7a7a7a7a7a7a7a7a7a7a7a7a7a7a7a7a7a7a7a7a"
+      },
+      "fetcher": {
+        "record": {
+          "checkpointHash": "0x2108880a63583ddd131270a7e425e0997c8ca03a00e9965d3384aec9af87a771"
+        }
+      },
+      "resolver": "registry_key_replaced_within_second",
       "expected": {
         "overall": "INVALID",
         "steps": [

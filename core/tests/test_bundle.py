@@ -1108,6 +1108,9 @@ def _registries(vectors) -> dict[str, dict[str, dict]]:
         "registry_key_revoked_after_inclusion": {DID: _snapshot(revoked_at_ms=ms_time_ms + 60_000)},
         "registry_wrong_issuer": {DID: wrong_issuer},
         "registry_weak_key": {DID: _weak_signer_snapshot()},
+        # #sig-1 replaced in place by SIGNER; OLD_SIGNER's entry carries the replacement time.
+        "registry_key_replaced_next_second": {DID: _replaced(ms_time_ms + 1000)},
+        "registry_key_replaced_within_second": {DID: _replaced(ms_time_ms + 500)},
     }
 
 
@@ -1177,6 +1180,11 @@ def _cases(vectors) -> list[dict]:
     # 600 levels: past the shared canonicalization cap (500), below where rfc8785 alone
     # would give up, so this is where the cap decides.
     past_jcs = _synthetic(vectors, env, claimed=CLAIMED, data=_deeply_nested(598))
+    ms_time_ms = (vectors("milestones")[-1]["timestamp"] + 5) * 1000
+    old_msg = _synthetic(vectors, _envelope(sign_key=OLD_SIGNER),
+                         snapshot=_replaced(ms_time_ms + 1000))
+    old_msg_late = _synthetic(vectors, _envelope(sign_key=OLD_SIGNER),
+                              snapshot=_replaced(ms_time_ms + 500))
     reg = "registry"
     return [
         _case("valid_anchored", b, cfg, rec, reg, "TTTTT VALID"),
@@ -1266,6 +1274,13 @@ def _cases(vectors) -> list[dict]:
               {"record": legacy_at_cap.record}, reg, "TTTNT PARTIAL"),
         _case("envelope_nested_past_jcs_cap", past_jcs.bundle, cfg, {"record": past_jcs.record},
               reg, "TTTFT INVALID"),
+        # Signed with the key #sig-1 had before an in-place replacement: valid when the
+        # replacement came at the next second, not when it came within the inclusion second.
+        _case("key_replaced_old_msg", old_msg.bundle, cfg, {"record": old_msg.record},
+              "registry_key_replaced_next_second", "TTTTT VALID"),
+        _case("key_replaced_within_second", old_msg_late.bundle, cfg,
+              {"record": old_msg_late.record}, "registry_key_replaced_within_second",
+              "TTTFT INVALID"),
     ]
 
 
