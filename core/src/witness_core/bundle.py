@@ -1,10 +1,13 @@
 """`witness-proof/v1` bundles and the offline verifier ladder.
 
-A bundle is self-contained: raw block bytes, the milestone essence and its
-signatures, the Merkle audit path, a DID document snapshot and, optionally, an
-anchor checkpoint. The verifier trusts only its pinned `VerifierConfig` and
-recomputes every id and root from raw bytes; claims written into the bundle
-(block id aside, which step 1 checks) are cross-checked, never relied on.
+A bundle carries raw block bytes, the milestone essence and its signatures,
+the Merkle audit path, a DID document snapshot and, optionally, an anchor
+checkpoint. The verifier trusts only its pinned `VerifierConfig` plus two
+trusted lookups (on-chain anchor record, DID registry) and recomputes every id
+and root from raw bytes; claims written into the bundle (block id aside, which
+step 1 checks) are cross-checked, never relied on. The DID snapshot is for
+offline display only: it is attacker-controlled, so it never authenticates a
+signer, it can only contradict the registry.
 
 Ladder: 1 block_hash, 2 inclusion, 3 milestone_signatures, 4 envelope,
 5 anchor. Each step is ok (True), failed (False) or not evaluated (None).
@@ -318,7 +321,47 @@ def _step_signatures(b: dict, cfg: VerifierConfig) -> tuple[bool | None, str]:
     return len(valid) >= threshold, f"milestone {essence.index} {to_hex(mid)}: {summary}"
 
 
-def _step_envelope(b: dict) -> tuple[bool | None, str]:
+UNRESOLVED_SIGNER = "signer identity not resolved (bundle snapshot is unauthenticated)"
+
+
+def _trusted_keys(
+    resolve_did: Callable[[str], dict | None] | None, iss: str
+) -> Callable[[str], KeyInfo | None] | None:
+    """Keys of `iss` from the trusted resolver; None if it cannot be resolved."""
+    if resolve_did is None:
+        return None
+    try:
+        resolved = resolve_did(iss)
+    except Exception:  # noqa: BLE001 - an unreachable registry is not a verdict
+        return None
+    if resolved is None:
+        return None
+    doc = resolved.get("doc") if isinstance(resolved, dict) else None
+    if not isinstance(doc, dict) or doc.get("id") != iss:
+        raise _Fail("resolved DID document does not belong to the issuer")
+    try:
+        return snapshot_resolver(resolved)
+    except ValueError as exc:
+        raise _Fail(f"resolved DID document is malformed: {exc}") from None
+
+
+def _snapshot_matches(b: dict, kid: str, trusted: KeyInfo) -> None:
+    """The bundle's snapshot is display-only, but it must not contradict the registry."""
+    section = b.get("envelope")
+    snapshot = section.get("didDoc") if isinstance(section, dict) else None
+    if snapshot is None:
+        return
+    try:
+        claimed = snapshot_resolver(snapshot)(kid)
+    except ValueError:
+        claimed = None
+    if claimed is None or claimed.ed25519_public != trusted.ed25519_public:
+        raise _Fail("DID snapshot does not match resolved document")
+
+
+def _step_envelope(
+    b: dict, resolve_did: Callable[[str], dict | None] | None
+) -> tuple[bool | None, str]:
     try:
         raw = _block_raw(b)
         block = codec.parse_block(raw)
@@ -334,30 +377,32 @@ def _step_envelope(b: dict) -> tuple[bool | None, str]:
         tag = payload.tag.decode("utf-8")
     except UnicodeDecodeError:
         return False, f"{verdicts.FORGED}: block tag is not UTF-8"
-    section = b.get("envelope")
-    snapshot = section.get("didDoc") if isinstance(section, dict) else None
-    if snapshot is None:
-        return None, "envelope present but the bundle has no DID document snapshot"
-    try:
-        resolve = snapshot_resolver(snapshot)
-    except ValueError as exc:
-        return False, f"DID document snapshot is malformed: {exc}"
-    check = envelope.verify(env, tag, resolve)
+    # Structure, tag binding and kid/iss binding do not depend on any key.
+    offline = envelope.verify(env, tag, lambda _kid: None)
+    if offline.verdict == verdicts.MALFORMED:
+        return False, f"{offline.verdict}: {offline.reason}"
+    iss, kid = env["iss"], env["kid"]
+    if env["tag"] != tag or kid.split("#", 1)[0] != iss:
+        return False, f"{offline.verdict}: {offline.reason}"
+    # Signer keys come only from the trusted resolver, never from the bundle.
+    trusted = _trusted_keys(resolve_did, iss)
+    if trusted is None:
+        return None, UNRESOLVED_SIGNER
+    check = envelope.verify(env, tag, trusted)
     if check.verdict not in (verdicts.PRODUCER_SIGNED, verdicts.RELAY_ATTESTED):
         return False, f"{check.verdict}: {check.reason}"
-    info = resolve(check.kid or "")
-    revoked = info.revoked_at_ms if info is not None else None
-    if revoked is not None:
+    info = trusted(kid)
+    if info is None:  # unreachable: verify() just resolved it
+        return False, "signing key not resolvable"
+    _snapshot_matches(b, kid, info)
+    if info.revoked_at_ms is not None:
         try:
             _, essence = _essence(b)
         except _Fail:
-            return False, f"{verdicts.REVOKED_KEY}: {check.kid} is revoked, milestone time unknown"
-        if essence.timestamp * 1000 >= revoked:
-            return False, (
-                f"{verdicts.REVOKED_KEY}: {check.kid} revoked at {revoked} ms, "
-                f"before milestone time {essence.timestamp * 1000} ms"
-            )
-    return True, f"{check.verdict} by {check.kid}"
+            return False, "key revoked; inclusion time unknown"
+        if essence.timestamp * 1000 > info.revoked_at_ms:
+            return False, "key revoked before inclusion"
+    return True, f"{check.verdict} by {kid}"
 
 
 def _record_matches(record: Any, expected: bytes) -> tuple[bool, str]:
@@ -446,8 +491,15 @@ def verify(
     b: dict,
     cfg: VerifierConfig,
     fetch_anchor_record: Callable[[dict], dict | None] | None = None,
+    resolve_did: Callable[[str], dict | None] | None = None,
 ) -> Ladder:
-    """Run the five-step ladder. Never raises on bad input."""
+    """Run the five-step ladder. Never raises on bad input.
+
+    `fetch_anchor_record` reads the on-chain checkpoint record for step 5;
+    `resolve_did` returns the issuer's DID document from the trusted registry
+    (`{"doc", "version", "keys"}`) for step 4. Without them those steps stay
+    unevaluated (None): the bundle's own snapshot never authenticates a signer.
+    """
     if not isinstance(b, dict) or not _uint(b.get("v")) or b.get("v") != VERSION:
         reason = "not a witness-proof/v1 bundle"
         steps = [StepResult(n, False, reason) for n in STEP_NAMES]
@@ -456,7 +508,7 @@ def verify(
         _run("block_hash", _step_block_hash, b),
         _run("inclusion", _step_inclusion, b),
         _run("milestone_signatures", _step_signatures, b, cfg),
-        _run("envelope", _step_envelope, b),
+        _run("envelope", _step_envelope, b, resolve_did),
         _run("anchor", _step_anchor, b, cfg, fetch_anchor_record),
     ]
     return Ladder(steps, _overall(steps))

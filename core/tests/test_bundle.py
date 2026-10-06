@@ -83,7 +83,10 @@ def _real_bundle(vectors, block_id: str = REAL_BLOCK) -> dict:
     raise AssertionError(f"{block_id} not in any cone")
 
 
-def _snapshot(revoked_at_ms: int | None = None) -> dict:
+def _snapshot(
+    revoked_at_ms: int | None = None, signer: Ed25519PrivateKey = SIGNER
+) -> dict:
+    """DID document in the anchor service's resolve shape."""
     return {
         "doc": {"id": DID},
         "version": "4",
@@ -91,7 +94,7 @@ def _snapshot(revoked_at_ms: int | None = None) -> dict:
             {
                 "kid": KID,
                 "type": "Ed25519",
-                "publicKeyHex": to_hex(SIGNER.public_key().public_bytes_raw()),
+                "publicKeyHex": to_hex(signer.public_key().public_bytes_raw()),
                 "revokedAtMs": revoked_at_ms,
             },
             {
@@ -240,6 +243,16 @@ def _drop_sig(b: dict) -> dict:
 
 def _fetch(record: Any):
     return lambda anchor: copy.deepcopy(record)
+
+
+def _registry(doc: dict | None = None):
+    """Trusted DID resolver serving the issuer's real document."""
+    docs = {DID: _snapshot() if doc is None else doc}
+    return lambda did: copy.deepcopy(docs.get(did))
+
+
+def _boom(*_args):
+    raise OSError("registry unreachable")
 
 
 @pytest.fixture(scope="module")
@@ -419,14 +432,38 @@ def test_raw_that_does_not_parse(vectors):
 
 
 def test_envelope_step_producer_signed(vectors, syn):
-    ladder = bundle.verify(syn.bundle, _cfg(vectors))
+    ladder = bundle.verify(syn.bundle, _cfg(vectors), resolve_did=_registry())
     assert _ok(ladder) == "TTTTN PARTIAL"
     assert verdicts.PRODUCER_SIGNED in _step(ladder, "envelope").detail
 
 
+def test_envelope_needs_trusted_resolver(vectors, syn):
+    """The bundle's own snapshot never turns step 4 green."""
+    ladder = bundle.verify(syn.bundle, _cfg(vectors), _fetch(syn.record))
+    assert _ok(ladder) == "TTTNT PARTIAL"
+    assert _step(ladder, "envelope").detail == bundle.UNRESOLVED_SIGNER
+    for registry in (lambda did: None, _boom):
+        step = _step(bundle.verify(syn.bundle, _cfg(vectors), resolve_did=registry), "envelope")
+        assert (step.ok, step.detail) == (None, bundle.UNRESOLVED_SIGNER)
+
+
+def test_self_made_snapshot_is_not_trusted(vectors):
+    """A forger signs with their own key and ships a snapshot listing that key."""
+    forger = ATTACKERS[0]
+    s = _synthetic(vectors, _envelope(sign_key=forger), snapshot=_snapshot(signer=forger))
+    assert s.bundle["envelope"]["verdict"] == verdicts.PRODUCER_SIGNED  # against its own snapshot
+    alone = bundle.verify(s.bundle, _cfg(vectors), _fetch(s.record))
+    assert _ok(alone) == "TTTNT PARTIAL"
+    resolved = bundle.verify(s.bundle, _cfg(vectors), _fetch(s.record), _registry())
+    assert _ok(resolved) == "TTTFT INVALID"
+    assert verdicts.FORGED in _step(resolved, "envelope").detail
+
+
 def test_envelope_step_relay_attested(vectors):
     s = _synthetic(vectors, _envelope(att_mode="relay", att_sub="kc-user-1"))
-    assert _step(bundle.verify(s.bundle, _cfg(vectors)), "envelope").ok is True
+    step = _step(bundle.verify(s.bundle, _cfg(vectors), resolve_did=_registry()), "envelope")
+    assert step.ok is True
+    assert verdicts.RELAY_ATTESTED in step.detail
 
 
 def test_envelope_forged_ignores_claimed_verdict(vectors):
@@ -435,40 +472,82 @@ def test_envelope_forged_ignores_claimed_verdict(vectors):
     lie = EnvelopeCheck(verdicts.PRODUCER_SIGNED, DID, KID, 1, NOW_MS, None)
     s = _synthetic(vectors, forged, claimed=lie)
     assert s.bundle["envelope"]["verdict"] == verdicts.PRODUCER_SIGNED
-    ladder = bundle.verify(s.bundle, _cfg(vectors), _fetch(s.record))
+    ladder = bundle.verify(s.bundle, _cfg(vectors), _fetch(s.record), _registry())
     assert _ok(ladder) == "TTTFT INVALID"
     assert verdicts.FORGED in _step(ladder, "envelope").detail
 
 
-def test_envelope_signed_by_key_missing_from_snapshot(vectors):
+def test_key_independent_failures_need_no_resolver(vectors):
+    """Malformed envelopes and tag or kid mismatches are red even without a registry."""
+    retagged = envelope.seal(
+        "LLO-K8s", {"event": "x"}, iss=DID, kid=KID, sign_key=SIGNER, seq=1,
+        att_mode="producer", now_ms=NOW_MS, nonce=bytes(range(16)),
+    )
+    step = _step(bundle.verify(_synthetic(vectors, retagged).bundle, _cfg(vectors)), "envelope")
+    assert step.ok is False and verdicts.FORGED in step.detail
+    foreign_kid = _synthetic(vectors, _envelope(kid="did:iota:testnet:0xother#sig-1"))
+    assert _step(bundle.verify(foreign_kid.bundle, _cfg(vectors)), "envelope").ok is False
+    malformed = _envelope()
+    malformed["seq"] = "1"
+    step = _step(bundle.verify(_synthetic(vectors, malformed).bundle, _cfg(vectors)), "envelope")
+    assert step.ok is False and verdicts.MALFORMED in step.detail
+
+
+def test_key_missing_from_resolved_document(vectors):
     other = Ed25519PrivateKey.from_private_bytes(b"\x0c" * 32)
     s = _synthetic(vectors, _envelope(sign_key=other))
-    assert _step(bundle.verify(s.bundle, _cfg(vectors)), "envelope").ok is False
+    step = _step(bundle.verify(s.bundle, _cfg(vectors), resolve_did=_registry()), "envelope")
+    assert step.ok is False
+    doc = _snapshot()
+    doc["keys"] = doc["keys"][1:]  # only the X25519 key left
+    step = _step(bundle.verify(s.bundle, _cfg(vectors), resolve_did=_registry(doc)), "envelope")
+    assert step.ok is False
 
 
-def test_envelope_without_snapshot_is_not_evaluated(vectors, syn):
+def test_resolved_document_must_belong_to_issuer(vectors, syn):
+    doc = _snapshot()
+    doc["doc"]["id"] = "did:iota:testnet:0xother"
+    step = _step(bundle.verify(syn.bundle, _cfg(vectors), resolve_did=lambda did: doc), "envelope")
+    assert (step.ok, step.detail) == (False, "resolved DID document does not belong to the issuer")
+    for bad in ({"doc": {"id": DID}, "keys": "nope"}, {"keys": []}, [], "x"):
+        ladder = bundle.verify(syn.bundle, _cfg(vectors), resolve_did=lambda did, d=bad: d)
+        assert _step(ladder, "envelope").ok is False, bad
+
+
+def test_snapshot_must_match_resolved_document(vectors):
+    """Honest signature under the registry key, but the bundle snapshot shows another key."""
+    s = _synthetic(vectors, _envelope(), snapshot=_snapshot(signer=ATTACKERS[1]))
+    step = _step(bundle.verify(s.bundle, _cfg(vectors), resolve_did=_registry()), "envelope")
+    assert (step.ok, step.detail) == (False, "DID snapshot does not match resolved document")
+    for snap in ({"keys": "nope"}, {"doc": {"id": DID}, "keys": []}):
+        b = copy.deepcopy(s.bundle)
+        b["envelope"]["didDoc"] = snap
+        step = _step(bundle.verify(b, _cfg(vectors), resolve_did=_registry()), "envelope")
+        assert step.ok is False, snap
+
+
+def test_envelope_without_snapshot_uses_registry(vectors, syn):
     b = copy.deepcopy(syn.bundle)
     b["envelope"]["didDoc"] = None
-    step = _step(bundle.verify(b, _cfg(vectors)), "envelope")
-    assert step.ok is None
-    b["envelope"] = None
     assert _step(bundle.verify(b, _cfg(vectors)), "envelope").ok is None
+    assert _step(bundle.verify(b, _cfg(vectors), resolve_did=_registry()), "envelope").ok is True
+    b["envelope"] = None
+    assert _step(bundle.verify(b, _cfg(vectors), resolve_did=_registry()), "envelope").ok is True
 
 
-def test_envelope_malformed_snapshot(vectors, syn):
-    b = copy.deepcopy(syn.bundle)
-    b["envelope"]["didDoc"] = {"keys": "nope"}
-    assert _step(bundle.verify(b, _cfg(vectors)), "envelope").ok is False
-
-
-def test_envelope_revocation_is_time_aware(vectors):
+def test_envelope_revocation_is_time_aware(vectors, syn):
     ms_time_ms = (vectors("milestones")[-1]["timestamp"] + 5) * 1000
-    before = _synthetic(vectors, _envelope(), snapshot=_snapshot(revoked_at_ms=ms_time_ms - 1))
-    step = _step(bundle.verify(before.bundle, _cfg(vectors)), "envelope")
-    assert step.ok is False
-    assert verdicts.REVOKED_KEY in step.detail
-    after = _synthetic(vectors, _envelope(), snapshot=_snapshot(revoked_at_ms=ms_time_ms + 1000))
-    assert _step(bundle.verify(after.bundle, _cfg(vectors)), "envelope").ok is True
+    revoked = _registry(_snapshot(revoked_at_ms=ms_time_ms - 1))
+    step = _step(bundle.verify(syn.bundle, _cfg(vectors), resolve_did=revoked), "envelope")
+    assert (step.ok, step.detail) == (False, "key revoked before inclusion")
+    for later in (ms_time_ms, ms_time_ms + 1000):
+        registry = _registry(_snapshot(revoked_at_ms=later))
+        ladder = bundle.verify(syn.bundle, _cfg(vectors), resolve_did=registry)
+        assert _step(ladder, "envelope").ok is True, later
+    # Revocation is read from the registry, not from the bundle's snapshot.
+    s = _synthetic(vectors, _envelope(), snapshot=_snapshot(revoked_at_ms=ms_time_ms - 1))
+    ladder = bundle.verify(s.bundle, _cfg(vectors), resolve_did=_registry())
+    assert _step(ladder, "envelope").ok is True
 
 
 def test_snapshot_resolver_shapes():
@@ -503,17 +582,19 @@ def test_anchor_membership(vectors, syn):
         calls.append(anchor)
         return dict(syn.record)
 
-    ladder = bundle.verify(syn.bundle, _cfg(vectors), fetch)
+    ladder = bundle.verify(syn.bundle, _cfg(vectors), fetch, _registry())
     assert _ok(ladder) == "TTTTT VALID"
     assert calls and calls[0]["rebased"] == REBASED
     assert len(syn.window) == 5 and syn.milestone_id in syn.window
-    by_checkpoint = bundle.verify(syn.bundle, _cfg(vectors), _fetch({"checkpoint": syn.checkpoint}))
+    by_checkpoint = bundle.verify(
+        syn.bundle, _cfg(vectors), _fetch({"checkpoint": syn.checkpoint}), _registry()
+    )
     assert _ok(by_checkpoint) == "TTTTT VALID"
 
 
 def test_anchor_mismatch(vectors, syn):
     other = {**syn.checkpoint, "msRoot": to_hex(b"\x42" * 32)}
-    ladder = bundle.verify(syn.bundle, _cfg(vectors), _fetch({"checkpoint": other}))
+    ladder = bundle.verify(syn.bundle, _cfg(vectors), _fetch({"checkpoint": other}), _registry())
     assert _ok(ladder) == "TTTTF INVALID"
     assert _step(ladder, "anchor").detail == "checkpoint does not match on-chain record"
     by_hash = {"checkpointHash": to_hex(checkpoint.hash(other))}
@@ -526,7 +607,7 @@ def test_anchor_not_in_window(vectors):
     real = [from_hex(m["milestoneId"]) for m in vectors("milestones")]
     # Same index range, but the anchored id at 374 is a different milestone.
     s = _synthetic(vectors, _envelope(), window_override=[*real, blake2b256(b"other 374")])
-    ladder = bundle.verify(s.bundle, _cfg(vectors), _fetch(s.record))
+    ladder = bundle.verify(s.bundle, _cfg(vectors), _fetch(s.record), _registry())
     assert _ok(ladder) == "TTTTF INVALID"
     assert _step(ladder, "anchor").detail == "milestone not in anchored checkpoint"
     # A window that ends before our milestone.
@@ -540,7 +621,7 @@ def test_anchor_not_in_window(vectors):
 
 
 def test_anchor_unavailable(vectors, syn):
-    ladder = bundle.verify(syn.bundle, _cfg(vectors), _fetch(None))
+    ladder = bundle.verify(syn.bundle, _cfg(vectors), _fetch(None), _registry())
     assert _ok(ladder) == "TTTTN PARTIAL"
     assert _step(ladder, "anchor").detail == "anchor record unavailable"
 
@@ -623,9 +704,13 @@ def _paths(obj: Any, prefix: tuple = ()) -> list[tuple]:
 
 
 @settings(max_examples=_EXAMPLES, deadline=None)
-@given(st.dictionaries(st.sampled_from(_TOP) | st.text(max_size=6), _json, max_size=8), _json)
-def test_verify_never_raises(vectors, d, record):
-    ladder = bundle.verify(d, _cfg(vectors), _fetch(record))
+@given(
+    st.dictionaries(st.sampled_from(_TOP) | st.text(max_size=6), _json, max_size=8),
+    _json,
+    _json,
+)
+def test_verify_never_raises(vectors, d, record, doc):
+    ladder = bundle.verify(d, _cfg(vectors), _fetch(record), lambda did: copy.deepcopy(doc))
     assert isinstance(ladder, Ladder)
     assert [s.name for s in ladder.steps] == STEPS
 
@@ -643,7 +728,8 @@ def test_verify_never_raises_on_mutated_bundle(vectors, syn, data):
     else:
         target[path[-1]] = data.draw(_json)
     record = data.draw(st.sampled_from([syn.record, None]) | _json)
-    ladder = bundle.verify(b, _cfg(vectors), _fetch(record))
+    doc = data.draw(st.sampled_from([_snapshot(), None]) | _json)
+    ladder = bundle.verify(b, _cfg(vectors), _fetch(record), lambda did: copy.deepcopy(doc))
     assert isinstance(ladder, Ladder)
     assert ladder.overall in ("VALID", "INVALID", "PARTIAL")
 
@@ -661,13 +747,16 @@ def _config_json(cfg: VerifierConfig) -> dict:
     }
 
 
-def _case(name: str, b: dict, cfg: VerifierConfig, fetcher: Any, expect: str) -> dict:
+def _case(
+    name: str, b: dict, cfg: VerifierConfig, fetcher: Any, resolver: str | None, expect: str
+) -> dict:
     marks, overall = expect.split()
     return {
         "name": name,
         "bundle": b,
         "config": _config_json(cfg),
         "fetcher": fetcher,
+        "resolver": resolver,
         "expected": {
             "overall": overall,
             "steps": [
@@ -675,6 +764,18 @@ def _case(name: str, b: dict, cfg: VerifierConfig, fetcher: Any, expect: str) ->
                 for n, m in zip(STEPS, marks, strict=True)
             ],
         },
+    }
+
+
+def _registries(vectors) -> dict[str, dict[str, dict]]:
+    """Trusted DID registries the cases refer to by name: {name: {did: resolve doc}}."""
+    ms_time_ms = (vectors("milestones")[-1]["timestamp"] + 5) * 1000
+    wrong_issuer = _snapshot()
+    wrong_issuer["doc"]["id"] = "did:iota:testnet:0xother"
+    return {
+        "registry": {DID: _snapshot()},
+        "registry_key_revoked": {DID: _snapshot(revoked_at_ms=ms_time_ms - 1)},
+        "registry_wrong_issuer": {DID: wrong_issuer},
     }
 
 
@@ -688,37 +789,66 @@ def _cases(vectors) -> list[dict]:
         {**env, "body": {"score": 0.99, "id": "MyDomain:fa163e5e25ef"}},
         claimed=EnvelopeCheck(verdicts.PRODUCER_SIGNED, DID, KID, 1, NOW_MS, None),
     )
+    forger = ATTACKERS[0]
+    self_made = _synthetic(vectors, _envelope(sign_key=forger), snapshot=_snapshot(signer=forger))
+    stale_snapshot = _synthetic(vectors, env, snapshot=_snapshot(signer=ATTACKERS[1]))
     real = [from_hex(m["milestoneId"]) for m in vectors("milestones")]
     outside = _synthetic(vectors, env, window_override=[*real, blake2b256(b"other 374")])
     mismatch = {"checkpoint": {**good.checkpoint, "msRoot": to_hex(b"\x42" * 32)}}
+    untrusted = _cfg(vectors, trusted_coordinator_keys=ATTACKER_PUBS)
+    reg = "registry"
     return [
-        _case("valid_anchored", b, cfg, rec, "TTTTT VALID"),
-        _case("partial_real_no_anchor", _real_bundle(vectors), cfg, None, "TTTNN PARTIAL"),
-        _case("anchor_unreachable", b, cfg, {"record": None}, "TTTTN PARTIAL"),
-        _case("raw_byte_flipped", _flip_raw(b), cfg, rec, "FTTTT INVALID"),
-        _case("path_hash_corrupted", _corrupt_path(b), cfg, rec, "TFTTT INVALID"),
-        _case("signature_corrupted", _corrupt_sig(b), cfg, rec, "TTFTT INVALID"),
-        _case("one_signature_threshold_2", _drop_sig(b), cfg, rec, "TTFTT INVALID"),
+        _case("valid_anchored", b, cfg, rec, reg, "TTTTT VALID"),
+        _case("partial_real_no_anchor", _real_bundle(vectors), cfg, None, None, "TTTNN PARTIAL"),
+        _case("anchor_unreachable", b, cfg, {"record": None}, reg, "TTTTN PARTIAL"),
+        _case("signer_unresolved", b, cfg, rec, None, "TTTNT PARTIAL"),
+        _case("raw_byte_flipped", _flip_raw(b), cfg, rec, reg, "FTTTT INVALID"),
+        _case("path_hash_corrupted", _corrupt_path(b), cfg, rec, reg, "TFTTT INVALID"),
+        _case("signature_corrupted", _corrupt_sig(b), cfg, rec, reg, "TTFTT INVALID"),
+        _case("one_signature_threshold_2", _drop_sig(b), cfg, rec, reg, "TTFTT INVALID"),
+        _case("untrusted_key_set", b, untrusted, rec, reg, "TTFTT INVALID"),
         _case(
-            "untrusted_key_set",
-            b,
-            _cfg(vectors, trusted_coordinator_keys=ATTACKER_PUBS),
-            rec,
-            "TTFTT INVALID",
+            "envelope_forged", forged.bundle, cfg, {"record": forged.record}, reg, "TTTFT INVALID"
         ),
-        _case("envelope_forged", forged.bundle, cfg, {"record": forged.record}, "TTTFT INVALID"),
-        _case("anchor_mismatch", b, cfg, {"record": mismatch}, "TTTTF INVALID"),
+        _case(
+            "self_made_snapshot_unresolved",
+            self_made.bundle,
+            cfg,
+            {"record": self_made.record},
+            None,
+            "TTTNT PARTIAL",
+        ),
+        _case(
+            "self_made_snapshot_resolved",
+            self_made.bundle,
+            cfg,
+            {"record": self_made.record},
+            reg,
+            "TTTFT INVALID",
+        ),
+        _case(
+            "snapshot_differs_from_registry",
+            stale_snapshot.bundle,
+            cfg,
+            {"record": stale_snapshot.record},
+            reg,
+            "TTTFT INVALID",
+        ),
+        _case("key_revoked_before_inclusion", b, cfg, rec, "registry_key_revoked", "TTTFT INVALID"),
+        _case("resolved_doc_not_issuer", b, cfg, rec, "registry_wrong_issuer", "TTTFT INVALID"),
+        _case("anchor_mismatch", b, cfg, {"record": mismatch}, reg, "TTTTF INVALID"),
         _case(
             "milestone_not_in_window",
             outside.bundle,
             cfg,
             {"record": outside.record},
+            reg,
             "TTTTF INVALID",
         ),
     ]
 
 
-def _verify_case(case: dict) -> Ladder:
+def _verify_case(case: dict, registries: dict[str, dict[str, dict]]) -> Ladder:
     c = case["config"]
     cfg = VerifierConfig(
         network=c["network"],
@@ -728,16 +858,24 @@ def _verify_case(case: dict) -> Ladder:
         trail_id=c["trailId"],
     )
     fetcher = None if case["fetcher"] is None else _fetch(case["fetcher"]["record"])
-    return bundle.verify(case["bundle"], cfg, fetcher)
+    resolver = None
+    if case["resolver"] is not None:
+        docs = registries[case["resolver"]]
+        resolver = lambda did: copy.deepcopy(docs.get(did))
+    return bundle.verify(case["bundle"], cfg, fetcher, resolver)
 
 
 def test_write_bundle_vectors(vectors):
     data = {
         "description": (
-            "witness-proof/v1 bundles. For each case run verify(bundle, config, fetcher): "
-            "fetcher null = no anchor fetcher; otherwise the fetcher returns fetcher.record "
-            "(null = record unavailable). Compare ok per step (null = not evaluated) and overall."
+            "witness-proof/v1 bundles. For each case run "
+            "verify(bundle, config, fetcher, resolver). fetcher null = no anchor fetcher; "
+            "otherwise the fetcher returns fetcher.record (null = record unavailable). "
+            "resolver null = no trusted DID resolver; otherwise resolve(did) returns "
+            "resolvers[resolver][did] or null when absent. Compare ok per step "
+            "(null = not evaluated) and overall."
         ),
+        "resolvers": _registries(vectors),
         "cases": _cases(vectors),
     }
     if not VECTORS.exists() or os.environ.get("WITNESS_REGEN_VECTORS") == "1":
@@ -745,7 +883,7 @@ def test_write_bundle_vectors(vectors):
     stored = json.loads(VECTORS.read_text(encoding="utf-8"))
     assert stored == json.loads(json.dumps(data))
     for case in stored["cases"]:
-        ladder = _verify_case(case)
+        ladder = _verify_case(case, stored["resolvers"])
         got = {
             "overall": ladder.overall,
             "steps": [{"name": s.name, "ok": s.ok} for s in ladder.steps],
