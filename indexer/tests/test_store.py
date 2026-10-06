@@ -428,6 +428,30 @@ async def test_incident_events_ordered_by_time(store: Store):
     assert [e["role"] for e in (await store.incident(iid))["events"]] == ["early", "late"]
 
 
+async def test_incident_correlation_fields(store: Store):
+    iid = await store.put_incident(opened_at_ms=10, severity="high", title="t", ie_id="ie-a",
+                                   keys=["ie:ie-a"], baseline_score=0.9)
+    assert await store.attach_incident_event(iid, bid(1), "trigger", at_ms=10,
+                                             detail={"as": "trust-drop"})
+    assert not await store.attach_incident_event(iid, bid(1), "alert")
+    [inc] = await store.open_incidents(["ie:ie-a", "sc:x"])
+    assert (inc["last_event_ms"], inc["baseline_score"]) == (10, 0.9)
+    await store.update_incident(iid, severity="critical", keys=["ie:ie-a", "sc:x"],
+                                last_event_ms=20)
+    with pytest.raises(ValueError):
+        await store.update_incident(iid, status="closed")
+    assert [i["id"] for i in await store.open_incidents(["sc:x"])] == [iid]
+    assert await store.idle_incidents(20) == []
+    assert [i["id"] for i in await store.idle_incidents(21)] == [iid]
+    assert await store.close_incident(iid, "closed:quiet", closed_at_ms=30)
+    assert not await store.close_incident(iid, "closed:recovered", closed_at_ms=31)
+    assert await store.open_incidents(["ie:ie-a"]) == []
+    [held] = await store.incidents_with_block(bid(1))
+    assert (held["id"], held["status"], held["event_role"]) == (iid, "closed:quiet", "trigger")
+    [ev] = await store.incident_timeline(iid)
+    assert (ev["role"], ev["at_ms"], ev["detail"]) == ("trigger", 10, {"as": "trust-drop"})
+
+
 async def test_child_task_cannot_use_pinned_connection(store: Store):
     async with store.transaction():
         await store.put_message(row(1))

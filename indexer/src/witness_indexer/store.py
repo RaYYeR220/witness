@@ -219,6 +219,11 @@ class Store:
             finally:
                 _PIN.reset(token)
 
+    def in_transaction(self) -> bool:
+        """True inside a Store.transaction() opened by (or inherited from) this task."""
+        pin = _PIN.get()
+        return pin is not None and pin[0] is self
+
     @asynccontextmanager
     async def savepoint(self) -> AsyncIterator[None]:
         """Inside Store.transaction(), a savepoint: an exception escaping the block undoes only
@@ -519,6 +524,22 @@ class Store:
             eid = (await cur.fetchone())["id"]
             await c.execute("SELECT pg_notify(%s, %s)", (NOTIFY_CHANNEL, str(eid)))
         return eid
+
+    async def emit_lock(self) -> None:
+        """Take emit()'s per-schema lock now; it is held until the surrounding transaction
+        ends. A writer that reads, decides and then emits takes it first, so two writers never
+        decide on the same state and there is no second lock to order against emit's."""
+        await self._fetch("SELECT pg_advisory_xact_lock(hashtext(%s))",
+                          (f"{self.schema}:emit",))
+
+    async def last_event_id(self) -> int:
+        row = await self._one("SELECT COALESCE(max(id), 0) AS id FROM events")
+        return row["id"] if row else 0
+
+    async def events_of_type_after(self, type: str, id: int, limit: int) -> list[dict]:
+        return await self._fetch(
+            "SELECT id, type, payload, ts FROM events WHERE id > %s AND type = %s "
+            "ORDER BY id LIMIT %s", (id, type, limit))
 
     async def events_after(self, id: int, limit: int) -> list[dict]:
         return await self._fetch(
@@ -887,18 +908,111 @@ class Store:
 
     async def put_incident(self, *, opened_at_ms: int, severity: str, title: str,
                            ie_id: str | None = None, status: str = "open",
-                           closed_at_ms: int | None = None) -> int:
+                           closed_at_ms: int | None = None, keys: list[str] | None = None,
+                           last_event_ms: int | None = None,
+                           baseline_score: float | None = None,
+                           baseline_block_id: bytes | None = None,
+                           low_score: float | None = None) -> int:
         rows = await self._fetch(
-            "INSERT INTO incidents (opened_at_ms, closed_at_ms, ie_id, severity, title, status) "
-            "VALUES (%s,%s,%s,%s,%s,%s) RETURNING id",
-            (opened_at_ms, closed_at_ms, ie_id, severity, title, status))
+            "INSERT INTO incidents (opened_at_ms, closed_at_ms, ie_id, severity, title, status, "
+            "keys, last_event_ms, baseline_score, baseline_block_id, low_score, updated_at_ms) "
+            "VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s) RETURNING id",
+            (opened_at_ms, closed_at_ms, ie_id, severity, title, status, keys or [],
+             opened_at_ms if last_event_ms is None else last_event_ms, baseline_score,
+             baseline_block_id, low_score, _now_ms()))
         return rows[0]["id"]
 
-    async def attach_incident_event(self, incident_id: int, block_id: bytes, role: str) -> None:
-        await self._insert(
-            "INSERT INTO incident_events (incident_id, block_id, role, attached_at_ms) "
-            "VALUES (%s,%s,%s,%s) ON CONFLICT DO NOTHING",
-            (incident_id, block_id, role, _now_ms()))
+    async def attach_incident_event(self, incident_id: int, block_id: bytes, role: str, *,
+                                    at_ms: int | None = None,
+                                    detail: dict | None = None) -> bool:
+        """False when the block is already part of the incident."""
+        return await self._insert(
+            "INSERT INTO incident_events (incident_id, block_id, role, attached_at_ms, at_ms, "
+            "detail) VALUES (%s,%s,%s,%s,%s,%s) ON CONFLICT DO NOTHING",
+            (incident_id, block_id, role, _now_ms(), at_ms, _jb(detail)))
+
+    _INCIDENT_FIELDS = frozenset({
+        "severity", "title", "ie_id", "keys", "last_event_ms", "baseline_score",
+        "baseline_block_id", "low_score"})
+
+    async def update_incident(self, id: int, **fields: Any) -> None:
+        """Set correlation fields of an incident (see `_INCIDENT_FIELDS`)."""
+        unknown = set(fields) - self._INCIDENT_FIELDS
+        if unknown:
+            raise ValueError(f"not an updatable incident field: {sorted(unknown)}")
+        if not fields:
+            return
+        cols = sorted(fields)  # names from the fixed set above, safe to splice in
+        assign = ", ".join(f"{c} = %s" for c in cols)
+        await self._fetch(
+            f"UPDATE incidents SET {assign}, updated_at_ms = %s WHERE id = %s RETURNING id",
+            [*(fields[c] for c in cols), _now_ms(), id])
+
+    async def close_incident(self, id: int, status: str, *, closed_at_ms: int,
+                             closed_by: bytes | None = None) -> bool:
+        """Close an open incident; False if it was not open."""
+        return await self._insert_like(
+            "UPDATE incidents SET status = %s, closed_at_ms = %s, closed_by = %s, "
+            "updated_at_ms = %s WHERE id = %s AND status = 'open'",
+            (status, closed_at_ms, closed_by, _now_ms(), id))
+
+    async def open_incidents(self, keys: list[str]) -> list[dict]:
+        """Open incidents sharing at least one key, most recently active first."""
+        return await self._fetch(
+            "SELECT * FROM incidents WHERE status = 'open' AND keys && %s::text[] "
+            "ORDER BY last_event_ms DESC NULLS LAST, id DESC LIMIT 50", (keys,))
+
+    async def idle_incidents(self, before_ms: int, limit: int = 500) -> list[dict]:
+        """Open incidents whose latest event is older than `before_ms`."""
+        return await self._fetch(
+            "SELECT * FROM incidents WHERE status = 'open' "
+            "AND COALESCE(last_event_ms, opened_at_ms) < %s ORDER BY id LIMIT %s",
+            (before_ms, limit))
+
+    async def incidents_with_block(self, block_id: bytes) -> list[dict]:
+        """Incidents the block is an event of, open ones first, then newest."""
+        return await self._fetch(
+            "SELECT i.*, e.role AS event_role FROM incident_events e "
+            "JOIN incidents i ON i.id = e.incident_id WHERE e.block_id = %s "
+            "ORDER BY (i.status = 'open') DESC, i.id DESC", (block_id,))
+
+    async def link_incident_alert(self, alert_id: int, incident_id: int, at_ms: int) -> bool:
+        """False if the alert already belongs to an incident."""
+        return await self._insert(
+            "INSERT INTO incident_alerts (alert_id, incident_id, attached_at_ms) "
+            "VALUES (%s,%s,%s) ON CONFLICT DO NOTHING", (alert_id, incident_id, at_ms))
+
+    async def incident_alert_linked(self, alert_id: int) -> bool:
+        return await self._one(
+            "SELECT 1 AS x FROM incident_alerts WHERE alert_id = %s", (alert_id,)) is not None
+
+    async def incident_alerts(self, incident_id: int) -> list[dict]:
+        return await self._fetch(
+            "SELECT a.id, a.rule, a.severity, a.block_id, a.ie_id, a.evidence, a.ts "
+            "FROM incident_alerts l JOIN alerts a ON a.id = l.alert_id "
+            "WHERE l.incident_id = %s ORDER BY a.ts, a.id", (incident_id,))
+
+    async def incident_timeline(self, incident_id: int) -> list[dict]:
+        """The incident's events in time order, each with what the database knows about its
+        block: message fields and the latest lifecycle status."""
+        return await self._fetch(
+            "SELECT e.block_id, e.role, e.at_ms, e.attached_at_ms, e.detail, m.tag, m.kind, "
+            "m.verdict, m.ie_id, m.iss, m.ms_index, m.ts, m.status AS message_status, "
+            "(m.block_id IS NOT NULL) AS indexed, "
+            "(SELECT l.status FROM lifecycle l WHERE l.block_id = e.block_id "
+            " ORDER BY l.at_ms DESC, l.id DESC LIMIT 1) AS lifecycle_status "
+            "FROM incident_events e LEFT JOIN messages m ON m.block_id = e.block_id "
+            "WHERE e.incident_id = %s ORDER BY COALESCE(e.at_ms, m.received_at_ms, "
+            "m.confirmed_at_ms, m.ts * 1000) NULLS LAST, e.attached_at_ms, e.block_id",
+            (incident_id,))
+
+    async def alerts_after(self, after_id: int, severities: list[str],
+                           limit: int) -> list[dict]:
+        """Alerts with an id above `after_id` and one of `severities`, in id order."""
+        return await self._fetch(
+            "SELECT id, rule, severity, block_id, ie_id, evidence, ts, dedupe_key FROM alerts "
+            "WHERE id > %s AND severity = ANY(%s::text[]) ORDER BY id LIMIT %s",
+            (after_id, severities, limit))
 
     async def incidents(self, f: dict | None = None, limit: int = 200) -> list[dict]:
         f = f or {}
@@ -921,5 +1035,6 @@ class Store:
         inc["events"] = await self._fetch(
             "SELECT e.block_id, e.role FROM incident_events e "
             "LEFT JOIN messages m ON m.block_id = e.block_id WHERE e.incident_id = %s "
-            "ORDER BY COALESCE(m.received_at_ms, m.confirmed_at_ms, m.ts * 1000) NULLS LAST, e.attached_at_ms, e.block_id", (id,))
+            "ORDER BY COALESCE(e.at_ms, m.received_at_ms, m.confirmed_at_ms, m.ts * 1000) "
+            "NULLS LAST, e.attached_at_ms, e.block_id", (id,))
         return inc

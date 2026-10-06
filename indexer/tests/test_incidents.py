@@ -1,0 +1,594 @@
+import asyncio
+import dataclasses
+import itertools
+import json
+import os
+import unicodedata
+import uuid
+from urllib.parse import urlsplit
+
+import pytest
+from witness_core import schema
+from witness_core import verdicts as V
+from witness_core.ids import blake2b256, to_hex
+from witness_indexer import events
+from witness_indexer.incidents import (
+    CorrelatedRules,
+    IncidentConfig,
+    IncidentEngine,
+    MqttAlertPublisher,
+    component_key,
+)
+from witness_indexer.orion import OrionUnavailable
+from witness_indexer.rules import SEVERITY
+from witness_indexer.store import Alert, MessageRow, Store, Submission
+
+URN = "urn:ngsi-ld:InfrastructureElement:"
+IE_X = "MyDomain:fa163e5e25ef"
+IE_Y = "MyDomain:fa163e5e25f0"
+IE_Z = "Edge:001122334455"
+SC = "urn:ngsi-ld:Service:0a1b:Component:web"
+SC_K8S = "urn-ngsi-ld-service-0a1b-component-web"  # the LLO reports the k8s resource name
+T0 = 1_791_280_000  # seconds
+_blocks = itertools.count(1)
+
+
+def row(tag: str, body: dict, *, ms: int, verdict: str = V.PRODUCER_SIGNED,
+        ts: int | None = None) -> MessageRow:
+    data = json.dumps(body).encode()
+    c = schema.classify(tag, data)
+    return MessageRow(
+        block_id=blake2b256(data + next(_blocks).to_bytes(8, "big")), tag=tag, kind=c.kind,
+        data=data, json=c.json, ie_id=c.ie_id, verdict=verdict, ms_index=ms, wf_index=0,
+        ts=T0 + 30 * ms if ts is None else ts)
+
+
+def score(value: float, *, ms: int, ie: str = IE_X, **kw) -> MessageRow:
+    return row("trust.score", {"score": value, "id": ie}, ms=ms, **kw)
+
+
+def so_error(code, *, ms: int, ie: str = IE_X, **kw) -> MessageRow:
+    return row("self-orchestrator", {"infrastructureElementId": URN + ie, "errorCode": code},
+               ms=ms, **kw)
+
+
+def llo(event: str, *, ms: int, sc: str = SC_K8S, **kw) -> MessageRow:
+    return row("LLO-K8s", {"event": event, "lloId": "llo-k8s-domain1",
+                           "serviceComponentId": sc}, ms=ms, **kw)
+
+
+def security(*, ms: int, ie: str = IE_X, **kw) -> MessageRow:
+    return row("self-security", {"infrastructureElementId": URN + ie,
+                                 "alert": "ET SCAN Nmap Scripting Engine", "priority": 1},
+               ms=ms, **kw)
+
+
+async def store_row(store: Store, r: MessageRow, *, submitted: bool = False,
+                    alerts: tuple[str, ...] = ()) -> None:
+    if submitted:
+        await store.put_submission(Submission(
+            sub_id=f"sub-{r.block_id.hex()[:16]}", source="mqtt",
+            received_at_ms=r.ts * 1000 - 500, tag=r.tag, block_id=r.block_id,
+            hornet_status=201))
+    await store.put_message(r)
+    for rule in alerts:
+        await store.put_alert(Alert(rule, SEVERITY[rule], r.block_id, r.ie_id,
+                                    {"reason": f"test {rule}"}, r.ts * 1000))
+
+
+async def feed(store: Store, eng: IncidentEngine, r: MessageRow, **kw) -> list[dict]:
+    await store_row(store, r, **kw)
+    return await eng.on_message(r)
+
+
+class FakePublisher:
+    def __init__(self) -> None:
+        self.sent: list[tuple[str, dict]] = []
+        self.fail = False
+
+    async def publish(self, topic: str, payload: bytes) -> None:
+        if self.fail:
+            raise ConnectionError("broker refused the connection")
+        self.sent.append((topic, json.loads(payload)))
+
+
+class FakeOrion:
+    def __init__(self, hosts: dict[str, str]) -> None:
+        self.hosts = hosts
+        self.down = False
+        self.calls = 0
+
+    async def service_component_hosts(self) -> dict[str, str]:
+        self.calls += 1
+        if self.down:
+            raise OrionUnavailable("Orion unreachable: refused")
+        return dict(self.hosts)
+
+
+@pytest.fixture
+def pub() -> FakePublisher:
+    return FakePublisher()
+
+
+@pytest.fixture
+def engine(store: Store, pub: FakePublisher) -> IncidentEngine:
+    return IncidentEngine(store, FakeOrion({SC: IE_X}), IncidentConfig(), pub)
+
+
+def actions(changes: list[dict]) -> list[str]:
+    return [c["action"] for c in changes]
+
+
+async def incident_events(store: Store) -> list[dict]:
+    return [e for e in await store.events_after(0, 1000) if e["type"] == events.INCIDENT]
+
+
+# -- the aeriOS scenario --------------------------------------------------------------------------
+
+async def test_aerios_incident_is_one_timeline_closed_on_recovery(store, engine, pub):
+    # The pipeline calls the engine inside each milestone transaction; the Orion component
+    # map is loaded beforehand by the periodic pass, and alerts go out after the commit.
+    await engine.periodic(now_ms=(T0 + 300) * 1000)
+
+    async def milestone(r: MessageRow, **kw) -> list[dict]:
+        async with store.transaction():
+            changes = await feed(store, engine, r, **kw)
+        await engine.flush()
+        return changes
+
+    assert await milestone(score(0.9, ms=10)) == []  # the pre-incident level
+    sec = security(ms=11, verdict=V.UNSIGNED_LEGACY)
+    assert actions(await milestone(sec, submitted=True)) == ["opened"]
+    drop = score(0.5, ms=12)
+    assert actions(await milestone(drop)) == ["attached"]
+    err = so_error("isolate-ie", ms=13)
+    assert actions(await milestone(err)) == ["attached"]
+    failed = llo("Service component failed", ms=14)
+    assert actions(await milestone(failed)) == ["attached"]
+    assert await milestone(score(0.6, ms=15)) == []  # still below the pre-incident level
+    recovered = score(0.92, ms=16)
+    assert actions(await milestone(recovered)) == ["attached", "closed"]
+
+    [inc] = await store.incidents()
+    assert inc["status"] == "closed:recovered"
+    assert inc["ie_id"] == IE_X and inc["severity"] == "high"
+    assert inc["closed_by"] == recovered.block_id
+    assert IE_X in inc["title"]
+
+    tl = await engine.timeline(inc["id"])
+    assert [e["role"] for e in tl["events"]] == [
+        "trigger", "trust-drop", "security", "deployment", "remediation"]
+    assert [e["blockId"] for e in tl["events"]] == [
+        to_hex(r.block_id) for r in (sec, drop, err, failed, recovered)]
+    assert tl["incident"]["status"] == "closed:recovered"
+
+    stored = await incident_events(store)
+    assert [e["payload"]["action"] for e in stored] == [
+        "opened", "attached", "attached", "attached", "attached", "closed"]
+    assert [p["action"] for _, p in pub.sent] == [e["payload"]["action"] for e in stored]
+    assert {t for t, _ in pub.sent} == {"witness/alerts/high"}
+    assert all(p["incidentId"] == inc["id"] for _, p in pub.sent)
+    assert pub.sent[-1][1]["status"] == "closed:recovered"
+
+
+async def test_unrelated_ie_gets_its_own_incident(store, engine):
+    await feed(store, engine, score(0.9, ms=10))
+    await feed(store, engine, score(0.9, ms=10, ie=IE_Y))
+    assert actions(await feed(store, engine, score(0.4, ms=11))) == ["opened"]
+    assert actions(await feed(store, engine, score(0.3, ms=12, ie=IE_Y))) == ["opened"]
+    assert actions(await feed(store, engine, so_error("restart", ms=13, ie=IE_Y))) == [
+        "attached"]
+    by_ie = {i["ie_id"]: i for i in await store.incidents()}
+    assert set(by_ie) == {IE_X, IE_Y}
+    x = await engine.timeline(by_ie[IE_X]["id"])
+    y = await engine.timeline(by_ie[IE_Y]["id"])
+    assert [e["role"] for e in x["events"]] == ["trigger"]
+    assert [e["role"] for e in y["events"]] == ["trigger", "security"]
+    assert by_ie[IE_X]["title"] != by_ie[IE_Y]["title"]
+
+
+async def test_events_outside_the_window_start_a_new_incident(store, engine):
+    await feed(store, engine, score(0.9, ms=10))
+    await feed(store, engine, so_error("restart", ms=11))
+    # 11 minutes later: past the 10-minute correlation window
+    late = so_error("restart", ms=11, ts=T0 + 30 * 11 + 660)
+    assert actions(await feed(store, engine, late)) == ["opened"]
+    assert len(await store.incidents()) == 2
+
+
+async def test_small_moves_and_routine_scores_are_not_events(store, engine):
+    await feed(store, engine, score(0.9, ms=10))
+    assert await feed(store, engine, score(0.75, ms=11)) == []  # 0.15 < 0.2
+    assert await feed(store, engine, so_error("0", ms=12)) == []
+    assert await feed(store, engine, so_error(0, ms=13)) == []
+    assert await feed(store, engine, so_error("", ms=14)) == []
+    assert await feed(store, engine, llo("Service component deployed", ms=15)) == []
+    assert await store.incidents() == []
+
+
+# -- what may open, attach and close --------------------------------------------------------------
+
+async def test_forged_and_shadow_blocks_never_open_or_close(store, engine):
+    await feed(store, engine, score(0.9, ms=10))
+    await feed(store, engine, score(0.9, ms=10, ie=IE_Y))
+    # A forged self-orchestrator error for Z and a drop for Y written around the relay open
+    # nothing, even once their alerts are scanned.
+    assert await feed(store, engine, so_error("isolate-ie", ms=11, ie=IE_Z, verdict=V.FORGED),
+                      alerts=("FORGED",)) == []
+    assert await feed(store, engine, score(0.1, ms=11, ie=IE_Y,
+                                           verdict=V.UNSIGNED_LEGACY)) == []
+    await engine.periodic(now_ms=(T0 + 30 * 11) * 1000)
+    assert await store.incidents() == []
+
+    assert actions(await feed(store, engine, score(0.4, ms=12))) == ["opened"]
+    [inc] = await store.incidents()
+    assert inc["severity"] == "high"
+    forged_recovery = score(0.99, ms=13, verdict=V.FORGED)
+    assert actions(await feed(store, engine, forged_recovery, alerts=("FORGED",))) == [
+        "attached", "updated"]
+    shadow_recovery = score(0.97, ms=14)  # signed, but its SHADOW alert is already known
+    assert actions(await feed(store, engine, shadow_recovery, alerts=("SHADOW",))) == [
+        "attached"]
+    unsigned_recovery = score(0.98, ms=15, verdict=V.UNSIGNED_LEGACY)
+    assert actions(await feed(store, engine, unsigned_recovery)) == ["attached"]
+    [inc] = await store.incidents()
+    assert inc["status"] == "open" and inc["severity"] == "critical"
+    roles = {e["blockId"]: e["role"] for e in (await engine.timeline(inc["id"]))["events"]}
+    assert roles[to_hex(forged_recovery.block_id)] == "alert"
+    assert roles[to_hex(shadow_recovery.block_id)] == "alert"
+    assert roles[to_hex(unsigned_recovery.block_id)] == "alert"
+    assert "remediation" not in roles.values()
+
+    real = score(0.93, ms=16)
+    assert actions(await feed(store, engine, real)) == ["attached", "closed"]
+    [inc] = await store.incidents()
+    assert inc["status"] == "closed:recovered" and inc["closed_by"] == real.block_id
+
+
+async def test_forged_evidence_neither_prolongs_nor_reshapes_an_incident(store, engine):
+    await feed(store, engine, score(0.9, ms=10))
+    await feed(store, engine, score(0.4, ms=11))
+    [inc] = await store.incidents()
+    last = inc["last_event_ms"]
+    # forged LLO report claiming a component of X, and a forged error, minutes later
+    forged = llo("Service component failed", ms=12, sc="urn-ngsi-ld-service-ff-component-x",
+                 verdict=V.FORGED, ts=T0 + 330 + 500)
+    await store_row(store, forged)
+    await store.put_alert(Alert("FORGED", "critical", forged.block_id, IE_X, {}, 1))
+    [change] = await engine.on_message(forged)  # joins through its FORGED alert's IE
+    assert (change["action"], change["role"], change["severity"]) == (
+        "attached", "alert", "critical")
+    [inc] = await store.incidents()
+    assert inc["last_event_ms"] == last and inc["keys"] == [f"ie:{IE_X}"]
+    assert actions(await engine.periodic(now_ms=last + 1_800_001)) == ["closed"]
+
+
+async def test_relay_routed_unsigned_events_may_open(store, engine):
+    await feed(store, engine, score(0.9, ms=10, ie=IE_Y))
+    drop = score(0.3, ms=11, ie=IE_Y, verdict=V.UNSIGNED_LEGACY)
+    assert actions(await feed(store, engine, drop, submitted=True)) == ["opened"]
+    # ... but only a PROVEN score closes it
+    up = score(0.95, ms=12, ie=IE_Y, verdict=V.UNSIGNED_LEGACY)
+    assert await feed(store, engine, up, submitted=True) == []
+    [inc] = await store.incidents()
+    assert inc["status"] == "open"
+
+
+async def test_self_orchestrator_error_alone_closes_only_when_quiet(store, engine):
+    await feed(store, engine, score(0.9, ms=10))
+    assert actions(await feed(store, engine, so_error(503, ms=11))) == ["opened"]
+    # a routine score at the pre-incident level is no recovery: nothing dropped
+    assert await feed(store, engine, score(0.9, ms=12)) == []
+    [inc] = await store.incidents()
+    last = inc["last_event_ms"]
+    assert await engine.periodic(now_ms=last + 1_800_000) == []
+    assert actions(await engine.periodic(now_ms=last + 1_800_001)) == ["closed"]
+    [inc] = await store.incidents()
+    assert inc["status"] == "closed:quiet" and inc["closed_at_ms"] == last + 1_800_001
+    assert await engine.periodic(now_ms=last + 9_000_000) == []
+    # the next error starts a new incident
+    assert actions(await feed(store, engine, so_error(503, ms=200))) == ["opened"]
+
+
+async def test_recovery_target_is_the_level_the_first_drop_fell_from(store, engine):
+    await feed(store, engine, score(0.9, ms=10))
+    assert actions(await feed(store, engine, so_error("restart", ms=11))) == ["opened"]
+    assert await feed(store, engine, score(0.95, ms=12)) == []
+    assert actions(await feed(store, engine, score(0.6, ms=13))) == ["attached"]
+    assert await feed(store, engine, score(0.92, ms=14)) == []  # above 0.9, below 0.95
+    assert await feed(store, engine, score(0.78, ms=15)) == []
+    assert await feed(store, engine, score(0.59, ms=16)) == []  # lower, but not a new drop
+    [inc] = await store.incidents()
+    assert (inc["status"], inc["baseline_score"], inc["low_score"]) == ("open", 0.95, 0.59)
+    assert actions(await feed(store, engine, score(0.96, ms=17))) == ["attached", "closed"]
+
+
+async def test_llo_failure_correlates_by_component_without_orion(store, pub):
+    orion = FakeOrion({})
+    orion.down = True
+    eng = IncidentEngine(store, orion, IncidentConfig(), pub)
+    assert actions(await feed(store, eng, llo("Service component failed", ms=10))) == [
+        "opened"]
+    other = llo("Service component failed", ms=10, sc="urn-ngsi-ld-service-0a1b-component-db")
+    assert actions(await feed(store, eng, other)) == ["opened"]
+    assert actions(await feed(store, eng, llo("Service component deployed", ms=11))) == [
+        "attached"]
+    # the IE's drop is not linked to the component: Orion never said where it runs
+    await feed(store, eng, score(0.9, ms=11))
+    assert actions(await feed(store, eng, score(0.2, ms=12))) == ["opened"]
+    incs = await store.incidents()
+    assert len(incs) == 3
+    web = next(i for i in incs if "web" in i["title"])
+    tl = await eng.timeline(web["id"])
+    assert [e["role"] for e in tl["events"]] == ["trigger", "deployment"]
+
+
+async def test_llo_failure_joins_the_ie_incident_through_orion(store, engine):
+    await feed(store, engine, score(0.9, ms=10))
+    await feed(store, engine, score(0.4, ms=11))
+    assert actions(await feed(store, engine, llo("Service component failed", ms=12))) == [
+        "attached"]
+    # once joined, the component's later events follow the incident
+    assert actions(await feed(store, engine, llo("Service component deployed", ms=13))) == [
+        "attached"]
+    [inc] = await store.incidents()
+    roles = [e["role"] for e in (await engine.timeline(inc["id"]))["events"]]
+    assert roles == ["trigger", "deployment", "deployment"]
+
+
+def test_component_key_lines_up_llo_names_and_orion_ids():
+    assert component_key(SC_K8S) == component_key(SC)
+    assert component_key("URN-NGSI-LD-SERVICE-0A1B-COMPONENT-web") == component_key(SC)
+    assert component_key("plain-name") == "plain-name"
+
+
+# -- alerts as triggers ---------------------------------------------------------------------------
+
+async def test_integrity_alerts_group_into_a_ledger_incident(store, engine):
+    a = llo("Service component deployed", ms=10, verdict=V.UNSIGNED_LEGACY)
+    b = llo("Service component updated", ms=11, verdict=V.UNSIGNED_LEGACY)
+    await store_row(store, a, submitted=True)
+    await store_row(store, b, submitted=True)
+    for bid, rule in ((a.block_id, "CONTENT_MISMATCH"), (b.block_id, "DB_TAMPER")):
+        await store.put_alert(Alert(rule, "critical", bid, None, {"reason": rule}, T0 * 1000))
+    await store.put_alert(Alert("ANCHOR_MISMATCH", "critical", None, None,
+                                {"reason": "root differs", "seq": 4}, T0 * 1000))
+    await store.put_alert(Alert("STALE", "low", None, IE_X, {}, T0 * 1000))
+    changes = await engine.periodic(now_ms=(T0 + 330) * 1000)
+    assert actions(changes) == ["opened", "attached", "updated"]
+    [inc] = await store.incidents()
+    assert inc["ie_id"] is None and inc["severity"] == "critical"
+    tl = await engine.timeline(inc["id"])
+    assert [e["role"] for e in tl["events"]] == ["trigger", "alert"]
+    assert sorted(x["rule"] for x in tl["alerts"]) == [
+        "ANCHOR_MISMATCH", "CONTENT_MISMATCH", "DB_TAMPER"]
+    assert await engine.periodic(now_ms=(T0 + 340) * 1000) == []  # idempotent
+
+
+async def test_alert_on_a_proven_block_opens_and_alerts_raise_severity(store, engine):
+    fork = so_error("0", ms=10)
+    changes = await feed(store, engine, fork, alerts=("CHAIN_FORK",))
+    assert actions(changes) == ["opened"]
+    [inc] = await store.incidents()
+    assert inc["ie_id"] == IE_X and inc["severity"] == "high"
+    assert "CHAIN_FORK" in inc["title"] or "fork" in inc["title"].lower()
+    # an alert raised later (validator) on a block already in the incident raises its severity
+    await store.put_alert(Alert("CONTENT_MISMATCH", "critical", fork.block_id, None, {},
+                                T0 * 1000))
+    assert actions(await engine.periodic(now_ms=(T0 + 400) * 1000)) == ["updated"]
+    [inc] = await store.incidents()
+    assert inc["severity"] == "critical"
+
+
+# -- delivery ------------------------------------------------------------------------------------
+
+async def test_publisher_failure_never_breaks_indexing(store, engine, pub):
+    pub.fail = True
+    await feed(store, engine, score(0.9, ms=10))
+    assert actions(await feed(store, engine, score(0.3, ms=11))) == ["opened"]
+    assert (await store.service_status())["alerts-mqtt"]["status"] == "unreachable"
+    assert pub.sent == []
+    pub.fail = False
+    assert await engine.flush() == 1  # the backlog goes out once the broker is back
+    assert [p["action"] for _, p in pub.sent] == ["opened"]
+    assert (await store.service_status())["alerts-mqtt"]["status"] == "ok"
+    assert await engine.flush() == 0
+
+
+async def test_nothing_is_published_before_commit(store, engine, pub):
+    await feed(store, engine, score(0.9, ms=10))
+    with pytest.raises(RuntimeError):
+        async with store.transaction():
+            await feed(store, engine, score(0.3, ms=11))
+            assert await engine.flush() == 0
+            raise RuntimeError("milestone failed")
+    assert await engine.flush() == 0 and pub.sent == []
+    assert await store.incidents() == []
+    async with store.transaction():
+        await feed(store, engine, score(0.3, ms=12))
+        assert pub.sent == []
+    assert await engine.flush() == 1
+    [(topic, payload)] = pub.sent
+    assert topic == "witness/alerts/high" and payload["action"] == "opened"
+    assert payload["eventId"] > 0 and payload["blockId"].startswith("0x")
+
+
+async def test_publisher_cursor_survives_a_restart(store, pub):
+    eng = IncidentEngine(store, None, IncidentConfig(), pub)
+    await feed(store, eng, score(0.9, ms=10))
+    await feed(store, eng, score(0.3, ms=11))
+    assert len(pub.sent) == 1
+    again = IncidentEngine(store, None, IncidentConfig(), pub)
+    assert await again.flush() == 0
+    await feed(store, again, so_error("restart", ms=12))
+    assert [p["action"] for _, p in pub.sent] == ["opened", "attached"]
+
+
+# -- timeline -------------------------------------------------------------------------------------
+
+async def test_timeline_reports_verdict_and_lifecycle_per_event(store, engine):
+    await feed(store, engine, score(0.9, ms=10))
+    drop = score(0.4, ms=11, verdict=V.RELAY_ATTESTED)
+    await feed(store, engine, drop, submitted=True)
+    await store.set_lifecycle(block_id=drop.block_id, sub_id=None, status="CONFIRMED",
+                              at_ms=(T0 + 331) * 1000)
+    await store.set_lifecycle(block_id=drop.block_id, sub_id=None, status="CONTENT_VERIFIED",
+                              at_ms=(T0 + 332) * 1000)
+    forged = score(0.99, ms=12, verdict=V.FORGED)
+    await feed(store, engine, forged, alerts=("FORGED",))
+    err = so_error("isolate-ie", ms=13)
+    await feed(store, engine, err)
+    [inc] = await store.incidents()
+    tl = await engine.timeline(inc["id"])
+    assert tl["incident"]["id"] == inc["id"] and tl["incident"]["ieId"] == IE_X
+    got = [(e["blockId"], e["verdict"], e["status"], e["role"]) for e in tl["events"]]
+    assert got == [
+        (to_hex(drop.block_id), V.RELAY_ATTESTED, "CONTENT_VERIFIED", "trigger"),
+        (to_hex(forged.block_id), V.FORGED, "CONFIRMED", "alert"),
+        (to_hex(err.block_id), V.PRODUCER_SIGNED, "CONFIRMED", "security"),
+    ]
+    times = [e["atMs"] for e in tl["events"]]
+    assert times == sorted(times)
+    assert all(e["proof"] == f"/proofs/{e['blockId']}" for e in tl["events"])
+    assert [a["rule"] for a in tl["alerts"]] == ["FORGED"]
+    assert await engine.timeline(10**9) is None
+
+
+# -- robustness -----------------------------------------------------------------------------------
+
+def _printable(s: str) -> bool:
+    return all(unicodedata.category(ch)[0] != "C" for ch in s)
+
+
+async def test_hostile_strings_are_sanitised(store, engine, pub):
+    async def hostile(r: MessageRow) -> list[dict]:
+        # PostgreSQL refuses NUL and lone surrogates in jsonb: the row is stored without its
+        # parsed body, the engine still sees the body the pipeline decoded.
+        await store_row(store, dataclasses.replace(r, json=None))
+        return await engine.on_message(r)
+
+    nasty = "\x1b[31mDROP TABLE incidents;\x00\ud800\u202e" + "A" * 5000 + "\n\r\t"
+    await feed(store, engine, score(0.9, ms=10, ie=IE_Y))
+    assert actions(await hostile(so_error(nasty, ms=11, ie=IE_Y))) == ["opened"]
+    bad_sc = "x\n" * 300 + "\x00\u202e"
+    assert actions(await hostile(llo("Service component failed", ms=12, sc=bad_sc))) == [
+        "opened"]
+    incs = await store.incidents()
+    for inc in incs:
+        assert _printable(inc["title"]) and len(inc["title"]) <= 200
+        assert all(_printable(k) and len(k) <= 200 for k in inc["keys"])
+    for _, payload in pub.sent:
+        assert _printable(payload["title"])
+    tl = await engine.timeline(incs[-1]["id"])
+    json.dumps(tl)
+
+
+async def test_a_failure_is_isolated_in_the_callers_transaction(store, engine, monkeypatch):
+    await feed(store, engine, score(0.9, ms=10))
+
+    async def broken(*a, **k):
+        raise RuntimeError("incident bug")
+
+    monkeypatch.setattr(store, "put_incident", broken)
+    drop = score(0.3, ms=11)
+    async with store.transaction():
+        await store_row(store, drop)
+        assert await engine.on_message(drop) == []
+        await store.put_ie_score(IE_X, 11, drop.ts, 0.3, drop.block_id, drop.verdict)
+    assert await store.get_message(drop.block_id) is not None  # the milestone committed
+    st = (await store.service_status())["incident-engine"]
+    assert st["status"] == "error" and "incident bug" in st["detail"]
+    assert await store.incidents() == []
+    monkeypatch.undo()
+    # the next message works again
+    assert actions(await feed(store, engine, score(0.05, ms=12))) == ["opened"]
+
+
+async def test_reprocessing_a_message_changes_nothing(store, engine):
+    await feed(store, engine, score(0.9, ms=10))
+    drop = score(0.4, ms=11)
+    assert actions(await feed(store, engine, drop)) == ["opened"]
+    assert await engine.on_message(drop) == []
+    [inc] = await store.incidents()
+    await engine.periodic(now_ms=inc["last_event_ms"] + 1_800_001)
+    assert await engine.on_message(drop) == []  # closed now: still not a second incident
+    assert len(await store.incidents()) == 1
+
+
+async def test_message_without_a_stored_row_or_ie_is_ignored(store, engine):
+    r = row("trust.score", {"score": "high", "id": "nope"}, ms=10)
+    assert await engine.on_message(r) == []
+    r = row("unknown-tag", {"anything": 1}, ms=10)
+    assert await feed(store, engine, r) == []
+    assert await store.incidents() == []
+
+
+async def test_correlated_rules_feeds_both_engines(store, engine):
+    class Rules:
+        anchor = "anchor-client"
+
+        def __init__(self) -> None:
+            self.seen: list[bytes] = []
+            self.periodic_calls = 0
+
+        async def on_message(self, r: MessageRow) -> list[Alert]:
+            self.seen.append(r.block_id)
+            return [Alert("ANOMALY", "medium", r.block_id, r.ie_id, {}, 1)]
+
+        async def periodic(self, *, now_ms: int) -> list[Alert]:
+            self.periodic_calls += 1
+            return []
+
+    rules = Rules()
+    hook = CorrelatedRules(rules, engine)
+    await store_row(store, score(0.9, ms=10))
+    drop = score(0.3, ms=11)
+    await store_row(store, drop)
+    [alert] = await hook.on_message(drop)
+    assert alert.rule == "ANOMALY" and rules.seen == [drop.block_id]
+    assert len(await store.incidents()) == 1
+    assert await hook.periodic(now_ms=(T0 + 400) * 1000) == []
+    assert rules.periodic_calls == 1
+    assert hook.anchor == "anchor-client"
+
+
+# -- the aiomqtt publisher ------------------------------------------------------------------------
+
+def test_mqtt_publisher_rejects_other_schemes():
+    with pytest.raises(ValueError):
+        MqttAlertPublisher("http://127.0.0.1:1883")
+
+
+async def test_unreachable_broker_is_reported_not_raised(store):
+    pub = MqttAlertPublisher("mqtt://127.0.0.1:1", timeout_s=2.0)
+    with pytest.raises(Exception):  # noqa: B017 - whatever the transport raises
+        await pub.publish("witness/alerts/high", b"{}")
+    eng = IncidentEngine(store, None, IncidentConfig(), pub)
+    await feed(store, eng, score(0.9, ms=10))
+    assert actions(await feed(store, eng, score(0.3, ms=11))) == ["opened"]
+    assert (await store.service_status())["alerts-mqtt"]["status"] == "unreachable"
+    await eng.aclose()
+
+
+LIVE_MQTT = os.environ.get("WITNESS_LIVE_MQTT", "mqtt://127.0.0.1:1883")
+
+
+@pytest.mark.live
+@pytest.mark.skipif(os.environ.get("WITNESS_LIVE") != "1", reason="set WITNESS_LIVE=1")
+async def test_alerts_reach_mosquitto(store):
+    import aiomqtt
+
+    parts = urlsplit(LIVE_MQTT)
+    async with aiomqtt.Client(parts.hostname, parts.port or 1883,
+                              identifier=f"witness-test-{uuid.uuid4().hex[:8]}") as sub:
+        prefix = f"witness-test/{uuid.uuid4().hex[:8]}/alerts"
+        await sub.subscribe(f"{prefix}/#", qos=1)
+        pub = MqttAlertPublisher(LIVE_MQTT, client_id=f"witness-test-pub-{uuid.uuid4().hex[:8]}")
+        eng = IncidentEngine(store, None, IncidentConfig(mqtt_topic_prefix=prefix), pub)
+        await feed(store, eng, score(0.9, ms=10))
+        await feed(store, eng, score(0.3, ms=11))
+        msg = await asyncio.wait_for(anext(aiter(sub.messages)), 10)
+        await eng.aclose()
+    assert str(msg.topic) == f"{prefix}/high" and msg.qos == 1
+    body = json.loads(msg.payload)
+    assert body["action"] == "opened" and body["ieId"] == IE_X

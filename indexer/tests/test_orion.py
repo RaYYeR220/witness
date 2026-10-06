@@ -96,3 +96,32 @@ async def test_status_ok_and_default_timeout():
     client = OrionClient(BASE)
     assert client.timeout_s == 2.0
     assert await client.status() == "ok"
+
+
+@respx.mock
+async def test_service_component_hosts_follow_the_relationship():
+    sc = "urn:ngsi-ld:Service:0a1b:Component:"
+    body = [
+        {"id": sc + "web", "type": "ServiceComponent",
+         "infrastructureElement": URN + "MyDomain:fa163e5e25ef"},
+        {"id": sc + "db", "type": "ServiceComponent",
+         "infrastructureElement": {"type": "Relationship", "object": URN + "Edge:001122334455"}},
+        {"id": sc + "cache", "type": "ServiceComponent",
+         "infrastructureElement": {"id": URN + "Edge:001122334456", "type": "InfrastructureElement"}},
+        {"id": sc + "pending", "type": "ServiceComponent"},  # not allocated yet
+        {"id": sc + "bad", "infrastructureElement": 7},
+        {"type": "ServiceComponent"},
+        "junk",
+    ]
+    route = respx.get(ENTITIES).mock(return_value=httpx.Response(200, json=body))
+    hosts = await OrionClient(BASE).service_component_hosts()
+    assert hosts == {sc + "web": "MyDomain:fa163e5e25ef", sc + "db": "Edge:001122334455",
+                     sc + "cache": "Edge:001122334456"}
+    assert route.calls[0].request.url.params["type"] == "ServiceComponent"
+
+
+@respx.mock
+async def test_service_component_hosts_unreachable():
+    respx.get(ENTITIES).mock(side_effect=httpx.ConnectError("refused"))
+    with pytest.raises(OrionUnavailable):
+        await OrionClient(BASE).service_component_hosts()

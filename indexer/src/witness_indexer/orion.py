@@ -4,7 +4,9 @@ The Trust Manager writes each Infrastructure Element's score to Orion (`trustSco
 through Witness, to the Tangle. The rules engine compares the two (R5 DRIFT) and checks that
 scored IEs exist in Orion (R6 UNKNOWN_IE). Orion entity ids look like
 `urn:ngsi-ld:InfrastructureElement:<domain>:<id>`; the Trust Manager's ledger ids are
-`<domain>:<id>`, so the prefix is stripped to line the two up.
+`<domain>:<id>`, so the prefix is stripped to line the two up. ServiceComponent entities name
+the IE they were allocated to (`infrastructureElement`), which lets the incident engine tie
+an LLO report about a component to the IE it runs on.
 
 An Orion that cannot be asked raises `OrionUnavailable`; it is never reported as an empty
 entity list, which would make every IE look unknown.
@@ -19,6 +21,7 @@ from typing import Any, Literal
 import httpx
 
 ENTITY_TYPE = "InfrastructureElement"
+COMPONENT_TYPE = "ServiceComponent"
 IE_URN = f"urn:ngsi-ld:{ENTITY_TYPE}:"
 ENTITIES_PATH = "/ngsi-ld/v1/entities"
 MAX_PAGES = 1000
@@ -63,6 +66,16 @@ def _score(attr: Any) -> float | None:
     return value if math.isfinite(value) else None
 
 
+def _relationship(attr: Any) -> str | None:
+    """A relationship target in keyValues (`"urn:..."`) or normalized form
+    (`{"type": "Relationship", "object": "urn:..."}`); an embedded entity gives its id."""
+    if isinstance(attr, dict):
+        attr = attr.get("object", attr.get("value", attr.get("id")))
+        if isinstance(attr, dict):
+            attr = attr.get("id")
+    return attr if isinstance(attr, str) and attr else None
+
+
 def _ie(e: Any) -> IE | None:
     if not isinstance(e, dict) or not isinstance(e.get("id"), str) or not e["id"]:
         return None
@@ -88,10 +101,10 @@ class OrionClient:
                                f'type="application/ld+json"')
         return headers
 
-    async def _page(self, offset: int, limit: int) -> list:
+    async def _page(self, offset: int, limit: int, type_: str = ENTITY_TYPE) -> list:
         if self._http is None:
             self._http = httpx.AsyncClient(timeout=self.timeout_s)
-        params = {"type": ENTITY_TYPE, "limit": str(limit), "offset": str(offset)}
+        params = {"type": type_, "limit": str(limit), "offset": str(offset)}
         try:
             resp = await self._http.get(self.base_url + ENTITIES_PATH, params=params,
                                         headers=self._headers(), timeout=self.timeout_s)
@@ -107,15 +120,30 @@ class OrionClient:
             raise OrionUnavailable("Orion reply is not an entity list")
         return body
 
-    async def ie_entities(self) -> list[IE]:
-        """Every InfrastructureElement entity, all pages. Raises OrionUnavailable."""
-        out: list[IE] = []
+    async def _all(self, type_: str) -> list:
+        out: list = []
         for page in range(MAX_PAGES):
-            batch = await self._page(page * self._page_size, self._page_size)
-            out.extend(ie for ie in map(_ie, batch) if ie is not None)
+            batch = await self._page(page * self._page_size, self._page_size, type_)
+            out.extend(batch)
             if len(batch) < self._page_size:
                 return out
-        raise OrionUnavailable(f"more than {MAX_PAGES} pages of {ENTITY_TYPE} entities")
+        raise OrionUnavailable(f"more than {MAX_PAGES} pages of {type_} entities")
+
+    async def ie_entities(self) -> list[IE]:
+        """Every InfrastructureElement entity, all pages. Raises OrionUnavailable."""
+        return [ie for ie in map(_ie, await self._all(ENTITY_TYPE)) if ie is not None]
+
+    async def service_component_hosts(self) -> dict[str, str]:
+        """ServiceComponent entity id -> id of the IE it is allocated to (`<domain>:<id>`),
+        for every component that names one. Raises OrionUnavailable."""
+        out: dict[str, str] = {}
+        for e in await self._all(COMPONENT_TYPE):
+            if not isinstance(e, dict) or not isinstance(e.get("id"), str) or not e["id"]:
+                continue
+            host = _relationship(e.get("infrastructureElement"))
+            if host:
+                out[e["id"]] = ie_id_of(host)
+        return out
 
     async def status(self) -> Literal["ok", "unreachable"]:
         try:
