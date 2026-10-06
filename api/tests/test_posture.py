@@ -1,5 +1,7 @@
 """Node posture scanner: each finding fires on a vulnerable mock node and none (bar the
-always-on legacy relay note) on a hardened one; passive scans never POST or attempt a login."""
+always-on legacy relay note) on a hardened one; passive scans never POST or attempt a login;
+ambiguous answers are reported as inconclusive, never as exposure; active probes stay on
+loopback or allow-listed hosts."""
 
 import httpx
 import pytest
@@ -12,6 +14,10 @@ from witness_api.settings import Settings
 NODE = "http://127.0.0.1:14265"
 DASH = "http://127.0.0.1:8081"
 NON_LOOPBACK = "http://node.example:14265"
+FOREIGN_DASH = "http://dash.example:8081"
+PEERS = "/api/core/v2/peers"
+PRUNE = "/api/core/v2/control/database/prune"
+DEBUG = "/api/debug/v1/requests"
 
 SAMPLE_KEYS = ["0x" + k for k in sorted(posture.SAMPLE_COORDINATOR_KEYS)]
 FRESH_KEYS = ["0x" + "11" * 32, "0x" + "22" * 32]
@@ -28,95 +34,176 @@ async def _false_probe(addr, timeout_s):
     return False
 
 
-def _mock_vulnerable(mock):
-    mock.get(f"{NODE}/api/core/v2/peers").respond(200, json=[])
-    mock.get(f"{NODE}/api/core/v2/control/database/prune").respond(405)
-    mock.post(f"{NODE}/api/core/v2/control/database/prune").respond(400, json={})
-    mock.get(f"{NODE}/api/debug/v1/requests").respond(200, json={"requests": []})
-    mock.get(f"{DASH}/dashboard/").respond(200, headers={"set-cookie": "_csrf=tok; Path=/"})
-    mock.post(f"{DASH}/dashboard/auth").respond(200, json={"jwt": "SECRET-NOT-RECORDED"})
+def _mock_node(mock, base=NODE, *, peers=200, prune_get=405, prune_post=400, debug=200):
+    for path, method, status in ((PEERS, "GET", peers), (PRUNE, "GET", prune_get),
+                                 (PRUNE, "POST", prune_post), (DEBUG, "GET", debug)):
+        route = mock.route(method=method, url=base + path)
+        if isinstance(status, Exception):
+            route.mock(side_effect=status)
+        else:
+            route.respond(status)
 
 
-def _mock_hardened(mock):
-    mock.get(f"{NODE}/api/core/v2/peers").respond(401)
-    mock.get(f"{NODE}/api/core/v2/control/database/prune").respond(401)
-    mock.post(f"{NODE}/api/core/v2/control/database/prune").respond(401)
-    mock.get(f"{NODE}/api/debug/v1/requests").respond(404)
-    mock.get(f"{DASH}/dashboard/").respond(200, headers={"set-cookie": "_csrf=tok; Path=/"})
-    mock.post(f"{DASH}/dashboard/auth").respond(401, json={"error": "Unauthorized"})
+def _mock_dashboard(mock, base=DASH, *, auth=200):
+    mock.get(f"{base}/dashboard/").respond(200, headers={"set-cookie": "_csrf=tok; Path=/"})
+    mock.post(f"{base}/dashboard/auth").respond(auth, json={"jwt": "SECRET-NOT-RECORDED"})
 
+
+async def _scan(**kw):
+    args = {"node_url": NODE, "inx_addr": "127.0.0.1:9029", "dashboard_url": DASH,
+                "config_keys": FRESH_KEYS, "plaintext": PLAINTEXT_NONE, "active": False,
+                "tcp_probe": _false_probe}
+    args.update(kw)
+    async with httpx.AsyncClient() as http:
+        return await posture.scan(http=http, **args)
+
+
+def _ids(findings):
+    return {f.id for f in findings}
+
+
+def _methods(mock):
+    return [(c.request.method, c.request.url.host, c.request.url.path) for c in mock.calls]
+
+
+# -- every finding fires / none fires ---------------------------------------------------------
 
 async def test_every_finding_fires_on_a_vulnerable_node():
     async with respx.mock(assert_all_called=False) as mock:
-        _mock_vulnerable(mock)
-        async with httpx.AsyncClient() as http:
-            findings = await posture.scan(
-                http=http, node_url=NODE, inx_addr="127.0.0.1:9029", dashboard_url=DASH,
-                config_keys=SAMPLE_KEYS, plaintext=PLAINTEXT_SOME, active=True,
-                tcp_probe=_true_probe)
-    ids = {f.id for f in findings}
-    assert ids == {"sample-coordinator-keys", "unauthenticated-admin-routes",
-                   "inx-unauthenticated", "debug-api-enabled", "dashboard-default-credentials",
-                   "legacy-relay-ssrf", "plaintext-payloads"}
-    # highest severity first, and every finding carries a constructive fix
+        _mock_node(mock)
+        _mock_dashboard(mock)
+        findings = await _scan(config_keys=SAMPLE_KEYS, plaintext=PLAINTEXT_SOME, active=True,
+                               tcp_probe=_true_probe)
+    assert _ids(findings) == {"sample-coordinator-keys", "unauthenticated-admin-routes",
+                              "inx-unauthenticated", "debug-api-enabled",
+                              "dashboard-default-credentials", "legacy-relay-ssrf",
+                              "plaintext-payloads"}
     assert findings[0].severity == "high"
     assert all(f.fix for f in findings)
-    # the dashboard session token is never recorded in the evidence
     dash = next(f for f in findings if f.id == "dashboard-default-credentials")
     assert "SECRET-NOT-RECORDED" not in repr(dash.evidence)
+    admin = next(f for f in findings if f.id == "unauthenticated-admin-routes")
+    assert admin.evidence["prune"] == {"method": "POST", "status": 400, "result": "open"}
 
 
 async def test_no_findings_on_a_hardened_node():
     async with respx.mock(assert_all_called=False) as mock:
-        _mock_hardened(mock)
-        async with httpx.AsyncClient() as http:
-            findings = await posture.scan(
-                http=http, node_url=NODE, inx_addr="127.0.0.1:9029", dashboard_url=DASH,
-                config_keys=FRESH_KEYS, plaintext=PLAINTEXT_NONE, active=True,
-                tcp_probe=_false_probe)
+        _mock_node(mock, peers=401, prune_get=401, prune_post=401, debug=404)
+        _mock_dashboard(mock, auth=401)
+        findings = await _scan(active=True)
     # only the always-on informational note about the upstream Messages API remains
-    assert {f.id for f in findings} == {"legacy-relay-ssrf"}
+    assert _ids(findings) == {"legacy-relay-ssrf"}
 
 
 async def test_passive_scan_makes_no_post_or_login():
     async with respx.mock(assert_all_called=False) as mock:
-        _mock_vulnerable(mock)
-        async with httpx.AsyncClient() as http:
-            findings = await posture.scan(
-                http=http, node_url=NODE, inx_addr="127.0.0.1:9029", dashboard_url=DASH,
-                config_keys=SAMPLE_KEYS, plaintext=PLAINTEXT_SOME, active=False,
-                tcp_probe=_true_probe)
-        methods = {call.request.method for call in mock.calls}
-        urls = [str(call.request.url) for call in mock.calls]
-    assert "POST" not in methods, methods
-    assert not any("/dashboard/" in u for u in urls), urls
-    # the admin-route finding still fires: a passive GET on a public prune route reveals it
-    assert "unauthenticated-admin-routes" in {f.id for f in findings}
-    assert "dashboard-default-credentials" not in {f.id for f in findings}
+        _mock_node(mock)
+        _mock_dashboard(mock)
+        findings = await _scan(config_keys=SAMPLE_KEYS, plaintext=PLAINTEXT_SOME,
+                               tcp_probe=_true_probe)
+        calls = _methods(mock)
+    assert all(method != "POST" for method, _, _ in calls), calls
+    assert not any(path.startswith("/dashboard") for _, _, path in calls), calls
+    # peers 200 and prune GET 405: the admin-route finding fires on passive evidence
+    admin = next(f for f in findings if f.id == "unauthenticated-admin-routes")
+    assert admin.evidence["prune"] == {"method": "GET", "status": 405, "result": "open"}
+    assert "dashboard-default-credentials" not in _ids(findings)
 
 
-async def test_active_refused_against_non_loopback_host():
+# -- inconclusive passive answers ----------------------------------------------------------
+
+@pytest.mark.parametrize("peers,prune_get", [
+    (404, 404),          # routes not there (another node, a proxy)
+    (503, 500),          # node errors
+    (401, 405),          # prune 405 proves nothing while peers is protected
+    (404, 405),
+    (httpx.ConnectError("down"), httpx.ConnectError("down")),
+])
+async def test_ambiguous_passive_answers_are_inconclusive(peers, prune_get):
     async with respx.mock(assert_all_called=False) as mock:
-        mock.get(f"{NON_LOOPBACK}/api/core/v2/peers").respond(200, json=[])
-        mock.get(f"{NON_LOOPBACK}/api/core/v2/control/database/prune").respond(405)
-        mock.get(f"{NON_LOOPBACK}/api/debug/v1/requests").respond(404)
+        _mock_node(mock, peers=peers, prune_get=prune_get, debug=404)
+        findings = await _scan()
+    assert "unauthenticated-admin-routes" not in _ids(findings)
+    inc = next(f for f in findings if f.id == "admin-routes-inconclusive")
+    assert inc.severity == "info"
+    assert inc.evidence["peers"]["result"] in ("inconclusive", "protected")
+    assert inc.evidence["prune"]["result"] == "inconclusive"
+    expected = None if isinstance(peers, Exception) else peers
+    assert inc.evidence["peers"]["status"] == expected
+
+
+async def test_open_peers_alone_is_exposure():
+    async with respx.mock(assert_all_called=False) as mock:
+        _mock_node(mock, peers=200, prune_get=404, debug=404)
+        findings = await _scan()
+    admin = next(f for f in findings if f.id == "unauthenticated-admin-routes")
+    assert admin.evidence["peers"]["result"] == "open"
+    assert admin.evidence["prune"]["result"] == "inconclusive"
+
+
+# -- the active gate ----------------------------------------------------------------------------
+
+def test_loopback_and_allow_list_matching():
+    for host in ("localhost", "LOCALHOST", "127.0.0.1", "127.0.0.2", "::1", "[::1]"):
+        assert posture.host_allowed(host, frozenset()), host
+    for host in ("", "0.0.0.0", "node.example", "localhost.example", "127.0.0.1.example",
+                 "10.0.0.1"):
+        assert not posture.host_allowed(host, frozenset()), host
+    assert posture.host_allowed("node.example", frozenset({"Node.Example"}))
+    assert not posture.host_allowed("sub.node.example", frozenset({"node.example"}))
+
+
+@pytest.mark.parametrize("base", ["http://localhost:14265", "http://[::1]:14265"])
+async def test_active_probes_run_on_localhost_and_ipv6_loopback(base):
+    async with respx.mock(assert_all_called=False) as mock:
+        _mock_node(mock, base=base)
+        await _scan(node_url=base, dashboard_url=None, active=True)
+        calls = _methods(mock)
+    assert ("POST", base.split("//")[1].rsplit(":", 1)[0].strip("[]"), PRUNE) in calls
+
+
+async def test_active_refused_against_non_loopback_node():
+    async with respx.mock(assert_all_called=False) as mock:
+        _mock_node(mock, base=NON_LOOPBACK)
+        await _scan(node_url=NON_LOOPBACK, dashboard_url=None, active=True)
+        calls = _methods(mock)
+    assert all(method != "POST" for method, _, _ in calls), calls
+
+
+async def test_active_skips_a_non_allowed_dashboard_host():
+    async with respx.mock(assert_all_called=False) as mock:
+        _mock_node(mock)
+        _mock_dashboard(mock, base=FOREIGN_DASH)
+        findings = await _scan(dashboard_url=FOREIGN_DASH, active=True)
+        calls = _methods(mock)
+    # the loopback node still gets its active probe; the foreign dashboard is never touched
+    assert ("POST", "127.0.0.1", PRUNE) in calls
+    assert not any(host == "dash.example" for _, host, _ in calls), calls
+    assert "dashboard-default-credentials" not in _ids(findings)
+
+
+async def test_allow_listed_dashboard_host_is_probed():
+    async with respx.mock(assert_all_called=False) as mock:
+        _mock_node(mock)
+        _mock_dashboard(mock, base=FOREIGN_DASH)
+        findings = await _scan(dashboard_url=FOREIGN_DASH, active=True,
+                               allow_active_hosts=("dash.example",))
+    assert "dashboard-default-credentials" in _ids(findings)
+
+
+async def test_dashboard_probe_leaves_no_cookies_in_the_shared_client():
+    async with respx.mock(assert_all_called=False) as mock:
+        _mock_node(mock)
+        _mock_dashboard(mock)
         async with httpx.AsyncClient() as http:
-            await posture.scan(
-                http=http, node_url=NON_LOOPBACK, inx_addr=None, dashboard_url=None,
-                config_keys=FRESH_KEYS, plaintext=PLAINTEXT_NONE, active=True,
-                tcp_probe=_false_probe)
-        methods = {call.request.method for call in mock.calls}
-    assert "POST" not in methods  # active probe refused: host is not loopback/allow-listed
-
-
-async def test_active_allowed_when_host_is_allow_listed():
-    assert posture.host_allowed("node.example", frozenset({"node.example"}))
-    assert posture.host_allowed("127.0.0.1", frozenset())
-    assert not posture.host_allowed("node.example", frozenset())
+            await posture.scan(http=http, node_url=NODE, inx_addr=None, dashboard_url=DASH,
+                               config_keys=FRESH_KEYS, active=True, tcp_probe=_false_probe)
+            assert "_csrf" not in http.cookies
 
 
 def test_sample_key_match_is_case_and_prefix_insensitive():
-    assert posture.check_sample_keys(["ED3C3F1A319FF4E909CF2771D79FECE0AC9BD9FD2EE49EA6C0885C9CB3B1248C"])
+    assert posture.check_sample_keys(
+        ["ED3C3F1A319FF4E909CF2771D79FECE0AC9BD9FD2EE49EA6C0885C9CB3B1248C"])
     assert posture.check_sample_keys(SAMPLE_KEYS).severity == "high"
     assert posture.check_sample_keys(FRESH_KEYS) is None
 
@@ -139,23 +226,22 @@ async def posture_client(store):
             yield c
 
 
-async def test_scan_requires_token_and_caches(posture_client, store):
-    # no token: 401; GET /posture before any scan is empty
+async def test_scan_requires_token_and_caches(posture_client):
     assert (await posture_client.post("/posture/scan")).status_code == 401
     empty = await posture_client.get("/posture")
     assert empty.status_code == 200 and empty.json()["scannedAtMs"] is None
 
     async with respx.mock(assert_all_called=False) as mock:
-        _mock_vulnerable(mock)
-        # the store-backed INX probe is real; point it nowhere reachable so it just returns
+        _mock_node(mock)
         r = await posture_client.post("/posture/scan",
                                       headers={"Authorization": f"Bearer {TOKEN}"})
+        assert all(c.request.method != "POST" for c in mock.calls)  # passive by default
     assert r.status_code == 200, r.text
     body = r.json()
-    assert body["scannedAtMs"] is not None
+    assert body["scannedAtMs"] is not None and body["active"] is False
     ids = {f["id"] for f in body["findings"]}
-    assert "sample-coordinator-keys" in ids and "legacy-relay-ssrf" in ids
-    assert body["summary"].get("high", 0) >= 1
-    # GET /posture now returns the cached scan
+    assert {"sample-coordinator-keys", "unauthenticated-admin-routes",
+            "legacy-relay-ssrf"} <= ids
+    assert body["summary"]["high"] >= 2
     cached = await posture_client.get("/posture")
-    assert cached.json()["scannedAtMs"] == body["scannedAtMs"]
+    assert cached.json() == body
