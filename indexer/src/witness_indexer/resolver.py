@@ -9,7 +9,8 @@ force throughout the second holding `at_ms` (see `witness_core.bundle.snapshot_k
 milestone timestamps have second precision, so a key revoked anywhere in that second counts
 as revoked, as in `witness_core.bundle.valid_through_second`.
 
-Answers are cached per DID, including "no such DID": a 404 or any other definitive 4xx. How
+Answers are cached per DID, including "no such DID": a definitive refusal (DEFINITIVE: 400,
+404, 410, 414, 431) says the registry has no such DID or will never serve this one. How
 long an answer is reused depends on what it is and on the time asked about, so revocations
 near the live tip are seen promptly:
 
@@ -19,9 +20,11 @@ near the live tip are seen promptly:
 - "no such DID" and documents without `historyComplete: true` live SHORT_TTL_S;
 - complete documents asked about an earlier time live `cache_ttl_s`.
 
-A registry that cannot be asked (connection error, timeout, 5xx, 408, 429), or replies with
-something that is not an answer about the DID, raises `ResolverUnavailable` and caches
-nothing: callers must then decide nothing, rather than treat the signer as unknown.
+A registry that cannot be asked (connection error, timeout, 5xx, 408, 429), refuses the
+indexer rather than the DID (401, 403, 407: credentials, a proxy, an access rule), or replies
+with anything else that is not an answer about the DID, raises `ResolverUnavailable` and
+caches nothing: callers must then decide nothing (the milestone stalls with a visible
+status), rather than treat the signer as unknown.
 
 Without a `base_url` DID resolution is disabled: only `did:key` and `offline_docs` DIDs
 resolve, every other DID is unknown (None), never an outage. DIDs longer than
@@ -130,6 +133,10 @@ def _pick(reply: dict | None, kid: str, at_ms: int | None) -> KeyInfo | None:
 
 
 _MISS = object()
+# Statuses that answer "no such DID" (or "this id can never resolve"). Anything else that is
+# not a 200 says nothing about the DID: an auth or proxy failure (401, 403, 407) must not turn
+# every did:iota signer into FORGED.
+DEFINITIVE = frozenset({400, 404, 410, 414, 431})
 LIVE_WINDOW_MS = 2000  # at_ms this close to the fetch (or later) asks about the live tip
 LIVE_MAX_AGE_S = 3.0
 SHORT_TTL_S = 5.0  # "no such DID", and documents whose history is incomplete
@@ -271,7 +278,7 @@ class DidResolver:
 
     def _accept(self, did: str, resp: httpx.Response, sent: tuple[float, int]) -> dict | None:
         code = resp.status_code
-        if 400 <= code < 500 and code not in (408, 429):
+        if code in DEFINITIVE:
             value = None  # the registry says it has no such DID (or refuses this one for good)
         elif code == 200:
             try:

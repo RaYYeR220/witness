@@ -749,7 +749,9 @@ async def test_did_resolver_is_asked_at_the_milestone_time(store: Store):
 
 
 @pytest.mark.parametrize("failure", [httpx.ConnectError("refused"), httpx.Response(503),
-                                     httpx.Response(429), httpx.ReadTimeout("slow")])
+                                     httpx.Response(429), httpx.ReadTimeout("slow"),
+                                     httpx.Response(401), httpx.Response(403),
+                                     httpx.Response(407)])
 async def test_unreachable_did_resolver_stalls_the_milestone(store: Store, failure):
     chain = FakeChain()
     chain.add([("trust.score", iota_signed(1))])
@@ -765,6 +767,7 @@ async def test_unreachable_did_resolver_stalls_the_milestone(store: Store, failu
             await indexer(FakeSource(chain), store, resolve=resolver, policy=ALLOW_ALL).sync()
         await resolver.aclose()
     assert caught.value.kid == IOTA_DID + "#sig-1"
+    assert resolver.status == "unreachable"
     stats = await store.stats()
     assert (stats["milestones"], stats["messages"], stats["cursor"]) == (0, 0, 0)
 

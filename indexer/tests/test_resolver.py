@@ -273,7 +273,7 @@ def test_offline_docs_and_unsupported_ids():
     assert not respx.calls
 
 
-@pytest.mark.parametrize("status", [400, 403, 404, 410, 414, 431])
+@pytest.mark.parametrize("status", [400, 404, 410, 414, 431])
 @respx.mock
 def test_definitive_refusals_are_answers(status):
     route = respx.get(URL).mock(return_value=httpx.Response(status))
@@ -284,14 +284,19 @@ def test_definitive_refusals_are_answers(status):
     assert r.status == "ok"
 
 
-@pytest.mark.parametrize("status", [408, 429, 500, 502, 503])
+@pytest.mark.parametrize("status", [401, 403, 405, 407, 408, 421, 429, 500, 502, 503, 301])
 @respx.mock
 def test_temporary_refusals_decide_nothing(status):
-    respx.get(URL).mock(return_value=httpx.Response(status))
+    """Auth and proxy refusals (401/403/407) are about the indexer, not the DID: like an
+    outage they decide nothing and are not cached."""
+    route = respx.get(URL).mock(return_value=httpx.Response(status))
     r = DidResolver(BASE)
     with pytest.raises(ResolverUnavailable):
         r.resolve_kid(KID)
     assert r.status == "unreachable"
+    route.mock(return_value=httpx.Response(200, json=reply(entry(NEW, None))))
+    assert r.resolve_kid(KID).ed25519_public == pub(NEW)
+    assert route.call_count == 2
 
 
 async def test_oversized_did_is_unknown_without_asking():
