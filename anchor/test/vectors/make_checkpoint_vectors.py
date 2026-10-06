@@ -30,13 +30,33 @@ POLICY = {
 }
 
 
+# Flags are read with Python truthiness: present-but-falsy values must normalize the same way.
+FALSY_POLICY = {
+    "version": "2",
+    "tags": {
+        "a": {"allowed": [], "require_signature": 0, "legacy_grace": ""},
+        "b": {"require_signature": "false", "legacy_grace": {}},
+        "c": {"require_signature": [0], "legacy_grace": 0.0},
+        "d": {"require_signature": {"x": 1}, "legacy_grace": "no"},
+    },
+    "default": {"legacy_grace": False},
+}
+
+
 def window(first: int, count: int) -> list[bytes]:
     return [h(b"milestone:" + i.to_bytes(4, "little")) for i in range(first, first + count)]
 
 
 def main() -> None:
     p_hash = policy.policy_hash(policy.load(POLICY))
-    out = {"policy": {"input": POLICY, "normalized": policy.to_dict(policy.load(POLICY)), "hash": "0x" + p_hash.hex()}, "checkpoints": []}
+    out = {
+        "policies": [
+            {"input": p, "normalized": policy.to_dict(policy.load(p)),
+             "hash": "0x" + policy.policy_hash(policy.load(p)).hex()}
+            for p in (POLICY, FALSY_POLICY)
+        ],
+        "checkpoints": [],
+    }
     prev = None
     for first, count, msgs, domain in ((3601, 12, 37, "Domäne-東京 \u2028 \"q\""), (3613, 12, 0, "Domäne-東京 \u2028 \"q\""), (1, 1, 5, "MyDomain")):
         ids = window(first, count)

@@ -1,66 +1,130 @@
 {
-  "policy": {
-    "input": {
-      "version": 3,
-      "tags": {
-        "trust.score": {
-          "allowed": [
-            "did:iota:testnet:0x01",
-            "did:iota:testnet:0x02"
-          ],
-          "require_signature": true
+  "policies": [
+    {
+      "input": {
+        "version": 3,
+        "tags": {
+          "trust.score": {
+            "allowed": [
+              "did:iota:testnet:0x01",
+              "did:iota:testnet:0x02"
+            ],
+            "require_signature": true
+          },
+          "witness.anchor": {
+            "allowed": [
+              "did:iota:testnet:0x03"
+            ],
+            "require_signature": 1,
+            "legacy_grace": []
+          },
+          "LLO-K8s": {}
         },
-        "witness.anchor": {
+        "default": {
           "allowed": [
-            "did:iota:testnet:0x03"
+            "*"
           ],
-          "require_signature": 1,
-          "legacy_grace": []
-        },
-        "LLO-K8s": {}
-      },
-      "default": {
-        "allowed": [
-          "*"
-        ],
-        "legacy_grace": true
-      },
-      "note": "ignored by the policy hash"
-    },
-    "normalized": {
-      "version": 3,
-      "tags": {
-        "trust.score": {
-          "allowed": [
-            "did:iota:testnet:0x01",
-            "did:iota:testnet:0x02"
-          ],
-          "require_signature": true,
           "legacy_grace": true
         },
-        "witness.anchor": {
-          "allowed": [
-            "did:iota:testnet:0x03"
-          ],
-          "require_signature": true,
-          "legacy_grace": false
+        "note": "ignored by the policy hash"
+      },
+      "normalized": {
+        "version": 3,
+        "tags": {
+          "trust.score": {
+            "allowed": [
+              "did:iota:testnet:0x01",
+              "did:iota:testnet:0x02"
+            ],
+            "require_signature": true,
+            "legacy_grace": true
+          },
+          "witness.anchor": {
+            "allowed": [
+              "did:iota:testnet:0x03"
+            ],
+            "require_signature": true,
+            "legacy_grace": false
+          },
+          "LLO-K8s": {
+            "allowed": [],
+            "require_signature": false,
+            "legacy_grace": true
+          }
         },
-        "LLO-K8s": {
-          "allowed": [],
+        "default": {
+          "allowed": [
+            "*"
+          ],
           "require_signature": false,
           "legacy_grace": true
         }
       },
-      "default": {
-        "allowed": [
-          "*"
-        ],
-        "require_signature": false,
-        "legacy_grace": true
-      }
+      "hash": "0xacf59a2d743eba7c58db62fa7660c4699783f27ff0b7a9a49506155cacd9d0da"
     },
-    "hash": "0xacf59a2d743eba7c58db62fa7660c4699783f27ff0b7a9a49506155cacd9d0da"
-  },
+    {
+      "input": {
+        "version": "2",
+        "tags": {
+          "a": {
+            "allowed": [],
+            "require_signature": 0,
+            "legacy_grace": ""
+          },
+          "b": {
+            "require_signature": "false",
+            "legacy_grace": {}
+          },
+          "c": {
+            "require_signature": [
+              0
+            ],
+            "legacy_grace": 0.0
+          },
+          "d": {
+            "require_signature": {
+              "x": 1
+            },
+            "legacy_grace": "no"
+          }
+        },
+        "default": {
+          "legacy_grace": false
+        }
+      },
+      "normalized": {
+        "version": 2,
+        "tags": {
+          "a": {
+            "allowed": [],
+            "require_signature": false,
+            "legacy_grace": false
+          },
+          "b": {
+            "allowed": [],
+            "require_signature": true,
+            "legacy_grace": false
+          },
+          "c": {
+            "allowed": [],
+            "require_signature": true,
+            "legacy_grace": false
+          },
+          "d": {
+            "allowed": [],
+            "require_signature": true,
+            "legacy_grace": true
+          }
+        },
+        "default": {
+          "allowed": [],
+          "require_signature": false,
+          "legacy_grace": false
+        }
+      },
+      "hash": "0x3968085fdc7a466c11bcbcdc7c6691abe3e336a6b13a713cdc5d063eedefcb68"
+    }
+  ],
   "checkpoints": [
     {
       "input": {

@@ -42,9 +42,14 @@ function tangle(latest: number, msgCount: number | null = 4) {
 }
 
 describe("Python parity", () => {
-  it("normalizes and hashes the writer policy like witness_core.policy", () => {
-    expect(normalizePolicy(VECTORS.policy.input)).toEqual(VECTORS.policy.normalized);
-    expect(toHex(policyHash(VECTORS.policy.input))).toBe(VECTORS.policy.hash);
+  it("normalizes and hashes writer policies like witness_core.policy, falsy flags included", () => {
+    expect(VECTORS.policies.length).toBeGreaterThanOrEqual(2);
+    for (const p of VECTORS.policies) {
+      expect(normalizePolicy(p.input)).toEqual(p.normalized);
+      expect(toHex(policyHash(p.input))).toBe(p.hash);
+    }
+    // The checkpoints of the vector commit to the first policy.
+    expect(VECTORS.checkpoints[0].checkpoint.policyHash).toBe(VECTORS.policies[0].hash);
   });
 
   it("builds byte-identical checkpoints with identical hashes", () => {
@@ -76,6 +81,13 @@ describe("policy normalization", () => {
     expect(() => normalizePolicy([])).toThrow(/object/);
     expect(() => normalizePolicy({ version: "x" })).toThrow(/version/);
     expect(() => normalizePolicy({ version: 1, tags: { a: { allowed: "did" } } })).toThrow(/allowed/);
+    // Explicit nulls would read as false in Python but are ambiguous: refused.
+    expect(() => normalizePolicy({ version: 1, tags: { a: { legacy_grace: null } } })).toThrow(/legacy_grace is null/);
+    expect(() => normalizePolicy({ version: 1, default: { require_signature: null } })).toThrow(/require_signature is null/);
+    expect(() => normalizePolicy({ version: 1, tags: null })).toThrow(/tags/);
+    expect(() => normalizePolicy({ version: 1, default: null })).toThrow(/default/);
+    expect(() => normalizePolicy({ version: 1, tags: { a: { allowed: null } } })).toThrow(/allowed/);
+    expect(() => normalizePolicy({ version: 1.5 })).toThrow(/version/);
     expect(normalizePolicy({ version: "2" })).toEqual({
       version: 2,
       tags: {},

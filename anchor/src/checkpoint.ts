@@ -24,39 +24,50 @@ export function checkpointHashHex(cp: Checkpoint): string {
 
 // ---------------------------------------------------------------- writer policy
 
+/** Python's `bool(v)` for JSON values (empty containers, "" and 0 are false). */
 function pyTruthy(v: unknown): boolean {
   if (Array.isArray(v)) return v.length > 0;
   if (v !== null && typeof v === "object") return Object.keys(v).length > 0;
   return Boolean(v);
 }
 
+const has = (o: Record<string, unknown>, k: string) => Object.prototype.hasOwnProperty.call(o, k);
+
+/** `bool(d.get(key, fallback))`; an explicit null is refused rather than read as false. */
+function flagOf(r: Record<string, unknown>, key: string, fallback: boolean, where: string): boolean {
+  if (!has(r, key)) return fallback;
+  if (r[key] === null) throw new Error(`${where}.${key} is null; write true or false`);
+  return pyTruthy(r[key]);
+}
+
 function ruleDict(d: unknown, where: string): Record<string, unknown> {
-  if (d === undefined) d = {};
   if (d === null || typeof d !== "object" || Array.isArray(d)) throw new Error(`${where} must be an object`);
   const r = d as Record<string, unknown>;
-  const allowed = r.allowed ?? [];
+  const allowed = has(r, "allowed") ? r.allowed : [];
   if (!Array.isArray(allowed) || !allowed.every((x) => typeof x === "string")) throw new Error(`${where}.allowed must be a list of strings`);
   return {
     allowed: [...allowed],
-    require_signature: pyTruthy(r.require_signature ?? false),
-    legacy_grace: pyTruthy(r.legacy_grace ?? true),
+    require_signature: flagOf(r, "require_signature", false, where),
+    legacy_grace: flagOf(r, "legacy_grace", true, where),
   };
 }
 
 /**
  * Normal form of a writer policy, as `witness_core.policy.to_dict(policy.load(d))` builds it:
- * only `version`, `tags` and `default`, every rule with all three fields.
+ * only `version`, `tags` and `default`, every rule with all three fields, flags read with
+ * Python truthiness. Inputs Python would read differently or not at all (explicit nulls,
+ * non-integer versions, non-string writers) are refused, so the hash can never silently differ.
  */
 export function normalizePolicy(d: unknown): Record<string, unknown> {
   if (d === null || typeof d !== "object" || Array.isArray(d)) throw new Error("writer policy must be a JSON object");
   const p = d as Record<string, unknown>;
   const version = typeof p.version === "string" && /^\s*[+-]?\d+\s*$/.test(p.version) ? Number(p.version) : p.version;
   if (typeof version !== "number" || !Number.isSafeInteger(version)) throw new Error("writer policy version must be an integer");
-  const tags = p.tags ?? {};
+  const tags = has(p, "tags") ? p.tags : {};
   if (tags === null || typeof tags !== "object" || Array.isArray(tags)) throw new Error("writer policy tags must be an object");
   const outTags: Record<string, unknown> = {};
   for (const [tag, rule] of Object.entries(tags)) outTags[tag] = ruleDict(rule, `tags[${JSON.stringify(tag)}]`);
-  return { version, tags: outTags, default: ruleDict(p.default, "default") };
+  return { version, tags: outTags, default: ruleDict(has(p, "default") ? p.default : {}, "default") };
 }
 
 /** BLAKE2b-256 over the JCS form of the normalized policy (`witness_core.policy.policy_hash`). */
