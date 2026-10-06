@@ -2,7 +2,7 @@
 name = "witness"
 version = "0.1.0"
 description = "IOTA Advanced Explorer for Eclipse aeriOS"
-requires-python = ">=3.11"
+requires-python = ">=3.12.1"
 license = "Apache-2.0"
 
 [tool.uv.workspace]

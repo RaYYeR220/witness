@@ -103,5 +103,26 @@ def test_loads_turns_json_recursion_errors_into_the_same_refusal(monkeypatch):
         raise RecursionError("maximum recursion depth exceeded")
 
     monkeypatch.setattr(json, "loads", boom)
-    with pytest.raises(nesting.JsonTooDeep):
+    with pytest.raises(nesting.JsonTooDeep) as caught:
         nesting.loads("[]")
+    assert str(caught.value) == "JSON nested deeper than the parser's recursion limit"
+    with pytest.raises(nesting.JsonTooDeep) as caught:
+        nesting.loads(nest(CAP + 1))
+    assert str(caught.value) == "JSON nested deeper than 2500 levels"  # the cap, not the parser
+
+
+def test_this_interpreter_parses_the_whole_cap():
+    """Checked at import; the module would not load otherwise (CPython 3.11 stops near 994)."""
+    assert json.loads(nest(CAP)) is not None
+    nesting._check_interpreter()
+
+
+def test_an_interpreter_that_stops_short_fails_loudly(monkeypatch):
+    def shallow(text, **_kw):
+        if text.count("[") > 994:
+            raise RecursionError("maximum recursion depth exceeded while decoding a JSON array")
+        return []
+
+    monkeypatch.setattr(json, "loads", shallow)
+    with pytest.raises(RuntimeError, match=r"3\.12\.1 or later"):
+        nesting._check_interpreter()

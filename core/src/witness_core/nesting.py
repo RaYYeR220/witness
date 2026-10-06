@@ -7,6 +7,10 @@ so how deep it gets depends on how deep its caller already is (about 990 levels 
 bare script, 890 with 100 frames above it). A verdict must depend on neither, so these
 caps are checked first. @witness/verify applies the same ones (`PY_JSON_MAX_DEPTH` in
 json.ts, `JCS_MAX_DEPTH` in jcs.ts); keep both sides equal.
+
+The JSON cap only decides if json.loads itself parses that deep. CPython 3.11 gives up at
+about 994 levels, so Witness requires CPython 3.12.1 or later and checks at import time
+that this interpreter parses MAX_JSON_DEPTH levels (RuntimeError otherwise).
 """
 
 from __future__ import annotations
@@ -14,8 +18,9 @@ from __future__ import annotations
 import json
 from typing import Any
 
-# Deepest bracket nesting read from JSON text. Below the C json scanner's own limit on
-# every supported platform, so json.loads never reaches it first.
+# Deepest bracket nesting read from JSON text. On the supported interpreters (CPython
+# 3.12.1+) json.loads parses deeper than this on every platform, which the import-time
+# check below confirms, so the cap decides and the interpreter never does.
 MAX_JSON_DEPTH = 2500
 # Deepest value the canonicalizer accepts (the top value is at depth 0). Leaves rfc8785
 # about 500 frames of headroom for its caller's stack.
@@ -52,12 +57,16 @@ def text_too_deep(text: str, limit: int = MAX_JSON_DEPTH) -> bool:
     return False
 
 
+CAP_EXCEEDED = f"JSON nested deeper than {MAX_JSON_DEPTH} levels"
+PARSER_LIMIT = "JSON nested deeper than the parser's recursion limit"
+
 
 class JsonTooDeep(ValueError):
-    """JSON text nested deeper than MAX_JSON_DEPTH, valid JSON or not."""
+    """JSON text too deep to read: past MAX_JSON_DEPTH (CAP_EXCEEDED), valid JSON or not, or,
+    should it ever happen below the cap, past json.loads' own limit (PARSER_LIMIT)."""
 
-    def __init__(self, limit: int = MAX_JSON_DEPTH) -> None:
-        super().__init__(f"JSON nested deeper than {limit} levels")
+    def __init__(self, message: str = CAP_EXCEEDED) -> None:
+        super().__init__(message)
 
 
 def loads(data: str | bytes | bytearray, **kw: Any) -> Any:
@@ -65,18 +74,18 @@ def loads(data: str | bytes | bytearray, **kw: Any) -> Any:
 
     Raises JsonTooDeep (a ValueError) when the text nests deeper than MAX_JSON_DEPTH, so
     every entry point refuses the same payloads on every platform; json's own
-    RecursionError (which cannot occur below the cap) is turned into the same. Bytes are
-    decoded the way json.loads decodes them (UTF-8/16/32 sniffing). Other errors are
-    json.loads' own.
+    RecursionError (which the import-time check rules out below the cap) is turned into
+    JsonTooDeep too, with its own message. Bytes are decoded the way json.loads decodes
+    them (UTF-8/16/32 sniffing). Other errors are json.loads' own.
     """
     text = data.decode(json.detect_encoding(data), "surrogatepass") if isinstance(
         data, (bytes, bytearray)) else data
     if text_too_deep(text):
-        raise JsonTooDeep
+        raise JsonTooDeep(CAP_EXCEEDED)
     try:
         return json.loads(text, **kw)
     except RecursionError:
-        raise JsonTooDeep from None
+        raise JsonTooDeep(PARSER_LIMIT) from None
 
 
 def value_too_deep(value: Any, limit: int = MAX_JCS_DEPTH) -> bool:
@@ -92,3 +101,19 @@ def value_too_deep(value: Any, limit: int = MAX_JCS_DEPTH) -> bool:
         elif isinstance(v, (list, tuple)):
             stack.extend((x, depth + 1) for x in v)
     return False
+
+
+def _check_interpreter() -> None:
+    """The cap must be what decides: this json.loads has to parse MAX_JSON_DEPTH levels."""
+    deepest = "[" * MAX_JSON_DEPTH + "]" * MAX_JSON_DEPTH
+    try:
+        json.loads(deepest)
+    except RecursionError:
+        raise RuntimeError(
+            f"witness_core needs a json.loads that parses {MAX_JSON_DEPTH} levels of nesting; "
+            "this Python gives up earlier, so verdicts on deep payloads would depend on the "
+            "interpreter. Use CPython 3.12.1 or later."
+        ) from None
+
+
+_check_interpreter()
