@@ -23,7 +23,6 @@ function toHow() {
   <SiteNav @how="toHow" />
   <main>
     <SkyStage ref="stage" :still="reduced" @verify="toFlip" />
-    <span id="how" class="sr-only">How it works</span>
     <FlipByte />
   </main>
   <LandingFooter />

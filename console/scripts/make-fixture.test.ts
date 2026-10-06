@@ -14,7 +14,16 @@ import {
 } from "@witness/verify";
 import { describe, expect, it } from "vitest";
 
-import { makeFixture, OUT_FILE, readBlock, VECTORS_DIR, whiteFlagCone } from "./make-fixture.mjs";
+import {
+  IDENTITY_FILE,
+  makeFixture,
+  makeVerifierConfig,
+  OUT_FILE,
+  readBlock,
+  VECTORS_DIR,
+  VERIFIER_FILE,
+  whiteFlagCone,
+} from "./make-fixture.mjs";
 
 const fixture = makeFixture();
 const nodes = new Map(fixture.graph.nodes.map((n: { id: string }) => [n.id, n]));
@@ -40,8 +49,8 @@ describe("make-fixture", () => {
       expect(t.case).toBe(name);
       expect(t.bundle).toEqual(c.bundle);
       expect(t.config).toEqual(c.config);
-      expect(t.anchorRecord).toEqual(c.fetcher.record);
-      expect(t.trustedDids).toEqual(vectors.resolvers[c.resolver]);
+      expect(t.recordedAnchor).toEqual(c.fetcher.record);
+      expect(t.recordedDids).toEqual(vectors.resolvers[c.resolver]);
     }
   });
 
@@ -53,8 +62,8 @@ describe("make-fixture", () => {
       const t = fixture[which];
       const expected = vectors.cases.find((x: { name: string }) => x.name === name).expected;
       const ladder = await verifyBundleText(JSON.stringify(t.bundle), t.config as VerifierConfig, {
-        resolveDid: (did) => t.trustedDids[did] ?? null,
-        fetchAnchorRecord: () => t.anchorRecord,
+        resolveDid: (did) => t.recordedDids[did] ?? null,
+        fetchAnchorRecord: () => t.recordedAnchor,
       });
       expect(ladder.overall).toBe(expected.overall);
       expect(ladder.steps.map((s) => ({ name: s.name, ok: s.ok }))).toEqual(expected.steps);
@@ -114,5 +123,43 @@ describe("make-fixture", () => {
     const sample = readBlock(fixture.sample.bundle.block.raw);
     expect(sample.parents).toHaveLength(2);
     expect(sample.payload).toEqual({ kind: "tagged_data", tag: "trust.score" });
+  });
+});
+
+describe("pinned verifier config", () => {
+  const pinned = JSON.parse(readFileSync(VERIFIER_FILE, "utf8"));
+  const coordinator = JSON.parse(readFileSync(join(VECTORS_DIR, "coordinator_keys.json"), "utf8"));
+  const identity = JSON.parse(readFileSync(IDENTITY_FILE, "utf8"));
+
+  it("pins the coordinator keys the stack's protocol config lists", () => {
+    // coordinator_keys.json was captured from the same protocol config (scripts/capture_vectors.py)
+    expect(pinned.trustedCoordinatorKeys).toEqual(coordinator.publicKeys);
+    expect(pinned.threshold).toBe(coordinator.publicKeys.length);
+  });
+
+  it("pins the stack's Tangle network and Rebased network", () => {
+    for (const c of vectors.cases) if (c.bundle?.network) expect(c.bundle.network).toBe(pinned.network);
+    expect(pinned.rebasedNetwork).toBe(identity.network);
+    expect(pinned.trailId === null || /^0x[0-9a-f]{64}$/.test(pinned.trailId)).toBe(true);
+  });
+
+  it("is built from a protocol config the way the stack writes it", () => {
+    const protocol = {
+      targetNetworkName: "private_tangle1",
+      milestonePublicKeyCount: 2,
+      publicKeyRanges: [
+        { key: "ED3C3F1A319FF4E909CF2771D79FECE0AC9BD9FD2EE49EA6C0885C9CB3B1248C", start: 0, end: 0 },
+        { key: "f6752f5f46a53364e2ee9c4d662d762a81efd51010282a75cd6bd03f28ef349c", start: 0, end: 0 },
+        { key: "f6752f5f46a53364e2ee9c4d662d762a81efd51010282a75cd6bd03f28ef349c", start: 10, end: 20 },
+      ],
+    };
+    const cfg = makeVerifierConfig({ protocol, identity: { network: "testnet" }, trailId: null });
+    expect(cfg.network).toBe("private_tangle1");
+    expect(cfg.trustedCoordinatorKeys).toEqual(coordinator.publicKeys);
+    expect(cfg.threshold).toBe(2);
+    expect(cfg.rebasedNetwork).toBe("testnet");
+    expect(cfg.trailId).toBeNull();
+    expect(() => makeVerifierConfig({ protocol: { ...protocol, milestonePublicKeyCount: 3 }, identity, trailId: null })).toThrow();
+    expect(() => makeVerifierConfig({ protocol, identity, trailId: "0x1234" })).toThrow();
   });
 });

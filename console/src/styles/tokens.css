@@ -42,7 +42,7 @@
   --accent: var(--ember);
   --focus: var(--ember);
 
-  /* type: one serif for claims, one grotesk for reading and UI, one mono for bytes and ids */
+  /* type: one serif for claims, one grotesk for reading and UI, one mono for bytes and ids (self-hosted, fonts.css) */
   --serif: "Instrument Serif", "Iowan Old Style", Georgia, serif;
   --sans: "Schibsted Grotesk", system-ui, -apple-system, "Segoe UI", sans-serif;
   --mono: "Spline Sans Mono", ui-monospace, "Cascadia Mono", Consolas, monospace;

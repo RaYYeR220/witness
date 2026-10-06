@@ -18,12 +18,11 @@ import {
   rawBytes,
   readTrustMessage,
   scoreDigitIndex,
+  sampleRun,
   shortHex,
-  trustedLookups,
-  verifierConfig,
 } from "@/verify/sample";
 
-import { bundleFacts, glosses } from "./facts";
+import { bundleFacts, glosses, SAMPLE_NOTE } from "./facts";
 
 const facts = bundleFacts("sample");
 const gloss = glosses(facts);
@@ -77,7 +76,7 @@ function bitDiff(a: string, b: string) {
 }
 
 async function recompute() {
-  await runLadder(ladder, bundleText("sample", bytes.value), verifierConfig("sample"), trustedLookups("sample"));
+  await runLadder(ladder, bundleText("sample", bytes.value), sampleRun("sample"));
 }
 
 function flip(i: number) {
@@ -152,6 +151,8 @@ let flashUntil = 0;
 let flashRaf = 0;
 const reduced = typeof matchMedia === "function" && matchMedia("(prefers-reduced-motion: reduce)").matches;
 function drawPortrait() {
+  cancelAnimationFrame(flashRaf);
+  flashRaf = 0;
   const cv = portrait.value;
   if (!cv) return;
   const ps = mq?.matches ? 6 : 7;
@@ -285,6 +286,7 @@ watch(hash, () => drawPortrait());
           <p class="verdict" aria-live="polite">
             <b v-if="verdict.b" :class="{ bad: verdict.bad }">{{ verdict.b }}</b> {{ verdict.t }}
           </p>
+          <p class="sample-note">{{ SAMPLE_NOTE }}</p>
         </div>
       </div>
     </div>
@@ -343,7 +345,7 @@ h2 {
 }
 .dump span {
   text-align: center;
-  color: rgba(var(--rgb-fog-200), 0.38);
+  color: rgba(var(--rgb-fog-200), 0.62);
   border-radius: var(--r-cell);
   cursor: pointer;
   transition:
@@ -427,6 +429,13 @@ h2 {
 .cmp b.bad,
 .verdict b.bad {
   color: var(--fail);
+}
+.sample-note {
+  margin: 8px 0 0 22px;
+  max-width: 46ch;
+  font-size: var(--fs-micro);
+  line-height: 17px;
+  color: var(--fog-400);
 }
 .verdict {
   margin: 14px 0 0 22px;

@@ -1,8 +1,13 @@
 /**
  * Plain-words copy for the landing page, filled with values read from the
  * sample's inputs. These sentences say what each check compares; whether it
- * passed is only ever shown from the library's result.
+ * passed is only ever shown from the library's result. The DID document and
+ * the anchor record are recorded copies from the test vectors, and the copy
+ * says so: the landing page never reads IOTA Rebased live.
  */
+
+/** Shown wherever the landing page's checks are. */
+export const SAMPLE_NOTE = "Sample from the test vectors \u2014 DID and anchor records are recorded copies, not live reads.";
 
 import { fromHex } from "@witness/verify";
 
@@ -45,7 +50,7 @@ export function glosses(f: BundleFacts): string[] {
     `BLAKE2b-256 of the block's ${f.bytes} raw bytes, against its id ${shortHex(f.id)}.`,
     `A ${f.pathSteps}-step Merkle path from the block to the inclusion root of milestone ${f.msIndex}.`,
     `${f.signatures} coordinator signatures over milestone ${f.msIndex}, against ${f.pinnedKeys} pinned keys; ${f.threshold} needed.`,
-    `The envelope's Ed25519 signature, against key #${key ?? "?"} of ${f.issuer ?? "the issuer"} in the DID registry.`,
-    `The checkpoint of milestones ${f.anchorFrom} to ${f.anchorTo}, against record ${f.record} on IOTA Rebased.`,
+    `The envelope's Ed25519 signature, against key #${key ?? "?"} of ${f.issuer ?? "the issuer"} in the sample's recorded DID document.`,
+    `The checkpoint of milestones ${f.anchorFrom} to ${f.anchorTo}, against the sample's recorded anchor record (record ${f.record}, test vectors).`,
   ];
 }

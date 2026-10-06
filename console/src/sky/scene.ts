@@ -459,7 +459,7 @@ export class Scene {
         if (s.kind === "milestone") {
           const arm = (s.msIndex === 374 ? 9 : 7) * zoom;
           cx.globalAlpha = clamp(0.6 * a);
-          cx.strokeStyle = s.role === "forged" && f.verdicts.get(this.model.forged) ? "#FF5A6E" : "#EEF6F3";
+          cx.strokeStyle = "#EEF6F3"; // milestones are never painted as failed: only the forged block is
           cx.lineWidth = 0.8;
           cx.beginPath();
           cx.moveTo(x - arm, y);
@@ -566,7 +566,7 @@ export class Scene {
         }
       }
       placed.push({ x0: lx, y0: ly - 8, x1: lx + tw, y1: ly + 8 });
-      const failed = f.verdicts.get(i) === true || (s.role === "forged" && f.verdicts.get(this.model.forged) === true);
+      const failed = f.verdicts.get(i) === true;
       const strong = i === this.subjectStar;
       cx.fillStyle = rgba(failed ? C.nova : strong ? C.fog50 : C.fog200, la * (strong ? 1 : 0.78));
       cx.fillText(text, lx, ly);

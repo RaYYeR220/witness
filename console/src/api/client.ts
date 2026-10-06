@@ -3,9 +3,12 @@
  *
  * LiveAdapter talks to a running witness-api; ReplayAdapter reads a recorded
  * snapshot of the same responses as static files, so the console works with
- * no backend at all. Screens depend on `WitnessData` only. Verification never
- * goes through here: the console fetches a bundle and checks it in the browser
- * with @witness/verify, so a lying API can at worst make a check fail.
+ * no backend at all. Screens depend on `WitnessData` only.
+ *
+ * Verification never goes through here. The console fetches a bundle and
+ * checks it in the browser with @witness/verify against the pins built into
+ * the console (verify/pinned.ts), so a lying API can at worst make a check
+ * fail. The API's own `verifierConfig()` is for display and comparison only.
  */
 
 import type { VerifierConfig } from "@witness/verify";
@@ -121,6 +124,11 @@ export interface WitnessData {
   reports(): Promise<ReportSummary[]>;
   /** Subscribes to new messages and alerts; returns the unsubscribe function. */
   stream(onEvent: (event: StreamEvent) => void): () => void;
+  /**
+   * The pins the API says it verifies with. Informational only: the console
+   * shows it next to its own pins and flags a difference, but never verifies
+   * with it (see verify/pinned.ts).
+   */
   verifierConfig(): Promise<VerifierConfig>;
   /** The proof bundle as raw text, for `verifyBundleText`. */
   bundle(blockId: string): Promise<string>;
@@ -214,7 +222,7 @@ export class ReplayAdapter implements WitnessData {
     return this.file("messages.json") as Promise<Page<MessageSummary>>;
   }
   message(blockId: string) {
-    return this.file(`messages/${blockId}.json`) as Promise<Message>;
+    return this.file(`messages/${encodeURIComponent(blockId)}.json`) as Promise<Message>;
   }
   async lookup(text: string) {
     const all = (await this.file("lookup.json")) as LookupHit[];
@@ -254,7 +262,7 @@ export class ReplayAdapter implements WitnessData {
     return this.file("verifier-config.json") as Promise<VerifierConfig>;
   }
   bundle(blockId: string) {
-    return this.file(`bundles/${blockId}.json`, "text") as Promise<string>;
+    return this.file(`bundles/${encodeURIComponent(blockId)}.json`, "text") as Promise<string>;
   }
 }
 

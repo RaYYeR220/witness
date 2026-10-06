@@ -1,13 +1,14 @@
 import { describe, expect, it } from "vitest";
 
 import { createLadder, resetLadder, runLadder, stepValue, type StepView } from "./ladder";
-import { bundleText, rawBytes, scoreDigitIndex, blockFields, trustedLookups, verifierConfig, type Which } from "./sample";
+import { PINNED } from "./pinned";
+import { blockFields, bundleText, rawBytes, recordedLookups, sampleConfig, sampleRun, scoreDigitIndex, type Which } from "./sample";
 
 function run(which: Which, raw?: Uint8Array) {
   const state = createLadder();
   const seen: { name: string; status: string; at: string[] }[] = [];
-  const promise = runLadder(state, bundleText(which, raw), verifierConfig(which), {
-    ...trustedLookups(which),
+  const promise = runLadder(state, bundleText(which, raw), {
+    ...sampleRun(which),
     onStep: (step: StepView, s) => seen.push({ name: step.name, status: step.status, at: s.steps.map((x) => x.status) }),
   });
   return { state, seen, promise };
@@ -70,8 +71,8 @@ describe("runLadder over the landing sample", () => {
 
   it("drops a run that a newer run superseded", async () => {
     const state = createLadder();
-    const first = runLadder(state, bundleText("forged"), verifierConfig("forged"), { ...trustedLookups("forged"), pace: 5 });
-    const second = runLadder(state, bundleText("sample"), verifierConfig("sample"), trustedLookups("sample"));
+    const first = runLadder(state, bundleText("forged"), { ...sampleRun("forged"), pace: 5 });
+    const second = runLadder(state, bundleText("sample"), sampleRun("sample"));
     expect(await first).toBeNull();
     expect((await second)?.overall).toBe("VALID");
     expect(state.steps.every((s) => s.status === "pass")).toBe(true);
@@ -79,22 +80,38 @@ describe("runLadder over the landing sample", () => {
 
   it("can be reset mid-run", async () => {
     const state = createLadder();
-    const p = runLadder(state, bundleText("sample"), verifierConfig("sample"), { ...trustedLookups("sample"), pace: 5 });
+    const p = runLadder(state, bundleText("sample"), { ...sampleRun("sample"), pace: 5 });
     resetLadder(state);
     expect(await p).toBeNull();
     expect(state.steps.every((s) => s.status === "waiting")).toBe(true);
   });
 
-  it("leaves steps 4 and 5 unevaluated without trusted lookups", async () => {
+  it("leaves steps 4 and 5 unevaluated without the DID and anchor lookups", async () => {
     const state = createLadder();
-    const ladder = await runLadder(state, bundleText("sample"), verifierConfig("sample"));
+    const ladder = await runLadder(state, bundleText("sample"), { config: sampleConfig("sample") });
     expect(ladder?.overall).toBe("PARTIAL");
     expect(state.steps.map((s) => s.status)).toEqual(["pass", "pass", "pass", "unknown", "unknown"]);
   });
 
+  it("verifies against the console's pinned config unless told otherwise", async () => {
+    const state = createLadder();
+    const ladder = await runLadder(state, bundleText("sample"), recordedLookups("sample"));
+    // same network, coordinator keys and threshold as the stack: steps 1 to 4 hold
+    expect(state.steps.slice(0, 4).map((s) => s.status)).toEqual(["pass", "pass", "pass", "pass"]);
+    // but the sample's anchor sits on the vectors' test trail, which the stack does not pin
+    if (PINNED.trailId === null) {
+      expect(state.steps[4]!.status).toBe("unknown");
+      expect(state.steps[4]!.detail).toBe("anchor not checked: verifier pins no Rebased trail");
+      expect(ladder?.overall).toBe("PARTIAL");
+    } else {
+      expect(state.steps[4]!.status).toBe("fail");
+      expect(state.steps[4]!.detail).toBe("anchor trail is not the pinned trail");
+    }
+  });
+
   it("fails all five steps on text that is not a bundle", async () => {
     const state = createLadder();
-    await runLadder(state, "{not json", verifierConfig("sample"));
+    await runLadder(state, "{not json");
     expect(state.steps.map((s) => s.status)).toEqual(["fail", "fail", "fail", "fail", "fail"]);
     expect(state.failedAt).toBe(1);
   });

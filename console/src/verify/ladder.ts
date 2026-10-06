@@ -5,6 +5,10 @@
  * step into the state from the library's `onStep` callback, in ladder order,
  * the moment the library decides it. Nothing here decides a verdict: a step
  * reads "pass" only because the library returned `ok: true` for it.
+ *
+ * It verifies against the console's pinned config (verify/pinned.ts) unless a
+ * caller passes another one on purpose, like the landing page's sample, which
+ * is checked against the pins of the test vectors it comes from.
  */
 
 import { reactive } from "vue";
@@ -18,6 +22,8 @@ import {
   type VerifierConfig,
   type VerifyOptions,
 } from "@witness/verify";
+
+import { pinnedConfig } from "./pinned";
 
 /** waiting: not reached yet; running: being computed; unknown: the library could not evaluate it (ok null). */
 export type StepStatus = "waiting" | "running" | "pass" | "fail" | "unknown";
@@ -85,6 +91,8 @@ export function statusOf(ok: boolean | null): StepStatus {
 }
 
 export interface RunOptions extends Pick<VerifyOptions, "resolveDid" | "fetchAnchorRecord"> {
+  /** The pins to verify against. Default: the console's pinned config. */
+  config?: VerifierConfig;
   /** Pause after each decided step, in ms, so people can watch the ladder climb. 0 = no pause. */
   pace?: number;
   /** Called after each step is written into the state. */
@@ -97,16 +105,12 @@ const now = () => (typeof performance !== "undefined" ? performance.now() : Date
 const sleep = (ms: number) => new Promise<void>((r) => setTimeout(r, ms));
 
 /**
- * Verify `input` (bundle text or bytes) against `cfg` and stream every step
+ * Verify `input` (bundle text or bytes) and stream every step
  * into `state`. Resolves with the library's ladder, or with null when a newer
  * run (or `resetLadder`) took over before this one finished.
  */
-export async function runLadder(
-  state: LadderState,
-  input: string | Uint8Array,
-  cfg: VerifierConfig,
-  options: RunOptions = {},
-): Promise<Ladder | null> {
+export async function runLadder(state: LadderState, input: string | Uint8Array, options: RunOptions = {}): Promise<Ladder | null> {
+  const cfg = options.config ?? pinnedConfig();
   resetLadder(state);
   const run = state.run;
   const pace = Math.max(0, options.pace ?? 0);

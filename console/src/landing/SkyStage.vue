@@ -10,13 +10,14 @@ import { computed, nextTick, onBeforeUnmount, onMounted, reactive, ref, watch } 
 
 import StepList from "@/components/StepList.vue";
 import { clamp } from "@/sky/camera";
+import { needsFrame } from "@/sky/loop";
 import { buildSky, milestoneFacts, pathToMilestone, type SkyModel } from "@/sky/model";
-import { Scene, THRESHOLDS, type Box, type FrameInput, type Subject, type Trace } from "@/sky/scene";
+import { HOP_MS, Scene, THRESHOLDS, type Box, type FrameInput, type Subject, type Trace } from "@/sky/scene";
 import { useVerificationStore } from "@/stores/verification";
 import { stepNote, stepValue, type StepStatus } from "@/verify/ladder";
 import { shortHex, type Which } from "@/verify/sample";
 
-import { bundleFacts, glosses } from "./facts";
+import { bundleFacts, glosses, SAMPLE_NOTE } from "./facts";
 
 const props = defineProps<{ still: boolean }>();
 const emit = defineEmits<{ verify: [] }>();
@@ -96,6 +97,7 @@ const captions = computed(() => {
       to: 0.955,
       h: "Five checks, back up to a public anchor",
       p: "Each one runs in your browser. None of them asks the dashboard.",
+      note: SAMPLE_NOTE,
     },
     {
       from: 0.955,
@@ -391,9 +393,22 @@ function frame(now: number) {
     void store.verifyInHero(trace.which, props.still ? 0 : 190);
   }
   placeAnnot();
-  const animating = trace !== null && (!plumbFired || out.traceHops < trace.path.length - 1);
-  if (!props.still && onScreen && !document.hidden && (p.value < 0.46 || animating)) raf = requestAnimationFrame(frame);
-  else if (props.still && animating) raf = requestAnimationFrame(frame);
+  const more = needsFrame({
+    onScreen,
+    hidden: document.hidden,
+    still: props.still,
+    p: p.value,
+    skyAlpha: factors.value.sky,
+    trace: trace
+      ? {
+          hops: trace.path.length - 1,
+          elapsedHops: props.still ? Infinity : (now - trace.start) / HOP_MS,
+          toLadder: trace.which !== null,
+          plumbFired,
+        }
+      : null,
+  });
+  if (more) raf = requestAnimationFrame(frame);
 }
 
 function kick() {
@@ -404,7 +419,9 @@ function onScroll() {
   const np = progress();
   if (np !== p.value) {
     p.value = np;
-    if (np > 0.4 && hover >= 0) setHover(-1);
+    const focused = document.activeElement === canvas.value;
+    if (np > 0.4 && hover >= 0 && !focused) setHover(-1);
+    else if (np <= 0.4 && focused && keyStar >= 0 && hover !== keyStar) setHover(keyStar);
   }
   kick();
 }
@@ -546,7 +563,11 @@ onMounted(async () => {
     });
     io.observe(section.value);
   }
-  await (document.fonts?.ready ?? Promise.resolve());
+  await Promise.all([
+    document.fonts?.ready,
+    document.fonts?.load("400 11px 'Spline Sans Mono'"),
+    document.fonts?.load("400 12px 'Schibsted Grotesk'"),
+  ]).catch(() => undefined);
   measure();
   onScroll();
   await store.computeAll();
@@ -601,6 +622,7 @@ const skyLabel = `A sample IOTA Tangle drawn as stars: ${realCount} real blocks 
 
 <template>
   <section ref="section" class="descent" :class="{ still }" aria-label="The sample, from the Tangle down to one trust score and back up through its proof">
+    <span v-if="!still" id="how" class="how-mark" aria-hidden="true"></span>
     <div ref="stage" class="stage">
       <canvas
         ref="canvas"
@@ -639,7 +661,7 @@ const skyLabel = `A sample IOTA Tangle drawn as stars: ${realCount} real blocks 
 
           <div class="hero-side">
             <div ref="skySlot" class="sky-slot" aria-hidden="true"></div>
-            <div class="hero-ladder" :class="{ dim: !store.heroSubject }" role="group" aria-label="The five checks for the traced block">
+            <div class="hero-ladder" role="group" aria-label="The five checks for the traced block">
               <p class="subject">
                 <span class="pin" aria-hidden="true"></span>
                 <template v-if="heroFacts">
@@ -659,6 +681,7 @@ const skyLabel = `A sample IOTA Tangle drawn as stars: ${realCount} real blocks 
                   {{ heroVerdict.t }}
                 </template>
               </p>
+              <p class="sample-note">{{ SAMPLE_NOTE }}</p>
             </div>
           </div>
         </div>
@@ -676,8 +699,11 @@ const skyLabel = `A sample IOTA Tangle drawn as stars: ${realCount} real blocks 
             <h2 :class="{ bad: c.bad }">{{ c.h }}</h2>
             <p>
               {{ c.p }}
-              <a v-if="c.end" href="#flip" @click.prevent="emit('verify')">{{ c.bad ? "Now break the real one." : "Now break it." }}</a>
+              <a v-if="c.end" href="#flip" :tabindex="p >= c.from && p < c.to ? 0 : -1" @click.prevent="emit('verify')">{{
+                c.bad ? "Now break the real one." : "Now break it."
+              }}</a>
             </p>
+            <p v-if="c.note" class="sample-note">{{ c.note }}</p>
           </div>
         </div>
 
@@ -709,7 +735,7 @@ const skyLabel = `A sample IOTA Tangle drawn as stars: ${realCount} real blocks 
       </template>
     </div>
 
-    <div v-if="still" ref="stillStage" class="stage still-frame">
+    <div v-if="still" id="how" ref="stillStage" class="stage still-frame">
       <canvas ref="stillCanvas" class="sky" role="img" aria-label="The five checks for the sample block, climbing from its raw bytes up to the public anchor."></canvas>
       <div class="caps">
         <div class="cap on">
@@ -718,6 +744,7 @@ const skyLabel = `A sample IOTA Tangle drawn as stars: ${realCount} real blocks 
             Each one runs in your browser. None of them asks the dashboard.
             <a href="#flip" @click.prevent="emit('verify')">Now break it.</a>
           </p>
+          <p class="sample-note">{{ SAMPLE_NOTE }}</p>
         </div>
       </div>
       <ol v-if="stillColumn" class="ascent" aria-label="The five checks for this block">
@@ -768,7 +795,9 @@ const skyLabel = `A sample IOTA Tangle drawn as stars: ${realCount} real blocks 
   touch-action: pan-y;
 }
 .sky:focus-visible {
-  outline: none;
+  outline: 1.5px solid var(--focus);
+  outline-offset: -6px;
+  border-radius: 10px;
 }
 
 /* the catalogue note next to a star: two lines, no box */
@@ -884,8 +913,25 @@ h1 {
   font-size: 14px;
   transition: opacity var(--t-step);
 }
-.hero-ladder.dim :deep(.steps) {
-  opacity: 0.4;
+.sample-note {
+  margin: 10px 0 0 22px;
+  max-width: 46ch;
+  font-size: var(--fs-micro);
+  line-height: 17px;
+  color: var(--fog-400);
+}
+.cap p.sample-note {
+  margin: 14px 0 0;
+  font-size: var(--fs-micro);
+  line-height: 17px;
+  color: var(--fog-400);
+}
+.how-mark {
+  position: absolute;
+  left: 0;
+  top: calc((640vh - 100vh) * 0.12);
+  width: 1px;
+  height: 1px;
 }
 .subject {
   position: relative;
@@ -1029,9 +1075,6 @@ h1 {
 .ascent li[data-s="fail"] .gl {
   color: var(--fog-200);
 }
-.ascent li[data-s="waiting"] .gl {
-  opacity: 0.6;
-}
 
 .trail {
   position: absolute;
@@ -1050,7 +1093,7 @@ h1 {
   padding: 6px 10px 8px;
   border-radius: 4px;
   font-size: var(--fs-small);
-  color: rgba(var(--rgb-fog-400), 0.75);
+  color: var(--fog-400);
   cursor: pointer;
   transition: color 300ms;
 }
@@ -1115,7 +1158,7 @@ h1 {
     order: -1;
   }
   .sky-slot {
-    height: clamp(220px, 34svh, 300px);
+    height: clamp(200px, 29svh, 260px);
   }
   .hero-ladder {
     width: 100%;
@@ -1130,10 +1173,14 @@ h1 {
     font-size: 12.5px;
     line-height: 17px;
   }
+  .sample-note {
+    margin: 4px 0 0;
+  }
   .hero-copy {
     margin-top: 18px;
   }
   h1 {
+    font-size: 46px;
     line-height: 0.96;
   }
   .sub {

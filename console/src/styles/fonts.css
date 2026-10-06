@@ -1,0 +1,27 @@
+/*
+ * Self-hosted webfonts, latin subset, SIL Open Font License 1.1
+ * (licence texts next to the files in src/assets/fonts/).
+ */
+@font-face {
+  font-family: "Instrument Serif";
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+  src: url("../assets/fonts/InstrumentSerif-Regular.latin.woff2") format("woff2");
+}
+
+@font-face {
+  font-family: "Schibsted Grotesk";
+  font-style: normal;
+  font-weight: 400 600;
+  font-display: swap;
+  src: url("../assets/fonts/SchibstedGrotesk-wght.latin.woff2") format("woff2");
+}
+
+@font-face {
+  font-family: "Spline Sans Mono";
+  font-style: normal;
+  font-weight: 400 500;
+  font-display: swap;
+  src: url("../assets/fonts/SplineSansMono-wght.latin.woff2") format("woff2");
+}

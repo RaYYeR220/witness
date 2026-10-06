@@ -1,8 +1,12 @@
 /**
  * The landing page's sample: a real bundle from the shared test vectors, its
- * forged twin, and the trusted inputs each one is checked against (see
+ * forged twin, and the inputs each one is checked against (see
  * scripts/make-fixture.mjs). This module only hands out inputs; every verdict
  * comes from @witness/verify at runtime.
+ *
+ * The DID document and the anchor record are recorded copies from the test
+ * vectors. Nothing here reads the DID registry or IOTA Rebased live, and the
+ * page says so next to the checks.
  */
 
 import {
@@ -24,8 +28,10 @@ interface TrustInputs {
   case: string;
   bundle: Record<string, unknown> & { block: { id: string; raw: string } };
   config: VerifierConfig & { trustedCoordinatorKeys: string[] };
-  trustedDids: Record<string, unknown>;
-  anchorRecord: unknown;
+  /** Recorded copies of the issuer's DID document, by DID (test vectors). */
+  recordedDids: Record<string, unknown>;
+  /** Recorded copy of the anchor record the bundle points at (test vectors). */
+  recordedAnchor: unknown;
 }
 
 export interface GraphNode {
@@ -79,22 +85,33 @@ export function bundleText(which: Which, raw?: Uint8Array): string {
   return JSON.stringify({ ...bundle, block });
 }
 
-export function verifierConfig(which: Which): VerifierConfig {
+/**
+ * The pins the test vectors check this sample against, including their test
+ * anchor trail. Not the console's pinned config (verify/pinned.ts): the
+ * sample predates the stack's trail.
+ */
+export function sampleConfig(which: Which): VerifierConfig {
   const c = landing[which].config;
   return { ...c, trustedCoordinatorKeys: [...c.trustedCoordinatorKeys] };
 }
 
 /**
- * The two trusted lookups the ladder needs, answered from the fixture the way
- * the vectors define them: the DID registry returns the issuer's record, the
- * anchor fetcher returns the checkpoint record stored on IOTA Rebased.
+ * The two lookups the ladder needs, answered from recorded copies the way the
+ * test vectors define them: the issuer's DID document as the vectors' resolver
+ * returns it, and the anchor record as the vectors' fetcher returns it. These
+ * are not live reads of the DID registry or of IOTA Rebased.
  */
-export function trustedLookups(which: Which): Pick<VerifyOptions, "resolveDid" | "fetchAnchorRecord"> {
+export function recordedLookups(which: Which): Pick<VerifyOptions, "resolveDid" | "fetchAnchorRecord"> {
   const t = landing[which];
   return {
-    resolveDid: (did: string) => structuredClone(t.trustedDids[did] ?? null),
-    fetchAnchorRecord: () => structuredClone(t.anchorRecord),
+    resolveDid: (did: string) => structuredClone(t.recordedDids[did] ?? null),
+    fetchAnchorRecord: () => structuredClone(t.recordedAnchor),
   };
+}
+
+/** Run options that check the sample against its own pins and recorded copies. */
+export function sampleRun(which: Which) {
+  return { config: sampleConfig(which), ...recordedLookups(which) };
 }
 
 export interface TrustMessage {

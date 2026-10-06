@@ -11,7 +11,7 @@ import { defineStore } from "pinia";
 import { reactive, ref } from "vue";
 
 import { createLadder, resetLadder, runLadder } from "@/verify/ladder";
-import { bundleText, trustedLookups, verifierConfig, type Which } from "@/verify/sample";
+import { bundleText, sampleRun, type Which } from "@/verify/sample";
 
 export const useVerificationStore = defineStore("verification", () => {
   const results = reactive({ sample: createLadder(), forged: createLadder() });
@@ -22,17 +22,23 @@ export const useVerificationStore = defineStore("verification", () => {
   const subject = ref<Which>("sample");
   let booted: Promise<void> | null = null;
 
+  /**
+   * One run per bundle, one after the other, so their timings are comparable.
+   * An untimed run goes first: the very first verification in a page pays for
+   * JIT warm-up, which would otherwise land on whichever bundle runs first.
+   */
   function computeAll(): Promise<void> {
-    booted ??= Promise.all(
-      (["sample", "forged"] as const).map((w) => runLadder(results[w], bundleText(w), verifierConfig(w), trustedLookups(w))),
-    ).then(() => undefined);
+    booted ??= (async () => {
+      await runLadder(createLadder(), bundleText("sample"), sampleRun("sample"));
+      for (const w of ["sample", "forged"] as const) await runLadder(results[w], bundleText(w), sampleRun(w));
+    })();
     return booted;
   }
 
   function verifyInHero(which: Which, pace: number) {
     heroSubject.value = which;
     subject.value = which;
-    return runLadder(hero, bundleText(which), verifierConfig(which), { ...trustedLookups(which), pace });
+    return runLadder(hero, bundleText(which), { ...sampleRun(which), pace });
   }
 
   function clearHero() {
