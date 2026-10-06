@@ -6,11 +6,14 @@ license = "Apache-2.0"
 dependencies = [
   "witness-core",
   "psycopg[binary,pool]>=3.2",
-  "grpcio>=1.66",
-  "protobuf>=5.28",
+  "grpcio>=1.84",
+  "protobuf>=7.35.1",
   "httpx>=0.27",
   "aiomqtt>=2.3",
 ]
+
+[project.scripts]
+witness-indexer = "witness_indexer.main:main"
 
 [build-system]
 requires = ["hatchling"]

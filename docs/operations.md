@@ -83,6 +83,44 @@ call the debug cone for each of M's `parents` in order and concatenate without
 duplicates (`cones.json` is built this way). Calling the cone endpoint on M's
 own block returns only that block, since its parents are already referenced.
 
+## Indexer
+
+```bash
+uv run witness-indexer --db postgresql://postgres:witness@127.0.0.1:5432/postgres \
+  --schema witness --policy policy.json \
+  [--source inx|rest] [--mqtt mqtt://127.0.0.1:1883] [--validate]
+```
+
+- `--source inx` (default) streams confirmed milestones over INX (`127.0.0.1:9029`)
+  and reads each cone with `ReadMilestoneCone`. If INX does not answer within
+  `--inx-timeout` seconds the indexer logs it and polls the REST API instead.
+- `--source rest` polls `/api/core/v2/info` every `--poll` seconds and rebuilds
+  each cone from block metadata (`referencedByMilestoneIndex`,
+  `whiteFlagIndex`), walking back from the milestone's parents. It needs only the
+  core routes, not the debug API.
+- Every milestone is one database transaction: milestone, cone blocks, messages
+  with verdicts, blind tokens, trust-score lineage, alerts, then the cursor and
+  the events. After a crash or reconnect it resumes at cursor + 1; replaying a
+  milestone changes nothing.
+- `--mqtt` stores the Messages API's submission records; `--validate` checks each
+  submitted block against the node. Without `--policy` every signer is allowed.
+- Ctrl+C / SIGTERM lets the milestone being written commit, then exits.
+
+INX also lets a plugin mount REST routes on the node: `RegisterAPIRoute` with
+route `witness/v1` makes `http://<node>:14265/api/witness/v1/*` proxy to the
+given host and port. HORNET runs in Docker, so the host must be reachable from
+the container (`host.docker.internal` with Docker Desktop); a server bound to
+`127.0.0.1` on the host works through it.
+
+The Python INX stubs in `indexer/src/witness_indexer/inx_proto/` are generated
+from `iotaledger/inx` (branch `production`, the Stardust protocol HORNET 2.x
+speaks) by `scripts/gen_inx.sh`; rerun it only to bump the pinned commit.
+
+Live checks: `WITNESS_LIVE=1 uv run pytest indexer/tests/test_source_inx_live.py`
+(streams real milestones, compares INX with REST, proxies a test route, and
+indexes a block written straight to HORNET into a throwaway schema; needs
+`WITNESS_TEST_PG`).
+
 ## Troubleshooting
 
 - **`bootstrap.sh` refuses to run on Windows.** The upstream script wants root

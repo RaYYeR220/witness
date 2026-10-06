@@ -37,3 +37,4 @@ addopts = "-q"
 [tool.ruff]
 line-length = 100
 target-version = "py311"
+extend-exclude = ["indexer/src/witness_indexer/inx_proto"]
