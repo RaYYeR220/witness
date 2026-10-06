@@ -24,7 +24,7 @@ dev = [
   "pytest-asyncio>=0.24",
   "hypothesis>=6.112",
   "respx>=0.21",
-  "grpcio-tools>=1.66",
+  "grpcio-tools>=1.84",
   "ruff>=0.7",
 ]
 

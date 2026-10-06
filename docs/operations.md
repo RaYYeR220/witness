@@ -93,7 +93,9 @@ uv run witness-indexer --db postgresql://postgres:witness@127.0.0.1:5432/postgre
 
 - `--source inx` (default) streams confirmed milestones over INX (`127.0.0.1:9029`)
   and reads each cone with `ReadMilestoneCone`. If INX does not answer within
-  `--inx-timeout` seconds the indexer logs it and polls the REST API instead.
+  `--inx-timeout` seconds at startup, the indexer logs it and polls the REST API
+  instead. The choice is made once: if INX drops later, the indexer keeps
+  reconnecting to INX (restart it to switch).
 - `--source rest` polls `/api/core/v2/info` every `--poll` seconds and rebuilds
   each cone from block metadata (`referencedByMilestoneIndex`,
   `whiteFlagIndex`), walking back from the milestone's parents. It needs only the
@@ -102,9 +104,30 @@ uv run witness-indexer --db postgresql://postgres:witness@127.0.0.1:5432/postgre
   with verdicts, blind tokens, trust-score lineage, alerts, then the cursor and
   the events. After a crash or reconnect it resumes at cursor + 1; replaying a
   milestone changes nothing.
+- Before that transaction a milestone must continue the stored chain (its
+  `previousMilestoneId` is the stored milestone before it), its cone must hash to
+  its inclusion Merkle root, and every signing key it uses must resolve (at the
+  milestone's time). Otherwise nothing is written and the milestone is retried.
+- A writer policy is required: `--policy policy.json` (same format as the relay's),
+  or `--allow-any-writer` for development, which logs a warning. Signers missing
+  from the policy get `UNAUTHORIZED_WRITER`.
 - `--mqtt` stores the Messages API's submission records; `--validate` checks each
-  submitted block against the node. Without `--policy` every signer is allowed.
+  submitted block against the node.
 - Ctrl+C / SIGTERM lets the milestone being written commit, then exits.
+
+Health shows up in `Store.stats()` (and so in the API's stats):
+
+| Key | Values |
+| --- | --- |
+| `indexer` | `ok`; `retrying (<inx\|rest\|database> unavailable)`; `retrying (resolver unreachable)`; `retrying milestone N (<reason>, attempt k)`; `stuck at N (<reason>)` after 5 failed attempts on the same milestone (e.g. `cone root mismatch`); `network changed` when the node serves a different Tangle than the database holds |
+| `resolver` | `unreachable` while signing keys cannot be resolved (no verdicts are written meanwhile), `ok` once it recovers |
+| `policy` | `file`, `allow-any`, or `none` (library default: every signed writer is unauthorized) |
+
+Messages nested more than 64 levels deep keep their raw bytes only (no JSON copy);
+a witness envelope that deep is `MALFORMED` ("nesting too deep"). An issuer's
+`seq` may arrive out of order (white-flag order is not issue order); a message is
+`REPLAY` only if another block already used the same `seq` or nonce for that
+issuer.
 
 INX also lets a plugin mount REST routes on the node: `RegisterAPIRoute` with
 route `witness/v1` makes `http://<node>:14265/api/witness/v1/*` proxy to the

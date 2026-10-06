@@ -1,7 +1,6 @@
 import asyncio
 import dataclasses
 import json
-import logging
 
 import pytest
 from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
@@ -10,7 +9,12 @@ from witness_core import canon, codec, envelope, merkle, policy
 from witness_core.envelope import KeyInfo
 from witness_indexer.didkey import OfflineResolver
 from witness_indexer.pipeline import Indexer
-from witness_indexer.source import ConeBlock, SourceUnavailable
+from witness_indexer.source import (
+    ConeBlock,
+    ConeMismatch,
+    NetworkChanged,
+    SourceUnavailable,
+)
 from witness_indexer.store import Alert, MessageFilter, MessageRow, Store, Submission
 
 ALICE = Ed25519PrivateKey.from_private_bytes(b"\x01" * 32)
@@ -205,21 +209,107 @@ async def test_duplicate_milestones_from_source_are_skipped(store: Store):
     assert (await event_types(store)).count("milestone") == 3
 
 
-async def test_cone_root_mismatch_is_logged(store: Store, caplog):
+async def test_cone_root_mismatch_is_refused(store: Store):
     chain = FakeChain()
     chain.add([("x", b"{}"), ("y", b"{}")])
     chain.cones[1] = chain.cones[1][:1]  # the node "forgot" a block
-    with caplog.at_level(logging.ERROR, logger="witness_indexer.pipeline"):
+    with pytest.raises(ConeMismatch):
         await indexer(FakeSource(chain), store).sync()
-    assert "inclusion" in caplog.text
-    assert (await store.stats())["milestones"] == 1
+    stats = await store.stats()
+    assert (stats["milestones"], stats["blocks"], stats["messages"], stats["cursor"]) == (
+        0, 0, 0, 0)
+
+
+async def test_stuck_milestone_is_reported_then_recovers(store: Store):
+    chain = FakeChain()
+    chain.add([("x", b"{}")])
+    chain.add([("x", b"{}"), ("y", b"{}")])
+    good = chain.cones[2]
+    chain.cones[2] = good[:1]
+    seen: list[str] = []
+
+    async def sleep(_s):
+        seen.append((await store.stats()).get("indexer"))
+        if len(seen) == 7:
+            chain.cones[2] = good  # the node is fixed
+        await asyncio.sleep(0)
+
+    ix = indexer(FakeSource(chain, tail=True), store, sleep=sleep)
+    task = asyncio.create_task(ix.run())
+    await wait_cursor(store, 2)
+    await ix.stop()
+    await task
+    assert seen[:4] == [f"retrying milestone 2 (cone root mismatch, attempt {n})"
+                        for n in range(1, 5)]
+    assert seen[4:7] == ["stuck at 2 (cone root mismatch)"] * 3
+    assert (await store.stats())["indexer"] == "ok"
+
+
+async def test_transient_source_errors_never_count_as_stuck(store: Store):
+    chain = FakeChain()
+    chain.add([("x", b"{}")])
+
+    class Flaky(FakeSource):
+        failures = 8
+
+        async def milestones(self, start):
+            if self.failures:
+                self.failures -= 1
+                raise SourceUnavailable("connection refused")
+            async for m in super().milestones(start):
+                yield m
+
+    seen = []
+
+    async def sleep(_s):
+        seen.append((await store.stats()).get("indexer"))
+        await asyncio.sleep(0)
+
+    ix = indexer(Flaky(chain, tail=True), store, sleep=sleep)
+    task = asyncio.create_task(ix.run())
+    await wait_cursor(store, 1)
+    await ix.stop()
+    await task
+    assert seen == ["retrying (fake unavailable)"] * 8
+    assert (await store.stats())["indexer"] == "ok"
+
+
+async def test_network_change_is_refused(store: Store):
+    a, b = FakeChain(), FakeChain()
+    for chain, tag in ((a, "a"), (b, "b")):
+        for _ in range(3):
+            chain.add([(tag, b"{}")])
+    del a.ms[3]
+    await indexer(FakeSource(a), store).sync()
+    assert await store.get_cursor() == 2
+    with pytest.raises(NetworkChanged):  # b's milestone 3 does not follow a's milestone 2
+        await indexer(FakeSource(b), store).sync()
+    with pytest.raises(NetworkChanged):  # same index, different milestone
+        await indexer(FakeSource(b), store).process_milestone(b.ms[2])
+    stats = await store.stats()
+    assert (stats["milestones"], stats["cursor"]) == (2, 2)
+
+    seen = []
+
+    async def sleep(_s):
+        seen.append((await store.stats()).get("indexer"))
+        await asyncio.sleep(0)
+
+    ix = indexer(FakeSource(b, tail=True), store, sleep=sleep)
+    task = asyncio.create_task(ix.run())
+    while not seen:
+        await asyncio.sleep(0.01)
+    await ix.stop()
+    await task
+    assert seen[0] == "network changed"
+    assert (await store.service_status())["indexer"]["detail"].startswith("milestone 3")
 
 
 # -- verdicts ----------------------------------------------------------------------------------
 
 
 async def test_verdict_pipeline(store: Store):
-    revoked_at = (1_790_000_000 + 5 * 3) * 1000  # milestone 3's timestamp, in ms
+    revoked_at = (1_790_000_000 + 5 * 3) * 1000 - 1  # just before milestone 3, in ms
     carol_kid = f"{did_key(CAROL)}#{did_key(CAROL)[len('did:key:'):]}"
     resolver = OfflineResolver({
         carol_kid: KeyInfo(carol_kid, CAROL.public_key().public_bytes_raw(), None, revoked_at)})
@@ -254,6 +344,7 @@ async def test_verdict_pipeline(store: Store):
         "PRODUCER_SIGNED", "RELAY_ATTESTED", "FORGED", "MALFORMED"]
     assert [await verdict(2, n) for n in range(3)] == ["REPLAY", "REPLAY", "PRODUCER_SIGNED"]
     assert await verdict(3, 0) == "REVOKED_KEY"
+    assert (await store.stats())["policy"] == "file"
 
     row = await msg(store, chain.block_id(1, 0))
     env = json.loads(first)
@@ -263,6 +354,150 @@ async def test_verdict_pipeline(store: Store):
     assert row["canon_hash"] == canon.canon_hash(score(ie, 0.9))
     assert row["data"] == first and row["kind"] == "trust.score"
     assert row["encrypted"] is False
+
+
+async def test_key_revoked_at_the_milestone_time_is_still_valid(store: Store):
+    ie = "D:aabbccddeeff"
+    chain = FakeChain()
+    chain.add([("trust.score", signed(CAROL, "trust.score", score(ie, 0.5), 1)),
+               ("trust.score", signed(ALICE, "trust.score", score(ie, 0.5), 1))])
+    at = chain.ms[1].timestamp * 1000
+    pinned = {kid_of(sk): KeyInfo(kid_of(sk), sk.public_key().public_bytes_raw(), None, when)
+              for sk, when in ((CAROL, at), (ALICE, at - 1))}
+    await indexer(FakeSource(chain), store, resolve=OfflineResolver(pinned)).sync()
+    assert [(await msg(store, chain.block_id(1, n)))["verdict"] for n in (0, 1)] == [
+        "PRODUCER_SIGNED", "REVOKED_KEY"]
+
+
+async def test_out_of_order_seqs_are_not_replays(store: Store):
+    ie = "D:aabbccddeeff"
+    chain = FakeChain()
+    chain.add([("trust.score", signed(ALICE, "trust.score", score(ie, 0.2), 2)),
+               ("trust.score", signed(ALICE, "trust.score", score(ie, 0.1), 1))])
+    chain.add([("trust.score", signed(ALICE, "trust.score", score(ie, 0.3), 1,
+                                      nonce=b"q" * 16)),                # seq 1 again
+               ("trust.score", signed(ALICE, "trust.score", score(ie, 0.3), 7,
+                                      nonce=(2).to_bytes(16, "big"))),  # nonce of seq 2
+               ("trust.score", signed(ALICE, "trust.score", score(ie, 0.3), 5))])
+    await indexer(FakeSource(chain), store).sync()
+    verdicts = [(await msg(store, chain.block_id(i, n)))["verdict"]
+                for i, n in ((1, 0), (1, 1), (2, 0), (2, 1), (2, 2))]
+    assert verdicts == ["PRODUCER_SIGNED", "PRODUCER_SIGNED", "REPLAY", "REPLAY",
+                        "PRODUCER_SIGNED"]
+
+
+async def test_default_policy_refuses_unlisted_signers(store: Store):
+    chain = FakeChain()
+    chain.add([("trust.score", signed(ALICE, "trust.score", score("D:aabbccddeeff", 0.5), 1)),
+               ("trust.score", json.dumps(score("D:aabbccddeeff", 0.5)).encode())])
+    await Indexer(FakeSource(chain), store).sync()
+    assert [(await msg(store, chain.block_id(1, n)))["verdict"] for n in (0, 1)] == [
+        "UNAUTHORIZED_WRITER", "UNSIGNED_LEGACY"]
+    assert (await store.stats())["policy"] == "none"
+
+
+class RecordingResolver:
+    def __init__(self, store: Store, fail: int = 0) -> None:
+        self.store = store
+        self.fail = fail
+        self.calls: list[tuple[str, int | None]] = []
+        self.inner = OfflineResolver()
+
+    async def aresolve_kid(self, kid: str, at_ms: int | None):
+        assert self.store._pinned() is None, "resolver called inside the milestone transaction"
+        self.calls.append((kid, at_ms))
+        if self.fail:
+            self.fail -= 1
+            raise ConnectionError("resolver down")
+        return self.inner(kid)
+
+
+def kid_of(sk: Ed25519PrivateKey) -> str:
+    did = did_key(sk)
+    return f"{did}#{did[len('did:key:'):]}"
+
+
+async def test_keys_resolved_before_the_transaction_at_milestone_time(store: Store):
+    ie = "D:aabbccddeeff"
+    chain = FakeChain()
+    chain.add([("trust.score", signed(ALICE, "trust.score", score(ie, 0.5), 1)),
+               ("trust.score", signed(ALICE, "trust.score", score(ie, 0.6), 2)),
+               ("trust.score", signed(BOB, "trust.score", score(ie, 0.6), 1)),
+               ("trust.score", json.dumps(score(ie, 0.5)).encode())])
+    res = RecordingResolver(store)
+    await indexer(FakeSource(chain), store, resolve=res).sync()
+    at = chain.ms[1].timestamp * 1000
+    assert sorted(res.calls) == sorted([(kid_of(ALICE), at), (kid_of(BOB), at)])
+    assert [(await msg(store, chain.block_id(1, n)))["verdict"] for n in range(3)] == [
+        "PRODUCER_SIGNED", "PRODUCER_SIGNED", "UNAUTHORIZED_WRITER"]
+
+
+async def test_resolver_outage_retries_instead_of_forging(store: Store):
+    chain = FakeChain()
+    chain.add([("trust.score", signed(ALICE, "trust.score", score("D:aabbccddeeff", 0.5), 1))])
+    res = RecordingResolver(store, fail=3)
+    seen = []
+
+    async def sleep(_s):
+        st = await store.stats()
+        seen.append((st.get("resolver"), st.get("indexer"), st["messages"]))
+        await asyncio.sleep(0)
+
+    ix = indexer(FakeSource(chain, tail=True), store, resolve=res, sleep=sleep)
+    task = asyncio.create_task(ix.run())
+    await wait_cursor(store, 1)
+    await ix.stop()
+    await task
+    assert seen == [("unreachable", "retrying (resolver unreachable)", 0)] * 3
+    assert (await msg(store, chain.block_id(1, 0)))["verdict"] == "PRODUCER_SIGNED"
+    st = await store.stats()
+    assert (st["resolver"], st["indexer"]) == ("ok", "ok")
+
+
+async def test_plain_callable_resolver_still_works(store: Store):
+    chain = FakeChain()
+    chain.add([("trust.score", signed(ALICE, "trust.score", score("D:aabbccddeeff", 0.5), 1))])
+    offline = OfflineResolver()
+    await indexer(FakeSource(chain), store, resolve=lambda kid: offline(kid)).sync()
+    assert (await msg(store, chain.block_id(1, 0)))["verdict"] == "PRODUCER_SIGNED"
+
+
+def nested(depth: int) -> dict:
+    obj: dict = {"leaf": True}
+    for _ in range(depth - 1):
+        obj = {"n": obj}
+    return obj
+
+
+async def test_hostile_nesting_is_indexed(store: Store):
+    deep_body = "{" + '"a":{' * 1199 + '"b":1' + "}" * 1199 + "}"  # 1200 levels
+    shell = json.loads(signed(ALICE, "trust.score", {"x": 1}, 1))
+    shell.pop("body")
+    deep_env = (json.dumps(shell)[:-1] + ', "body": ' + deep_body + "}").encode()
+    payloads = [
+        ("trust.score", deep_env),
+        ("LLO-K8s", b"[" * 2990 + b"]" * 2990),
+        ("deep.legacy", json.dumps(nested(100)).encode()),
+        ("trust.score", signed(ALICE, "trust.score", nested(63), 2)),  # 64 levels in all
+        ("trust.score", signed(ALICE, "trust.score", nested(64), 3)),  # 65 levels
+    ]
+    chain = FakeChain()
+    chain.add(payloads)
+    await indexer(FakeSource(chain), store).sync()
+    rows = [await msg(store, chain.block_id(1, n)) for n in range(len(payloads))]
+    for (_, data), row in zip(payloads, rows, strict=True):
+        assert row["data"] == data
+    assert [r["verdict"] for r in rows] == [
+        "MALFORMED", "MALFORMED", "UNSIGNED_LEGACY", "PRODUCER_SIGNED", "MALFORMED"]
+    for r in (rows[0], rows[1], rows[2], rows[4]):
+        assert r["json"] is None and r["canon_hash"] is None
+    assert rows[1]["kind"] == "unknown"
+    assert rows[3]["json"] == nested(63)
+    reasons = {e["payload"]["blockId"]: e["payload"]["reason"]
+               for e in await store.events_after(0, 100) if e["type"] == "message"}
+    assert reasons["0x" + chain.block_id(1, 0).hex()] == "nesting too deep"
+    assert reasons["0x" + chain.block_id(1, 4).hex()] == "nesting too deep"
+    assert await store.get_cursor() == 1
 
 
 async def test_sealed_envelope_keeps_blind_tokens(store: Store):

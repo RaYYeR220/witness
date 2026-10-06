@@ -5,6 +5,11 @@ every tagged-data message with its verdict, blind tokens, trust-score lineage, a
 the rules engine, lifecycle completion for messages that were first seen as submissions,
 then the cursor, and finally the events. A crash at any point leaves either the whole
 milestone or nothing, so a restart simply continues at cursor + 1.
+
+Before the transaction opens, the milestone must continue the stored chain, its cone must
+hash to its inclusion Merkle root, and every signing key it needs must have been resolved.
+Failures are retried with backoff; their kind and progress are published as service status
+(`indexer`, `resolver`, `policy` in `Store.stats()`).
 """
 
 from __future__ import annotations
@@ -16,13 +21,34 @@ import time
 from collections.abc import Awaitable, Callable
 from typing import Any, Protocol
 
+import psycopg
 from witness_core import codec, merkle, schema
+from witness_core.envelope import KeyInfo
 from witness_core.policy import TagRule, WriterPolicy
 
 from . import events
-from .classify import Classifier, Resolver, decode, judge, message_row
+from .classify import (
+    Classifier,
+    Decoded,
+    KeyResolver,
+    ResolverFailed,
+    as_key_resolver,
+    decode,
+    judge,
+    message_row,
+    resolve_keys,
+)
 from .didkey import OfflineResolver
-from .source import BlockSource, ConeBlock, MilestoneData, check_cone
+from .source import (
+    BlockSource,
+    ConeBlock,
+    ConeMismatch,
+    MilestoneData,
+    NetworkChanged,
+    SourceError,
+    SourceUnavailable,
+    check_cone,
+)
 from .store import Alert, MessageRow, Store
 
 log = logging.getLogger(__name__)
@@ -31,6 +57,10 @@ NO_PAYLOAD = -1  # blocks.payload_type for a block without a payload or one that
 # Lifecycle states a confirmation by the indexer moves forward; later states are left alone.
 BEFORE_CONFIRMED = frozenset({"RECEIVED", "SUBMITTED", "SOLID", "ORPHANED"})
 ALLOW_ALL = WriterPolicy(version=0, default=TagRule(["*"], False, True))
+# Consecutive failures of one milestone, for reasons that will not go away by themselves,
+# before the indexer reports itself stuck there.
+STUCK_AFTER = 5
+TRANSIENT = (SourceUnavailable, psycopg.OperationalError, TimeoutError, ConnectionError)
 
 
 class RulesEngine(Protocol):
@@ -43,6 +73,13 @@ def _hex(b: bytes | None) -> str | None:
 
 def _now_ms() -> int:
     return int(time.time() * 1000)
+
+
+def _reason(e: BaseException) -> str:
+    if isinstance(e, ConeMismatch):
+        return "cone root mismatch"
+    text = str(e) if isinstance(e, SourceError) else f"{type(e).__name__}: {e}"
+    return text if len(text) <= 80 else text[:77] + "..."
 
 
 def _payload_type(raw: bytes) -> tuple[int, codec.TaggedData | None]:
@@ -64,7 +101,8 @@ class Indexer:
                  classify: Classifier = schema.classify,
                  rules: RulesEngine | None = None,
                  policy: WriterPolicy | None = None,
-                 resolve: Resolver | None = None, *,
+                 resolve: KeyResolver | Callable[[str], KeyInfo | None] | None = None, *,
+                 policy_mode: str | None = None,
                  sleep: Callable[[float], Awaitable[Any]] = asyncio.sleep,
                  now_ms: Callable[[], int] = _now_ms,
                  initial_backoff_s: float = 0.5, max_backoff_s: float = 8.0) -> None:
@@ -72,8 +110,10 @@ class Indexer:
         self.store = store
         self.classify = classify
         self.rules = rules
-        self.policy = policy if policy is not None else ALLOW_ALL
-        self.resolve = resolve if resolve is not None else OfflineResolver()
+        # Without a policy no signer is listed, so every signed message is UNAUTHORIZED_WRITER.
+        self.policy = policy if policy is not None else WriterPolicy(version=0)
+        self.policy_mode = policy_mode or ("file" if policy is not None else "none")
+        self.resolver = as_key_resolver(resolve if resolve is not None else OfflineResolver())
         self._sleep = sleep
         self._now_ms = now_ms
         self._initial = initial_backoff_s
@@ -83,6 +123,8 @@ class Indexer:
         self._idle = asyncio.Event()  # cleared while a milestone transaction is open
         self._idle.set()
         self.last_index = 0
+        self._published: dict[str, tuple[str, str | None]] = {}
+        self._failing: tuple[int, int] = (0, 0)  # (milestone, consecutive failures)
 
     # -- loop -------------------------------------------------------------------------------
 
@@ -91,6 +133,7 @@ class Indexer:
         Source and database errors propagate."""
         start = await self.store.get_cursor() + 1
         self.last_index = start - 1
+        await self._publish("policy", self.policy_mode)
         log.info("indexing from milestone %d via %s", start, self.source.name)
         async for m in self.source.milestones(start):
             if m.index <= self.last_index:
@@ -98,12 +141,16 @@ class Indexer:
             if m.index != self.last_index + 1:
                 log.warning("milestones %d..%d are not available from %s; continuing at %d",
                             self.last_index + 1, m.index - 1, self.source.name, m.index)
-            self._idle.clear()
+            self._idle.clear()  # stop() waits for the milestone and its status to land
             try:
                 await self.process_milestone(m)
+                self.last_index = m.index
+                self._failing = (0, 0)
+                await self._publish("indexer", "ok")
+                if self._published.get("resolver", ("",))[0] == "unreachable":
+                    await self._publish("resolver", "ok")
             finally:
                 self._idle.set()
-            self.last_index = m.index
             if self._stopping:
                 break
         return self.last_index
@@ -123,8 +170,7 @@ class Indexer:
                 except asyncio.CancelledError:
                     raise
                 except Exception as e:  # noqa: BLE001 - keep indexing through outages
-                    log.warning("indexing via %s interrupted after milestone %d: %s: %s",
-                                self.source.name, self.last_index, type(e).__name__, e)
+                    await self._failed(e)
                 if self._stopping:
                     break
                 if self.last_index > before:
@@ -150,15 +196,76 @@ class Indexer:
         task.cancel()
         await asyncio.gather(task, return_exceptions=True)
 
+    # -- health -----------------------------------------------------------------------------
+
+    async def _publish(self, name: str, status: str, detail: str | None = None) -> None:
+        """Record a service status in the store, when it changed. Never raises: the database
+        may be the thing that is down."""
+        if self._published.get(name) == (status, detail):
+            return
+        try:
+            await self.store.set_service_status(name, status, detail=detail)
+        except Exception as e:  # noqa: BLE001
+            log.debug("could not record %s status %r: %s", name, status, e)
+            return
+        self._published[name] = (status, detail)
+
+    async def _failed(self, e: Exception) -> None:
+        """Log and publish why indexing stopped; `run` then backs off and retries."""
+        index = self.last_index + 1
+        detail = f"{type(e).__name__}: {e}"[:500]
+        if isinstance(e, NetworkChanged):
+            log.error("refusing milestone %d: %s", index, e)
+            await self._publish("indexer", "network changed", str(e)[:500])
+        elif isinstance(e, ResolverFailed):
+            log.warning("key resolver unreachable at milestone %d, retrying: %s", index, e)
+            await self._publish("resolver", "unreachable", detail)
+            await self._publish("indexer", "retrying (resolver unreachable)", detail)
+        elif isinstance(e, TRANSIENT):
+            what = "database" if isinstance(e, psycopg.OperationalError) else self.source.name
+            log.warning("%s unavailable after milestone %d, retrying: %s", what,
+                        self.last_index, detail)
+            await self._publish("indexer", f"retrying ({what} unavailable)", detail)
+        else:  # the same input will fail the same way: count it
+            prev, count = self._failing
+            count = count + 1 if prev == index else 1
+            self._failing = (index, count)
+            reason = _reason(e)
+            if count >= STUCK_AFTER:
+                if count == STUCK_AFTER:
+                    log.error("stuck at milestone %d after %d attempts: %s", index, count,
+                              detail, exc_info=e)
+                await self._publish("indexer", f"stuck at {index} ({reason})", detail)
+            else:
+                log.warning("milestone %d failed (attempt %d): %s", index, count, detail)
+                await self._publish("indexer",
+                                    f"retrying milestone {index} ({reason}, attempt {count})",
+                                    detail)
+
     # -- one milestone ----------------------------------------------------------------------
 
+    async def _check_continuity(self, m: MilestoneData) -> None:
+        """Refuse milestones of another network than the one already stored."""
+        same = await self.store.milestone(m.index)
+        if same is not None and bytes(same["id"]) != m.id:
+            raise NetworkChanged(f"milestone {m.index} is {_hex(m.id)} on the node but "
+                                 f"{_hex(bytes(same['id']))} in the database")
+        before = await self.store.milestone(m.index - 1) if m.index > 1 else None
+        if before is not None and bytes(before["id"]) != m.prev_id:
+            raise NetworkChanged(f"milestone {m.index} follows {_hex(m.prev_id)} but milestone "
+                                 f"{m.index - 1} in the database is {_hex(bytes(before['id']))}")
+
     async def process_milestone(self, m: MilestoneData) -> None:
+        await self._check_continuity(m)
         cone = check_cone(m.index, [b async for b in self.source.cone(m.index)])
         root = merkle.root([b.block_id for b in cone])
         if root != m.inclusion_root:
-            log.error("milestone %d: cone of %d blocks does not match the inclusion Merkle "
-                      "root (got %s, milestone says %s)", m.index, len(cone), _hex(root),
-                      _hex(m.inclusion_root))
+            raise ConeMismatch(f"milestone {m.index}: cone of {len(cone)} blocks hashes to "
+                               f"{_hex(root)}, the milestone commits to {_hex(m.inclusion_root)}")
+        parsed = [(b, *_payload_type(b.raw)) for b in cone]
+        decoded = {b.block_id: decode(payload.tag, payload.data, self.classify)
+                   for b, _, payload in parsed if payload is not None}
+        keys = await resolve_keys(self.resolver, decoded.values(), m.timestamp * 1000)
 
         pending: list[tuple[str, dict]] = []
         async with self.store.transaction():
@@ -167,14 +274,13 @@ class Indexer:
                 m.index, m.id, m.timestamp, m.essence, m.signature_dicts(), m.inclusion_root,
                 m.prev_id)
             tagged: list[tuple[ConeBlock, codec.TaggedData]] = []
-            for b in cone:
-                ptype, payload = _payload_type(b.raw)
+            for b, ptype, payload in parsed:
                 await self.store.put_block(b.block_id, m.index, b.wf_index, b.raw, ptype)
                 if payload is not None:
                     tagged.append((b, payload))
             new_messages = 0
             for b, payload in tagged:
-                if await self._message(m, b, payload, pending):
+                if await self._message(m, b, payload, decoded[b.block_id], keys, pending):
                     new_messages += 1
             if m.index > cursor:
                 await self.store.set_cursor(m.index)
@@ -187,9 +293,9 @@ class Indexer:
                 await self.store.emit(etype, payload)
 
     async def _message(self, m: MilestoneData, b: ConeBlock, payload: codec.TaggedData,
+                       d: Decoded, keys: dict[str, KeyInfo | None],
                        pending: list[tuple[str, dict]]) -> bool:
-        d = decode(payload.tag, payload.data, self.classify)
-        j = await judge(self.store, self.policy, self.resolve, d, b.block_id, m.timestamp)
+        j = await judge(self.store, self.policy, keys, d, b.block_id, m.timestamp)
         row = message_row(d, j, block_id=b.block_id, data=payload.data, ms_index=m.index,
                           wf_index=b.wf_index, ts=m.timestamp)
         result = await self.store.put_message(row)

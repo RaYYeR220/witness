@@ -1,17 +1,19 @@
 """From a tagged-data payload to a message row: decode, classify, judge.
 
 `decode` is pure: it runs the schema registry, keeps only values PostgreSQL can store (no NUL
-characters, no lone surrogates) and extracts blind tokens and the trust score. `judge` gives
-the single verdict, in this order: envelope structure and signature, writer policy, replay
-against what the issuer already wrote, key revocation at the milestone's time.
+characters, no lone surrogates, no nesting deeper than MAX_DEPTH) and extracts blind tokens and
+the trust score. `resolve_keys` looks up every signing key a milestone needs, before any
+database transaction is opened. `judge` gives the single verdict, in this order: envelope
+structure and signature, writer policy, replay (an issuer's seq or nonce already used by
+another block), key revocation at the milestone's time.
 """
 
 from __future__ import annotations
 
 import math
-from collections.abc import Callable
+from collections.abc import Callable, Iterable, Mapping
 from dataclasses import dataclass
-from typing import Any
+from typing import Any, Protocol, runtime_checkable
 
 from witness_core import canon, envelope, ids, policy, schema, verdicts
 from witness_core.envelope import EnvelopeCheck, KeyInfo
@@ -21,11 +23,40 @@ from witness_core.schema import Classified
 from .store import MessageRow, Store
 
 Classifier = Callable[[str, bytes], Classified]
-Resolver = Callable[[str], KeyInfo | None]
 
 SIGNED = frozenset({verdicts.PRODUCER_SIGNED, verdicts.RELAY_ATTESTED})
 MAX_BLIND_TOKENS = 64
 MAX_BLIND_TOKEN_LEN = 256
+# Deepest JSON nesting the indexer will canonicalize, verify or store; real aeriOS messages
+# are a handful of levels deep. Deeper payloads keep their raw bytes only.
+MAX_DEPTH = 64
+TOO_DEEP = "nesting too deep"
+
+
+@runtime_checkable
+class KeyResolver(Protocol):
+    async def aresolve_kid(self, kid: str, at_ms: int | None) -> KeyInfo | None:
+        """The key `kid` names, as it stood at `at_ms` (ms); None if it does not exist.
+        Raises when the answer cannot be known (registry unreachable)."""
+        ...
+
+
+class SyncResolver:
+    """Adapts a plain `resolve(kid) -> KeyInfo | None` callable to KeyResolver."""
+
+    def __init__(self, resolve: Callable[[str], KeyInfo | None]) -> None:
+        self._resolve = resolve
+
+    async def aresolve_kid(self, kid: str, at_ms: int | None) -> KeyInfo | None:
+        return self._resolve(kid)
+
+
+def as_key_resolver(resolve: KeyResolver | Callable[[str], KeyInfo | None]) -> KeyResolver:
+    return resolve if isinstance(resolve, KeyResolver) else SyncResolver(resolve)
+
+
+class ResolverFailed(Exception):
+    """A signing key could not be resolved; nothing about the milestone may be decided."""
 
 
 def storable_text(v: Any) -> str | None:
@@ -58,6 +89,21 @@ def storable_json(obj: Any) -> bool:
         elif isinstance(v, list):
             stack.extend(v)
     return True
+
+
+def too_deep(obj: Any, limit: int = MAX_DEPTH) -> bool:
+    """True when `obj` nests containers more than `limit` levels deep (checked without
+    recursion, so any depth is safe to ask about)."""
+    stack = [(obj, 1)]
+    while stack:
+        v, depth = stack.pop()
+        children = v.values() if isinstance(v, dict) else v if isinstance(v, list) else None
+        if children is None:
+            continue
+        if depth > limit:
+            return True
+        stack.extend((c, depth + 1) for c in children if isinstance(c, (dict, list)))
+    return False
 
 
 def decode_tag(tag: bytes) -> str:
@@ -97,6 +143,7 @@ class Decoded:
     canon_hash: bytes | None
     blind_tokens: list[str]
     score: float | None  # the trust score, for a well-formed trust.score body
+    too_deep: bool = False  # nested beyond MAX_DEPTH: raw bytes only, envelope MALFORMED
 
     @property
     def envelope(self) -> dict | None:
@@ -109,6 +156,8 @@ def decode(tag_bytes: bytes, data: bytes, classify: Classifier = schema.classify
     kind = c.kind
     if c.envelope is None and not isinstance(c.json, dict):
         kind = schema.UNKNOWN  # binary, scalars, arrays: no kind can apply
+    if too_deep(c.envelope if c.envelope is not None else c.json):
+        return Decoded(tag, kind, c, None, None, [], None, too_deep=True)
     body = c.json if c.json is None or storable_json(c.json) else None
 
     tokens: list[str] = []
@@ -132,34 +181,74 @@ class Judgement:
     reason: str | None = None
 
 
-async def judge(store: Store, pol: WriterPolicy, resolve: Resolver, d: Decoded,
-                block_id: bytes, ms_timestamp: int) -> Judgement:
-    """The verdict for one message confirmed by a milestone with timestamp `ms_timestamp` (s).
+def signing_kid(d: Decoded) -> str | None:
+    """The kid `envelope.verify` will look up for this message, if it gets that far."""
+    env = d.envelope
+    if env is None or d.too_deep or not envelope.is_envelope(env):
+        return None
+    kid, iss = env.get("kid"), env.get("iss")
+    if not isinstance(kid, str) or not isinstance(iss, str) or kid.split("#", 1)[0] != iss:
+        return None  # verify rejects these before asking for a key
+    return kid
 
-    Exceptions from `resolve` propagate: a resolver outage must not be recorded as FORGED.
-    """
+
+async def resolve_keys(resolver: KeyResolver, decoded: Iterable[Decoded],
+                       at_ms: int) -> dict[str, KeyInfo | None]:
+    """Every key the messages name, as of `at_ms`. Raises ResolverFailed if any lookup
+    fails: a key that cannot be looked up must not turn into a FORGED verdict."""
+    keys: dict[str, KeyInfo | None] = {}
+    for d in decoded:
+        kid = signing_kid(d)
+        if kid is None or kid in keys:
+            continue
+        try:
+            keys[kid] = await resolver.aresolve_kid(kid, at_ms)
+        except Exception as e:
+            raise ResolverFailed(f"resolving {kid[:120]}: {type(e).__name__}: {e}") from e
+    return keys
+
+
+async def judge(store: Store, pol: WriterPolicy, keys: Mapping[str, KeyInfo | None],
+                d: Decoded, block_id: bytes, ms_timestamp: int) -> Judgement:
+    """The verdict for one message confirmed by a milestone with timestamp `ms_timestamp` (s).
+    `keys` comes from `resolve_keys` for the same milestone."""
     env = d.envelope
     if env is None:
         if d.kind == schema.UNKNOWN and d.tag in schema.KINDS:
             return Judgement(verdicts.MALFORMED, None, "payload is not a JSON object")
         return Judgement(verdicts.UNSIGNED_LEGACY)
+    if d.too_deep:
+        return Judgement(verdicts.MALFORMED, None, TOO_DEEP)
 
-    chk = envelope.verify(env, d.tag, resolve)
+    def key(kid: str) -> KeyInfo | None:
+        if kid not in keys:
+            raise LookupError(f"key {kid[:120]} was not resolved before judging")
+        return keys[kid]
+
+    try:
+        chk = envelope.verify(env, d.tag, key)
+    except RecursionError:
+        return Judgement(verdicts.MALFORMED, None, TOO_DEEP)
     if chk.verdict not in SIGNED:
         return Judgement(chk.verdict, chk, chk.reason)
     if not policy.allowed(pol, d.tag, chk.iss):
         return Judgement(verdicts.UNAUTHORIZED_WRITER, chk, "issuer not allowed for this tag")
 
-    last_seq, nonces = await store.issuer_state(chk.iss, exclude_block_id=block_id)
-    if last_seq is not None and chk.seq <= last_seq:
-        return Judgement(verdicts.REPLAY, chk, f"seq {chk.seq} <= last seen {last_seq}")
-    if d.classified.nonce is not None and d.classified.nonce in nonces:
-        return Judgement(verdicts.REPLAY, chk, "nonce already used by this issuer")
+    # White-flag order is not issue order: a lower seq after a higher one is fine. A seq or
+    # nonce the issuer already spent in another block is not.
+    earlier = await store.seq_used(chk.iss, chk.seq, block_id)
+    if earlier is not None:
+        return Judgement(verdicts.REPLAY, chk, f"seq {chk.seq} already used by 0x{earlier.hex()}")
+    nonce = d.classified.nonce
+    if nonce is not None:
+        earlier = await store.nonce_used(chk.iss, nonce, block_id)
+        if earlier is not None:
+            return Judgement(verdicts.REPLAY, chk, f"nonce already used by 0x{earlier.hex()}")
 
-    info = resolve(chk.kid)
+    info = keys.get(chk.kid)
     if info is not None and info.revoked_at_ms is not None \
-            and ms_timestamp * 1000 >= info.revoked_at_ms:
-        return Judgement(verdicts.REVOKED_KEY, chk, "key revoked before confirmation")
+            and info.revoked_at_ms < ms_timestamp * 1000:
+        return Judgement(verdicts.REVOKED_KEY, chk, "key revoked before the milestone")
     return Judgement(chk.verdict, chk)
 
 

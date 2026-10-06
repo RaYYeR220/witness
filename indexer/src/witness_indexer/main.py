@@ -4,9 +4,11 @@
         --db postgresql://postgres:…@127.0.0.1:5432/postgres --schema witness \\
         --policy policy.json [--mqtt mqtt://127.0.0.1:1883] [--validate]
 
-With `--source inx` the node is read over INX; if INX does not answer, the indexer says so and
-polls the REST API instead. `--mqtt` consumes the Messages API's submission records,
-`--validate` checks every submitted block against the node (solid, confirmed, same bytes).
+With `--source inx` the node is read over INX; if INX does not answer at startup, the indexer
+says so and polls the REST API instead (the choice is made once; a later INX outage is
+retried on INX). `--mqtt` consumes the Messages API's submission records, `--validate`
+checks every submitted block against the node (solid, confirmed, same bytes). A writer
+policy is required; `--allow-any-writer` is the explicit opt-out for development.
 """
 
 from __future__ import annotations
@@ -49,7 +51,10 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     p.add_argument("--db", default=os.environ.get("WITNESS_DB"),
                    help="PostgreSQL DSN (default: $WITNESS_DB)")
     p.add_argument("--schema", default="witness", help="database schema")
-    p.add_argument("--policy", help="writer policy JSON; without it every signer is allowed")
+    who = p.add_mutually_exclusive_group(required=True)
+    who.add_argument("--policy", help="writer policy JSON (which DIDs may write which tags)")
+    who.add_argument("--allow-any-writer", action="store_true",
+                     help="development only: accept every signer for every tag")
     p.add_argument("--mqtt", help="consume submission records from this broker, "
                                   "e.g. mqtt://127.0.0.1:1883")
     p.add_argument("--validate", action="store_true",
@@ -61,13 +66,14 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     return args
 
 
-def load_policy(path: str | None) -> WriterPolicy:
-    if path is None:
-        log.warning("no writer policy given (--policy): every signer is allowed to write "
-                    "every tag, so UNAUTHORIZED_WRITER can never be reported")
-        return ALLOW_ALL
-    with open(path, encoding="utf-8") as f:
-        return policy.load(json.load(f))
+def writer_policy(args: argparse.Namespace) -> tuple[WriterPolicy, str]:
+    """The writer policy and how it was chosen: "file" or "allow-any"."""
+    if args.allow_any_writer:
+        log.warning("--allow-any-writer: ANY signer may write ANY tag; UNAUTHORIZED_WRITER "
+                    "will never be reported. Use a --policy file outside development.")
+        return ALLOW_ALL, "allow-any"
+    with open(args.policy, encoding="utf-8") as f:
+        return policy.load(json.load(f)), "file"
 
 
 async def open_source(args: argparse.Namespace) -> BlockSource:
@@ -95,7 +101,7 @@ class _NoValidation:
 async def amain(args: argparse.Namespace, *, stop: asyncio.Event | None = None) -> int:
     """Run until `stop` is set (or the process is interrupted); returns the exit code."""
     stop = stop or asyncio.Event()
-    pol = load_policy(args.policy)
+    pol, policy_mode = writer_policy(args)
     store = await Store.open(args.db, schema=args.schema)
     services: list[Service] = []
     closers: list[Callable[[], Awaitable[None]]] = [store.close]
@@ -103,7 +109,8 @@ async def amain(args: argparse.Namespace, *, stop: asyncio.Event | None = None) 
         await store.migrate()
         source = await open_source(args)
         closers.insert(0, source.close)
-        indexer = Indexer(source, store, policy=pol, resolve=OfflineResolver())
+        indexer = Indexer(source, store, policy=pol, policy_mode=policy_mode,
+                          resolve=OfflineResolver())
         services.append(("indexer", indexer.run, indexer.stop))
 
         validator: Any = _NoValidation()

@@ -38,10 +38,11 @@ def ed25519_from_did_key(did: str) -> bytes | None:
 
 
 class OfflineResolver:
-    """`resolve(kid) -> KeyInfo | None` for `envelope.verify`.
+    """Key resolution without a registry: `resolver(kid)` or `await aresolve_kid(kid, at_ms)`.
 
-    Pinned keys win (they can carry a revocation time); otherwise a `did:key` resolves to
-    the key it encodes, under its own fragment (`did:key:z…#z…`) or with no fragment.
+    Pinned keys win (they can carry a revocation time, which the caller compares with the
+    message's time); otherwise a `did:key` resolves to the key it encodes, under its own
+    fragment (`did:key:z…#z…`) or with no fragment. Never raises.
     """
 
     def __init__(self, pinned: Mapping[str, KeyInfo] | None = None) -> None:
@@ -57,3 +58,6 @@ class OfflineResolver:
         if pub is None or fragment not in ("", did[len("did:key:"):]):
             return None
         return KeyInfo(kid, pub, None, None)
+
+    async def aresolve_kid(self, kid: str, at_ms: int | None = None) -> KeyInfo | None:
+        return self(kid)

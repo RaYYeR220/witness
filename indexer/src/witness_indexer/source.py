@@ -21,6 +21,14 @@ class SourceError(Exception):
     """The node answered with data that does not add up (bad id, broken cone)."""
 
 
+class ConeMismatch(SourceError):
+    """A milestone's cone does not hash to the milestone's inclusion Merkle root."""
+
+
+class NetworkChanged(SourceError):
+    """The node's milestones do not continue the chain already in the database."""
+
+
 @dataclass(frozen=True)
 class MilestoneData:
     index: int

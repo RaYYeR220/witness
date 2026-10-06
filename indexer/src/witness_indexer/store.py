@@ -639,6 +639,24 @@ class Store:
             "SELECT id FROM milestones WHERE idx BETWEEN %s AND %s ORDER BY idx", (frm, to))
         return [r["id"] for r in rows]
 
+    async def seq_used(self, iss: str, seq: int, exclude_block_id: bytes) -> bytes | None:
+        """Another block in which the issuer provably used `seq` (signed verdicts only)."""
+        row = await self._one(
+            "SELECT block_id FROM messages WHERE iss = %s AND seq = %s "
+            "AND verdict IN ('PRODUCER_SIGNED', 'RELAY_ATTESTED') AND block_id <> %s "
+            "ORDER BY ms_index NULLS LAST, wf_index NULLS LAST, block_id LIMIT 1",
+            (iss, seq, exclude_block_id))
+        return bytes(row["block_id"]) if row else None
+
+    async def nonce_used(self, iss: str, nonce: str, exclude_block_id: bytes) -> bytes | None:
+        """Another block in which the issuer provably used `nonce` (signed verdicts only)."""
+        row = await self._one(
+            "SELECT block_id FROM messages WHERE iss = %s AND nonce = %s "
+            "AND verdict IN ('PRODUCER_SIGNED', 'RELAY_ATTESTED') AND block_id <> %s "
+            "ORDER BY ms_index NULLS LAST, wf_index NULLS LAST, block_id LIMIT 1",
+            (iss, nonce, exclude_block_id))
+        return bytes(row["block_id"]) if row else None
+
     async def issuer_state(self, iss: str, exclude_block_id: bytes | None = None
                            ) -> tuple[int | None, set[str]]:
         """Highest sequence number and recent nonces seen for an issuer.
