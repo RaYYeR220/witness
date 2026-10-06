@@ -16,12 +16,14 @@ export const MAX_UINT = Number.MAX_SAFE_INTEGER;
 const MAX_INT_DIGITS = 4300;
 
 /**
- * Deepest container nesting CPython 3.12's `json.loads` accepts before its C
- * recursion guard trips (measured: 2997). Deeper input is a RecursionError there.
+ * Container nesting cap for `parseJson`. CPython's own `json.loads` limit
+ * depends on the platform (about 3000 on Windows, 10000 on Linux), so this is a
+ * fixed cap at the lower figure. Deeper input throws `RecursionError`, never a
+ * parse error, and the bundle verifier fails closed on it.
  */
 export const PY_JSON_MAX_DEPTH = 2997;
 
-/** Nesting beyond what the Python reference can recurse through (Python's RecursionError). */
+/** Nesting beyond what the verifier will recurse through (Python's RecursionError). */
 export class RecursionError extends RangeError {
   override name = "RecursionError";
 }

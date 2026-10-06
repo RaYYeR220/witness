@@ -23,10 +23,15 @@ Verifies a witness-proof/v1 bundle offline and prints the ladder as JSON.
 
   --config <file>         pinned verifier config:
                           {network, trustedCoordinatorKeys, threshold, rebasedNetwork?, trailId?}
-  --anchor-record <file>  on-chain record of the bundle's checkpoint, read from the pinned trail:
-                          {checkpointHash} and/or {checkpoint}; null means unavailable
-  --resolver <file>       trusted DID documents keyed by DID: {"did:...": {doc, version, keys}}
+  --anchor-record <file>  TRUSTED input: the on-chain record of the bundle's checkpoint, read by
+                          you from the pinned trail: {checkpointHash} and/or {checkpoint};
+                          null means unavailable
+  --resolver <file>       TRUSTED input: DID documents from the registry, keyed by DID:
+                          {"did:...": {doc, version, keys}}
   -h, --help              show this help
+
+--anchor-record and --resolver decide steps 5 and 4. Fetch them yourself from the
+chain and the DID registry; never take them from the bundle's sender.
 
 Exit status: 0 VALID, 1 INVALID, 2 PARTIAL, 3 usage or input error.
 `;
@@ -70,7 +75,7 @@ function parseArgs(argv: string[]): Args {
 }
 
 async function load(io: CliIO, path: string, what: string): Promise<Json> {
-  const text = (await io.readText(path)).replace(/^﻿/, "");
+  const text = (await io.readText(path)).replace(/^\uFEFF/, "");
   try {
     return parseJson(text);
   } catch (e) {

@@ -83,6 +83,7 @@ export {
   STEP_NAMES,
   UNRESOLVED_SIGNER,
   verifyBundle,
+  verifyBundleText,
   type Ladder,
   type Overall,
   type StepName,

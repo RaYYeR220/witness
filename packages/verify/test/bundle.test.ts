@@ -9,6 +9,7 @@ import {
   STEP_NAMES,
   UNRESOLVED_SIGNER,
   verifyBundle,
+  verifyBundleText,
 } from "../src/index.js";
 import type { Ladder, StepResult, VerifierConfig, VerifyOptions } from "../src/index.js";
 import { bundles, clone } from "./vectors.js";
@@ -151,7 +152,33 @@ describe("onStep", () => {
     expect(ladder.overall).toBe("VALID");
   });
 
-  it("passes the same StepResult objects the ladder returns and awaits async callbacks", async () => {
+  it("hands out frozen copies, so a callback cannot change the verdict", async () => {
+    const ladder = await verifyBundle(...wire(caseByName("anchor_mismatch"), {
+      onStep: (s) => {
+        expect(Object.isFrozen(s)).toBe(true);
+        expect(() => {
+          (s as { ok: boolean | null }).ok = true;
+        }).toThrow(TypeError);
+      },
+    }));
+    expect(marks(ladder)).toBe("TTTTF INVALID");
+  });
+
+  it("a throwing callback aborts the ladder (the promise rejects)", async () => {
+    const boom = new Error("ui gone");
+    const names: string[] = [];
+    await expect(
+      verifyBundle(...wire(caseByName("valid_anchored"), {
+        onStep: (s) => {
+          names.push(s.name);
+          if (s.name === "inclusion") throw boom;
+        },
+      })),
+    ).rejects.toBe(boom);
+    expect(names).toEqual(["block_hash", "inclusion"]);
+  });
+
+  it("passes copies equal to the ladder's steps and awaits async callbacks", async () => {
     const seen: StepResult[] = [];
     let release!: () => void;
     let pending = 0;
@@ -184,6 +211,37 @@ describe("onStep", () => {
     expect(seen).toEqual([...STEP_NAMES]);
     expect(marks(ladder)).toBe("FFFFF INVALID");
     expect(ladder.steps.every((s) => s.detail === "not a witness-proof/v1 bundle")).toBe(true);
+  });
+});
+
+describe("verifyBundleText", () => {
+  const c = caseByName("valid_anchored");
+  const text = JSON.stringify(c.bundle);
+  const [, cfg, opts] = wire(c);
+
+  it("matches verifyBundle for text and for UTF-8 bytes (BOM tolerated)", async () => {
+    const expected = await verifyBundle(...wire(c));
+    expect(marks(expected)).toBe("TTTTT VALID");
+    expect(await verifyBundleText(text, cfg, opts)).toEqual(expected);
+    expect(await verifyBundleText(new TextEncoder().encode(text), cfg, opts)).toEqual(expected);
+    expect(await verifyBundleText(`\uFEFF${text}`, cfg, opts)).toEqual(expected);
+  });
+
+  it("reads numbers the Python way (JSON.parse would accept v: 1.0)", async () => {
+    const floatV = text.replace('"v":1', '"v":1.0');
+    expect(marks(await verifyBundle(JSON.parse(floatV), cfg, opts))).toBe("TTTTT VALID");
+    expect(marks(await verifyBundleText(floatV, cfg, opts))).toBe("FFFFF INVALID");
+  });
+
+  it.each([
+    ["not JSON", "{nope"],
+    ["invalid UTF-8", Uint8Array.of(0x7b, 0xff, 0x7d)],
+    ["hostile nesting", `{"v":1,"x":${"[".repeat(5000)}${"]".repeat(5000)}}`],
+  ])("%s fails closed with five failed steps", async (_name, input) => {
+    const seen: string[] = [];
+    const ladder = await verifyBundleText(input, cfg, { ...opts, onStep: (s) => void seen.push(s.name) });
+    expect(marks(ladder)).toBe("FFFFF INVALID");
+    expect(seen).toEqual([...STEP_NAMES]);
   });
 });
 
@@ -296,7 +354,11 @@ describe("envelope bytes read with Python's json.loads semantics", () => {
     ["trailing data", `${text} x`, null, "unsigned legacy message"],
     ["nested 1500", text.replace(body, deep(1500)), false, "malformed bundle (RecursionError)"],
     ["nested 2995", text.replace(body, deep(2995)), false, "malformed bundle (RecursionError)"],
-    ["nested 2996", text.replace(body, deep(2996)), null, "unsigned legacy message"],
+    // Past the parser's nesting cap the step fails closed. CPython's own json limit
+    // depends on the platform (about 3000 on Windows, 10000 on Linux), so no depth
+    // may ever turn into "not evaluated".
+    ["nested 2996", text.replace(body, deep(2996)), false, "malformed bundle (RecursionError)"],
+    ["nested 12000", text.replace(body, deep(12000)), false, "malformed bundle (RecursionError)"],
   ] as const)("%s", async (_name, altered, ok, detail) => {
     const ladder = await run({ ...c, bundle: withData(utf8(altered)) });
     expect(ladder.steps[3]).toEqual({ name: "envelope", ok, detail });

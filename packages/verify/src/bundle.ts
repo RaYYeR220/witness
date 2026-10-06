@@ -28,7 +28,7 @@ import {
 } from "./codec.js";
 import { ed25519Verify } from "./ed25519.js";
 import { isEnvelope, verifyEnvelope, type KeyInfo, type KeyResolver } from "./envelope.js";
-import { get, has, isDict, isNone, isUint, parseJson, pyRepr, type Json, type JsonObject } from "./json.js";
+import { get, has, isDict, isNone, isUint, JsonParseError, parseJson, pyRepr, type Json, type JsonObject } from "./json.js";
 import { verifyPath, type PathStep } from "./merkle.js";
 import { FORGED, MALFORMED, PRODUCER_SIGNED, RELAY_ATTESTED } from "./verdicts.js";
 
@@ -73,8 +73,12 @@ export interface VerifyOptions {
   fetchAnchorRecord?: ((anchor: JsonObject) => Awaitable<unknown>) | null;
   /** Returns the issuer's DID document from the trusted registry (`{doc, version, keys}`) or null. */
   resolveDid?: ((did: string) => Awaitable<unknown>) | null;
-  /** Called with each step as soon as it is decided, in ladder order; awaited when it returns a promise. */
-  onStep?: ((step: StepResult) => void | Promise<void>) | null;
+  /**
+   * Called with a frozen copy of each step as soon as it is decided, in ladder
+   * order; awaited when it returns a promise. A callback that throws or
+   * rejects aborts the ladder: `verifyBundle` rejects with that error.
+   */
+  onStep?: ((step: Readonly<StepResult>) => void | Promise<void>) | null;
 }
 
 /** The step failed; the message is its detail. */
@@ -225,12 +229,25 @@ function essenceOf(b: JsonObject): [Uint8Array, MilestoneEssence] {
   }
 }
 
-/** Tagged-data JSON as Python's `json.loads` reads it; null when it is not JSON. */
+/**
+ * Tagged-data JSON as Python's `json.loads` reads it; null only when the bytes
+ * are not UTF-8 or not JSON. Hostile nesting (RecursionError, or a RangeError
+ * from the engine's stack) is rethrown so the step fails closed: CPython's own
+ * nesting limit depends on the platform, so "not evaluated" would let the same
+ * bundle come out PARTIAL on one verifier and INVALID on another.
+ */
 function jsonOf(data: Uint8Array): Json {
+  let text: string;
   try {
-    return parseJson(utf8DecodeStrict(data));
+    text = utf8DecodeStrict(data);
   } catch {
     return null;
+  }
+  try {
+    return parseJson(text);
+  } catch (e) {
+    if (e instanceof JsonParseError) return null;
+    throw e;
   }
 }
 
@@ -470,11 +487,17 @@ function overallOf(steps: StepResult[]): Overall {
 }
 
 /**
- * Run the five-step ladder. Never rejects on bad bundle input (a malformed
- * `cfg` is a TypeError). Without `resolveDid` and `fetchAnchorRecord`, steps 4
- * and 5 can be at best unevaluated (null): the bundle's own snapshot never
- * authenticates a signer, and an anchor is never confirmed without the on-chain
- * record. Local contradictions are red either way.
+ * Run the five-step ladder over an already parsed bundle. Never rejects on bad
+ * bundle input (a malformed `cfg` is a TypeError; a throwing `onStep` aborts).
+ * Without `resolveDid` and `fetchAnchorRecord`, steps 4 and 5 can be at best
+ * unevaluated (null): the bundle's own snapshot never authenticates a signer,
+ * and an anchor is never confirmed without the on-chain record. Local
+ * contradictions are red either way.
+ *
+ * The bundle must come from `parseJson`: `JSON.parse` folds `1.0` into `1` and
+ * rounds big integers, so it would accept bundles the reference rejects. Code
+ * that holds the raw text or bytes (the console, a fetch) should call
+ * `verifyBundleText` instead.
  */
 export async function verifyBundle(bundle: unknown, cfg: VerifierConfig, options: VerifyOptions = {}): Promise<Ladder> {
   const pinned = normalizeConfig(cfg);
@@ -482,7 +505,8 @@ export async function verifyBundle(bundle: unknown, cfg: VerifierConfig, options
   const steps: StepResult[] = [];
   const emit = async (step: StepResult) => {
     steps.push(step);
-    if (onStep) await onStep(step);
+    // A copy, frozen, so a callback cannot touch what decides `overall`.
+    if (onStep) await onStep(Object.freeze({ ...step }));
   };
   if (!isDict(bundle) || !isUint(get(bundle, "v")) || get(bundle, "v") !== BUNDLE_VERSION) {
     for (const name of STEP_NAMES) await emit({ name, ok: false, detail: "not a witness-proof/v1 bundle" });
@@ -495,4 +519,25 @@ export async function verifyBundle(bundle: unknown, cfg: VerifierConfig, options
   await emit(await run("envelope", () => stepEnvelope(b, resolveDid)));
   await emit(await run("anchor", () => stepAnchor(b, pinned, fetchAnchorRecord)));
   return { steps, overall: overallOf(steps) };
+}
+
+/**
+ * Parse a bundle the way the Python reference reads it (`parseJson`) and run
+ * the ladder. Bytes must be UTF-8; a leading BOM is ignored. Input that is not
+ * UTF-8, not JSON or nested past the parser's cap fails closed: five failed
+ * steps, "not a witness-proof/v1 bundle".
+ */
+export async function verifyBundleText(
+  input: string | Uint8Array,
+  cfg: VerifierConfig,
+  options: VerifyOptions = {},
+): Promise<Ladder> {
+  let bundle: unknown;
+  try {
+    const text = typeof input === "string" ? input : utf8DecodeStrict(input);
+    bundle = parseJson(text.replace(/^\uFEFF/, ""));
+  } catch {
+    bundle = undefined;
+  }
+  return verifyBundle(bundle, cfg, options);
 }

@@ -6,6 +6,7 @@ import {
   jcs,
   JCS_MAX_DEPTH,
   JsonNumber,
+  JsonParseError,
   parseJson,
   PY_JSON_MAX_DEPTH,
   pyRepr,
@@ -62,10 +63,13 @@ describe("parseJson keeps Python's number model", () => {
     expect(() => parseJson(text)).toThrow(SyntaxError);
   });
 
-  it("nesting past CPython 3.12's json limit (2997) is a RecursionError, as in Python", () => {
+  it("nesting past the cap is a RecursionError, never a parse error, so callers can fail closed", () => {
     const nest = (n: number) => "[".repeat(n) + "]".repeat(n);
     expect(() => parseJson(nest(PY_JSON_MAX_DEPTH))).not.toThrow();
-    expect(() => parseJson(nest(PY_JSON_MAX_DEPTH + 1))).toThrow(RecursionError);
+    for (const n of [PY_JSON_MAX_DEPTH + 1, 12000, 200000]) {
+      expect(() => parseJson(nest(n))).toThrow(RecursionError);
+      expect(() => parseJson(nest(n))).not.toThrow(JsonParseError);
+    }
     expect(() => parseJson(nest(20), { maxDepth: 19 })).toThrow(RecursionError);
   });
 

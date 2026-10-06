@@ -96,6 +96,17 @@ describe("witness-verify CLI", () => {
   it("--help prints usage and exits 0", async () => {
     const { io, out } = memoryIO({});
     expect(await main(["--help"], io)).toBe(0);
-    expect(out.join("")).toContain("witness-verify <bundle.json> --config <verifier.json>");
+    const help = out.join("");
+    expect(help).toContain("witness-verify <bundle.json> --config <verifier.json>");
+    expect(help).toMatch(/--anchor-record[\s\S]*TRUSTED input/);
+    expect(help).toMatch(/--resolver[\s\S]*TRUSTED input/);
+    expect(help).toContain("never take them from the bundle's sender");
+  });
+
+  it("tolerates a UTF-8 BOM at the start of an input file", async () => {
+    const { files, args } = caseFiles("valid_anchored");
+    for (const name of Object.keys(files)) files[name] = `\uFEFF${files[name]}`;
+    const { io } = memoryIO(files);
+    expect(await main(args, io)).toBe(0);
   });
 });
