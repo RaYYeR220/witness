@@ -1,18 +1,29 @@
-# Publishes the private Tangle's ports on the loopback interface only. The upstream compose
+# Publishes the private Tangle's ports on the loopback interfaces only (IPv4 and IPv6,
+# since `localhost` resolves to ::1 first on some hosts). The upstream compose
 # file binds them on every interface, which exposes the node's admin routes, INX and the
 # dashboard (default credentials) to the local network. Containers still reach each other
 # through the compose network.
 services:
   inx-coordinator:
+    stop_grace_period: 60s
     ports: !override
       - "127.0.0.1:6021:6060/tcp"
+      - "[::1]:6021:6060/tcp"
   iota-hornet:
+    # HORNET refuses to start after an unclean stop ("not shut down properly"); give it time.
+    stop_grace_period: 120s
     ports: !override
       - "127.0.0.1:30506:15600"
+      - "[::1]:30506:15600"
       - "127.0.0.1:14265:14265"
+      - "[::1]:14265:14265"
       - "127.0.0.1:9029:9029"
+      - "[::1]:9029:9029"
       - "127.0.0.1:6011:6060/tcp"
+      - "[::1]:6011:6060/tcp"
   iota-inx-dashboard:
     ports: !override
       - "127.0.0.1:31031:6060"
+      - "[::1]:31031:6060"
       - "127.0.0.1:31011:8081"
+      - "[::1]:31011:8081"

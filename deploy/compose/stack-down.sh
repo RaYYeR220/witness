@@ -8,4 +8,4 @@ tangle="$root/vendor/iota-tangle/docker/main"
 docker compose -f "$here/docker-compose.aerios.yml" down
 docker compose -f "$here/inx-poi.yml" down
 docker compose -f "$here/messages-api.yml" down
-[ -d "$tangle" ] && docker compose -f "$tangle/hornet-main.yaml" down
+[ -d "$tangle" ] && docker compose -f "$tangle/hornet-main.yaml" -f "$here/hornet-loopback.yml" down
