@@ -287,7 +287,8 @@ def test_http_allowed_cases(monkeypatch):
     parse(["--http"], monkeypatch)
     parse(["--http", "--host", "localhost"], monkeypatch)
     parse(["--http", "--host", "::1"], monkeypatch)
-    parse(["--http", "--host", "0.0.0.0", "--allow-remote"], monkeypatch, "x" * 16)
+    parse(["--http", "--host", "0.0.0.0", "--allow-remote", "--allowed-host", "a:1"],
+          monkeypatch, "x" * 16)
 
 
 def test_bearer_middleware():
@@ -319,3 +320,103 @@ def test_bearer_middleware():
         assert await status(b"Bearer " + b"t" * 16) == 200
 
     anyio.run(run)
+
+
+# ---------------------------------------------------------------- rebinding and credentials
+
+async def asgi(app, headers, scope_type="http"):
+    sent = []
+
+    async def send(msg):
+        sent.append(msg)
+
+    async def receive():
+        return {"type": "http.request"}
+
+    await app({"type": scope_type, "headers": headers}, receive, send)
+    return sent[0]["status"]
+
+
+async def ok_app(scope, receive, send):
+    await send({"type": "http.response.start", "status": 200, "headers": []})
+    await send({"type": "http.response.body", "body": b"ok"})
+
+
+def test_host_guard():
+    import anyio
+
+    app = s.HostGuard(ok_app, s.allowed_hosts(7300), set())
+
+    async def run():
+        assert await asgi(app, [(b"host", b"127.0.0.1:7300")]) == 200
+        assert await asgi(app, [(b"host", b"LOCALHOST:7300")]) == 200
+        assert await asgi(app, [(b"host", b"[::1]:7300")]) == 200
+        assert await asgi(app, [(b"host", b"evil.example:7300")]) == 421
+        assert await asgi(app, [(b"host", b"127.0.0.1:9999")]) == 421
+        assert await asgi(app, []) == 421
+        assert await asgi(app, [(b"host", b"127.0.0.1:7300"),
+                                (b"host", b"evil.example")]) == 421
+        good = (b"host", b"127.0.0.1:7300")
+        assert await asgi(app, [good, (b"origin", b"http://evil.example")]) == 403
+        assert await asgi(app, [good, (b"origin", b"http://127.0.0.1:7300")]) == 403
+        assert await asgi(app, [good, (b"origin", b"null")]) == 403
+
+    anyio.run(run)
+
+
+def test_host_guard_extra_host_and_origin():
+    import anyio
+
+    app = s.HostGuard(ok_app, s.allowed_hosts(7300, ["mcp.corp:443"]), {"https://ui.corp"})
+
+    async def run():
+        assert await asgi(app, [(b"host", b"mcp.corp:443")]) == 200
+        assert await asgi(app, [(b"host", b"mcp.corp:443"),
+                                (b"origin", b"https://ui.corp")]) == 200
+
+    anyio.run(run)
+
+
+def test_duplicate_and_malformed_authorization():
+    import anyio
+
+    app = s.BearerAuth(ok_app, "t" * 16)
+    good = b"Bearer " + b"t" * 16
+
+    async def run():
+        assert await asgi(app, [(b"authorization", good), (b"authorization", good)]) == 400
+        assert await asgi(app, [(b"authorization", b"Bearer wrong"), (b"authorization", good)]) == 400
+        assert await asgi(app, [(b"authorization", b"bearer " + b"t" * 16)]) == 200
+        assert await asgi(app, [(b"authorization", b"Bearer  " + b"t" * 16)]) == 401
+        assert await asgi(app, [(b"authorization", good + b" ")]) == 401
+        assert await asgi(app, [(b"authorization", good + b"\x00")]) == 401
+        assert await asgi(app, [(b"authorization", b"Bearer")]) == 401
+
+    anyio.run(run)
+
+
+def test_http_app_stacks_guards_and_blocks_create_report_without_token(monkeypatch):
+    import anyio
+
+    monkeypatch.setattr(s, "HTTP_TOKENLESS", False)
+    app = s.http_app("127.0.0.1", None)
+    assert s.HTTP_TOKENLESS is True
+    assert isinstance(app, s.HostGuard)
+
+    async def run():
+        assert await asgi(app, [(b"host", b"rebind.evil:7300")]) == 421
+
+    anyio.run(run)
+    monkeypatch.setenv("WITNESS_REPORT_TOKEN", "sekret")
+    with pytest.raises(s.WitnessToolError, match="without WITNESS_MCP_TOKEN"):
+        s.create_report()
+    s.http_app("127.0.0.1", "t" * 16)
+    assert s.HTTP_TOKENLESS is False
+    monkeypatch.setattr(s, "HTTP_TOKENLESS", False)
+
+
+def test_remote_needs_allowed_host(monkeypatch):
+    with pytest.raises(SystemExit):
+        parse(["--http", "--host", "0.0.0.0", "--allow-remote"], monkeypatch, "x" * 16)
+    parse(["--http", "--host", "0.0.0.0", "--allow-remote", "--allowed-host", "a:1"],
+          monkeypatch, "x" * 16)
