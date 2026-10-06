@@ -65,12 +65,23 @@ describe("AnchorLoop", () => {
 
   it("waits while the next window is incomplete and never anchors a partial one", async () => {
     const { loop, trail, tangle } = setup({}, 11);
-    expect(await loop.runOnce()).toEqual({ status: "waiting", window: { from: 1, to: 12 }, reason: expect.any(String) });
+    expect(await loop.runOnce()).toEqual({ status: "waiting", window: { from: 1, to: 12 }, reason: expect.any(String), cause: "incomplete" });
     expect(trail.appends).toBe(0);
     tangle.latest = 12;
     expect((await loop.runOnce()).status).toBe("anchored");
     expect(await loop.runOnce()).toMatchObject({ status: "waiting", window: { from: 13, to: 24 } });
     expect(trail.appends).toBe(1);
+  });
+
+  it("does not anchor a window whose message count the API does not report", async () => {
+    const { loop, trail, tangle } = setup({}, 12);
+    tangle.msgCount = false;
+    expect(await loop.runOnce()).toMatchObject({ status: "waiting", cause: "no-msgcount" });
+    expect(trail.appends).toBe(0);
+    const dev = setup({ allowMissingMsgCount: true }, 12);
+    dev.tangle.msgCount = false;
+    expect(await dev.loop.runOnce()).toMatchObject({ status: "anchored" });
+    expect(dev.store.load()!.checkpoints[0]!.checkpoint.msgCount).toBe(0);
   });
 
   it("chains windows: contiguous indexes, prev hash, mirror seq and prev block", async () => {

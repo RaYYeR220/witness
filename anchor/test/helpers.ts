@@ -28,6 +28,8 @@ export const mid = (i: number) => blake2b256(new TextEncoder().encode(`ms-${i}`)
 /** Milestone source over an in-memory Tangle with milestones 1..latest indexed. */
 export class FakeTangle implements MilestoneSource {
   latest: number;
+  /** False: the source does not report msgCount (like the HORNET stub). */
+  msgCount = true;
   calls: [number, number][] = [];
   constructor(latest: number) {
     this.latest = latest;
@@ -37,7 +39,7 @@ export class FakeTangle implements MilestoneSource {
     if (to > this.latest) return { complete: false, ids: [], msgCount: null };
     const ids = [];
     for (let i = from; i <= to; i++) ids.push(mid(i));
-    return { complete: true, ids, msgCount: to - from };
+    return { complete: true, ids, msgCount: this.msgCount ? to - from : null };
   }
 }
 

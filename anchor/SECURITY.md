@@ -55,6 +55,11 @@ record from the trail on every request and answers 502 when it cannot; it never 
 copy as if it came from the chain. On top of the trail checks above, verifiers should check that
 the record's metadata names the seq they asked for and that `addedBy` is the anchor's writer.
 
+`msgCount` is the number of tagged-data messages referenced by milestones `from`..`to`, as
+indexed (witness-api `/milestones` reports it). A window whose source does not report it is not
+anchored; `ANCHOR_ALLOW_MISSING_MSGCOUNT=1` commits 0 instead and exists only for development
+against the HORNET stub, which cannot count messages.
+
 The loop state (`ANCHOR_STATE_PATH`) only maps seqs to records and keeps the mirror chain; it holds
 no key material. A signed `add_record` transaction is saved there before it is submitted, so a
 restart settles that very transaction (by digest, or by resubmitting the same bytes) instead of

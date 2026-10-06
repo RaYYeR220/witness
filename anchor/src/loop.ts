@@ -30,6 +30,8 @@ export interface LoopDeps {
   every: number;
   startIndex: number;
   pollMs: number;
+  /** Development only: anchor windows whose message count the source does not report, as 0. */
+  allowMissingMsgCount?: boolean;
   /** Most records scanned backwards when rebuilding a lost state file from the chain. */
   recoverMax?: number;
 }
@@ -45,7 +47,7 @@ export type TickResult =
       mirrored: boolean;
       mirrorError?: string;
     }
-  | { status: "waiting"; window: Window; reason: string }
+  | { status: "waiting"; window: Window; reason: string; cause: "incomplete" | "no-msgcount" }
   | { status: "error"; stage: "trail" | "state" | "pending" | "source" | "append"; error: string };
 
 export interface LoopStatus {
@@ -90,6 +92,7 @@ export class AnchorLoop {
   #stopped = true;
   #lastRunAt: string | null = null;
   #lastResult: TickResult | null = null;
+  #warnedWindow: number | null = null;
 
   constructor(deps: LoopDeps) {
     this.#d = deps;
@@ -171,11 +174,17 @@ export class AnchorLoop {
     const last = state.checkpoints.at(-1) ?? null;
     let next;
     try {
-      next = await buildNextCheckpoint(d.source, d.params, last, d.startIndex, d.every);
+      next = await buildNextCheckpoint(d.source, d.params, last, d.startIndex, d.every, { allowMissingMsgCount: d.allowMissingMsgCount });
     } catch (err) {
       return { status: "error", stage: "source", error: message(err) };
     }
-    if (next.status === "waiting") return next;
+    if (next.status === "waiting") {
+      if (next.cause === "no-msgcount" && this.#warnedWindow !== next.window.from) {
+        this.#warnedWindow = next.window.from;
+        log.warn("window not anchored: the milestone source does not report msgCount", { from: next.window.from, to: next.window.to });
+      }
+      return next;
+    }
 
     const seq = (last?.seq ?? 0) + 1;
     const { checkpoint, checkpointHash } = next;

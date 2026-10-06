@@ -144,6 +144,7 @@ describe("checkpoint settings", () => {
       identity: "anchor",
       pollMs: 10_000,
       httpTimeoutMs: 10_000,
+      allowMissingMsgCount: false,
     });
     expect(loadConfig({ SECRETS_DIR: "/data/secrets" }, "/srv/anchor").checkpoints.statePath).toBe(path.resolve("/data", "data", "anchor-state.json"));
   });

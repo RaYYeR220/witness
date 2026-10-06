@@ -171,11 +171,21 @@ export interface CheckpointParams {
 
 export type WindowResult =
   | { status: "ready"; window: Window; checkpoint: Checkpoint; checkpointHash: string; milestoneIds: Uint8Array[] }
-  | { status: "waiting"; window: Window; reason: string };
+  /** `cause`: the window is not fully indexed yet, or the source cannot say how many messages it holds. */
+  | { status: "waiting"; window: Window; reason: string; cause: "incomplete" | "no-msgcount" };
+
+export interface BuildOptions {
+  /**
+   * Development only: commit `msgCount: 0` when the source does not report it (the HORNET stub).
+   * Otherwise such a window is not anchored: a checkpoint never commits to a made-up count.
+   */
+  allowMissingMsgCount?: boolean;
+}
 
 /**
  * Builds the checkpoint of the next window when every milestone of it is available. Only
- * complete windows are ever anchored; an incomplete one is reported as `waiting`.
+ * complete windows are ever anchored; an incomplete one is reported as `waiting`, and so is a
+ * complete one whose message count the source does not report (unless explicitly allowed).
  */
 export async function buildNextCheckpoint(
   source: MilestoneSource,
@@ -183,10 +193,21 @@ export async function buildNextCheckpoint(
   last: { checkpoint: Checkpoint; checkpointHash: string } | null,
   startIndex: number,
   every: number,
+  opts: BuildOptions = {},
 ): Promise<WindowResult> {
   const window = nextWindow(last?.checkpoint ?? null, startIndex, every);
   const got = await source.milestones(window.from, window.to);
-  if (!got.complete) return { status: "waiting", window, reason: `milestones ${window.from}..${window.to} are not all indexed yet` };
+  if (!got.complete) {
+    return { status: "waiting", window, reason: `milestones ${window.from}..${window.to} are not all indexed yet`, cause: "incomplete" };
+  }
+  if (got.msgCount === null && !opts.allowMissingMsgCount) {
+    return {
+      status: "waiting",
+      window,
+      reason: `the milestone source reports no msgCount for ${window.from}..${window.to}; refusing to commit a made-up count`,
+      cause: "no-msgcount",
+    };
+  }
   const checkpoint = buildCheckpoint({
     network: params.network,
     domain: params.domain,

@@ -63,6 +63,8 @@ export interface CheckpointConfig {
   identity: string;
   pollMs: number;
   httpTimeoutMs: number;
+  /** Development only (HORNET stub): commit msgCount 0 when the source does not report it. */
+  allowMissingMsgCount: boolean;
 }
 
 interface NetworkDefaults {
@@ -308,6 +310,7 @@ function checkpointConfig(env: Env, cwd: string, issues: string[], secretsDir: s
     identity,
     pollMs,
     httpTimeoutMs,
+    allowMissingMsgCount: flag(issues, "ANCHOR_ALLOW_MISSING_MSGCOUNT", opt(env, "ANCHOR_ALLOW_MISSING_MSGCOUNT"), false),
   };
 }
 

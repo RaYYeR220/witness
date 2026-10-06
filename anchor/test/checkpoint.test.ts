@@ -95,7 +95,7 @@ describe("window selection", () => {
   it("builds only complete windows", async () => {
     const { source } = tangle(10);
     const r = await buildNextCheckpoint(source, PARAMS, null, 1, 12);
-    expect(r).toEqual({ status: "waiting", window: { from: 1, to: 12 }, reason: expect.stringMatching(/1\.\.12/) });
+    expect(r).toEqual({ status: "waiting", window: { from: 1, to: 12 }, reason: expect.stringMatching(/1\.\.12/), cause: "incomplete" });
     source.latest = 12;
     const ready = await buildNextCheckpoint(source, PARAMS, null, 1, 12);
     if (ready.status !== "ready") throw new Error("expected a checkpoint");
@@ -113,11 +113,19 @@ describe("window selection", () => {
     expect(ready.checkpointHash).toBe(checkpointHashHex(ready.checkpoint));
   });
 
+  it("refuses a complete window without a message count, unless explicitly allowed", async () => {
+    const { source } = tangle(100, null);
+    const r = await buildNextCheckpoint(source, PARAMS, null, 1, 12);
+    expect(r).toMatchObject({ status: "waiting", cause: "no-msgcount", reason: expect.stringMatching(/msgCount/) });
+    const dev = await buildNextCheckpoint(source, PARAMS, null, 1, 12, { allowMissingMsgCount: true });
+    expect(dev.status === "ready" && dev.checkpoint.msgCount).toBe(0);
+  });
+
   it("chains each checkpoint to the previous one, contiguously", async () => {
     const { source, asked } = tangle(100, null);
-    const first = await buildNextCheckpoint(source, PARAMS, null, 5, 12);
+    const first = await buildNextCheckpoint(source, PARAMS, null, 5, 12, { allowMissingMsgCount: true });
     if (first.status !== "ready") throw new Error("expected a checkpoint");
-    const second = await buildNextCheckpoint(source, PARAMS, first, 5, 12);
+    const second = await buildNextCheckpoint(source, PARAMS, first, 5, 12, { allowMissingMsgCount: true });
     if (second.status !== "ready") throw new Error("expected a checkpoint");
     expect(asked).toEqual([
       [5, 16],
