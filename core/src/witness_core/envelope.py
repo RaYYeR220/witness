@@ -199,6 +199,8 @@ def verify(
         signing_input = _signing_input(env)
     except ValueError as exc:  # CanonicalizationError: NaN, out-of-range integers, ...
         return _malformed(f"not canonicalizable: {exc}")
+    except RecursionError:  # nesting json.loads accepts but JCS cannot recurse through
+        return _malformed("not canonicalizable: nested too deeply")
 
     iss, kid, seq, iat = env["iss"], env["kid"], env["seq"], env["iat"]
 

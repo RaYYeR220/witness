@@ -219,6 +219,18 @@ class Store:
             finally:
                 _PIN.reset(token)
 
+    @asynccontextmanager
+    async def savepoint(self) -> AsyncIterator[None]:
+        """Inside Store.transaction(), a savepoint: an exception escaping the block undoes only
+        the block's statements and leaves the outer transaction usable. Outside one, each
+        statement commits on its own anyway, so this is a no-op."""
+        pinned = self._pinned()
+        if pinned is None:
+            yield
+            return
+        async with pinned.transaction():
+            yield
+
     async def _fetch(self, query: str, params: tuple | list = ()) -> list[dict]:
         async with self._conn() as c:
             cur = await c.execute(query, params)
@@ -690,12 +702,18 @@ class Store:
             (verdicts,))
 
     async def security_events(self, ie_id: str, tags: list[str], verdicts: list[str],
-                              from_ts: int, to_ts: int, limit: int = 5) -> list[dict]:
-        """Messages with one of `tags` about the IE between two milestone times (seconds)."""
+                              from_ts: int, to_ts: int, limit: int = 20) -> list[dict]:
+        """Messages with one of `tags` about the IE between two milestone times (seconds):
+        block_id, tag, ts, verdict, plus whether a submission names the block
+        (`submitted`) and whether it carries a SHADOW alert (`shadowed`)."""
         return await self._fetch(
-            "SELECT block_id, tag, ts, verdict FROM messages WHERE ie_id = %s "
-            "AND tag = ANY(%s::text[]) AND verdict = ANY(%s::text[]) AND ts BETWEEN %s AND %s "
-            "ORDER BY ts DESC, block_id LIMIT %s",
+            "SELECT m.block_id, m.tag, m.ts, m.verdict, "
+            "EXISTS (SELECT 1 FROM submissions s WHERE s.block_id = m.block_id) AS submitted, "
+            "EXISTS (SELECT 1 FROM alerts a WHERE a.rule = 'SHADOW' "
+            "AND a.block_id = m.block_id) AS shadowed "
+            "FROM messages m WHERE m.ie_id = %s AND m.tag = ANY(%s::text[]) "
+            "AND m.verdict = ANY(%s::text[]) AND m.ts BETWEEN %s AND %s "
+            "ORDER BY m.ts DESC, m.block_id LIMIT %s",
             (ie_id, tags, verdicts, from_ts, to_ts, limit))
 
     async def shadow_candidates(self, since_ms: int, until_ms: int, exempt_tags: list[str],
@@ -735,6 +753,43 @@ class Store:
             "AND (%s::text IS NULL OR ie_id = %s::text) LIMIT 1",
             (rule, block_id, block_id, ie_id, ie_id))
         return row is not None
+
+    async def anchors_to_verify(self, limit: int) -> list[dict]:
+        """Anchors not verified yet (unverified or unverifiable), oldest first."""
+        return await self._fetch(
+            "SELECT * FROM anchors WHERE status <> 'failed' "
+            "AND verify_state IN ('unverified', 'unverifiable') ORDER BY seq LIMIT %s",
+            (limit,))
+
+    async def anchors_after(self, seq: int, limit: int) -> list[dict]:
+        """A page of anchors (any verification state) with seq above `seq`, in seq order."""
+        return await self._fetch(
+            "SELECT * FROM anchors WHERE status <> 'failed' AND seq > %s ORDER BY seq LIMIT %s",
+            (seq, limit))
+
+    async def set_anchor_verification(self, seq: int, state: str, at_ms: int,
+                                      detail: str | None = None) -> None:
+        """Record an anchor's verification state; `verify_since_ms` keeps the time the
+        current state was first reached."""
+        await self._fetch(
+            "UPDATE anchors SET verify_state = %(st)s, verify_detail = %(d)s, "
+            "verify_since_ms = CASE WHEN verify_state = %(st)s "
+            "THEN COALESCE(verify_since_ms, %(at)s) ELSE %(at)s END, "
+            "verified_at_ms = CASE WHEN %(st)s IN ('verified', 'mismatch') THEN %(at)s "
+            "ELSE verified_at_ms END WHERE seq = %(seq)s RETURNING seq",
+            {"st": state, "d": detail, "at": at_ms, "seq": seq})  # type: ignore[arg-type]
+
+    # -- rule state -------------------------------------------------------------------------
+
+    async def get_rule_state(self, name: str) -> Any:
+        row = await self._one("SELECT value FROM rule_state WHERE name = %s", (name,))
+        return None if row is None else row["value"]
+
+    async def set_rule_state(self, name: str, value: Any, *, at_ms: int | None = None) -> None:
+        await self._fetch(
+            "INSERT INTO rule_state (name, value, at_ms) VALUES (%s,%s,%s) "
+            "ON CONFLICT (name) DO UPDATE SET value = excluded.value, at_ms = excluded.at_ms "
+            "RETURNING name", (name, Jsonb(value), _now_ms() if at_ms is None else at_ms))
 
     # -- service health ---------------------------------------------------------------------
 

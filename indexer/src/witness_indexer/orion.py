@@ -13,7 +13,7 @@ entity list, which would make every IE look unknown.
 from __future__ import annotations
 
 import math
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import Any, Literal
 
 import httpx
@@ -28,12 +28,23 @@ class OrionUnavailable(Exception):
     """Orion could not be asked, or answered with something that is not an entity list."""
 
 
+class _Missing:
+    def __repr__(self) -> str:
+        return "<missing>"
+
+
+MISSING: Any = _Missing()  # an entity without a trustScore attribute
+
+
 @dataclass(frozen=True)
 class IE:
     entity_id: str
     ie_id: str
     domain: str
     trust_score: float | None
+    # The `trustScore` attribute as Orion sent it (MISSING when absent), for evidence when it
+    # cannot be read as a number.
+    raw_trust_score: Any = field(default=MISSING, compare=False, repr=False)
 
 
 def ie_id_of(entity_id: str) -> str:
@@ -56,8 +67,9 @@ def _ie(e: Any) -> IE | None:
     if not isinstance(e, dict) or not isinstance(e.get("id"), str) or not e["id"]:
         return None
     ie_id = ie_id_of(e["id"])
+    raw = e.get("trustScore", MISSING)
     return IE(e["id"], ie_id, ie_id.split(":", 1)[0] if ":" in ie_id else "",
-              _score(e.get("trustScore")))
+              _score(None if raw is MISSING else raw), raw)
 
 
 class OrionClient:

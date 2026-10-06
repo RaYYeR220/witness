@@ -243,6 +243,20 @@ def test_canonicalization_errors():
         _seal(key, seq=-1)
 
 
+@pytest.mark.parametrize("depth", [1200, 5000])
+def test_deep_nesting_is_malformed_not_a_crash(depth):
+    """json.loads accepts nesting the canonicalizer cannot recurse through."""
+    key = Ed25519PrivateKey.generate()
+    deep: list = []
+    for _ in range(depth):
+        deep = [deep]
+    env = _seal(key)
+    env["body"]["x"] = deep
+    check = envelope.verify(env, "trust.score", _resolver(key))
+    assert check.verdict == verdicts.MALFORMED
+    assert check.reason.startswith("not canonicalizable")
+
+
 def _signing_input(env):
     try:
         return envelope._signing_input(env).decode("utf-8")
