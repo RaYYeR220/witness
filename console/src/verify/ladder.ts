@@ -95,8 +95,8 @@ export interface RunOptions extends Pick<VerifyOptions, "resolveDid" | "fetchAnc
   config?: VerifierConfig;
   /** Pause after each decided step, in ms, so people can watch the ladder climb. 0 = no pause. */
   pace?: number;
-  /** Called after each step is written into the state. */
-  onStep?: (step: StepView, state: LadderState) => void;
+  /** Called after each step is written into the state; awaited when it returns a promise. */
+  onStep?: (step: StepView, state: LadderState) => unknown;
 }
 
 class Superseded extends Error {}
@@ -129,7 +129,7 @@ export async function runLadder(state: LadderState, input: string | Uint8Array, 
     if (step.ok === false && state.failedAt === null) state.failedAt = view.n;
     const next = state.steps[i + 1];
     if (next) next.status = "running";
-    options.onStep?.(view, state);
+    await options.onStep?.(view, state);
     if (pace > 0) await sleep(pace);
     if (state.run !== run) throw new Superseded();
     resumed = now();

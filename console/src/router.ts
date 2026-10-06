@@ -9,6 +9,7 @@ const ComingSoon = () => import("@/views/ComingSoon.vue");
 const VIEWS: Record<string, RouteRecordRaw["component"]> = {
   live: () => import("@/views/LiveView.vue"),
   search: () => import("@/views/SearchView.vue"),
+  verify: () => import("@/views/VerifyView.vue"),
 };
 
 const routes: RouteRecordRaw[] = [
