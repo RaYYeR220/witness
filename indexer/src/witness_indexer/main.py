@@ -33,6 +33,7 @@ from typing import Any
 from witness_core import policy
 from witness_core.policy import WriterPolicy
 
+from .anchors import default_anchor_did
 from .maintenance import Every, Rescanner
 from .orion import OrionClient
 from .pipeline import ALLOW_ALL, Indexer
@@ -67,6 +68,13 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
                      help="development only: accept every signer for every tag")
     p.add_argument("--resolver", default="http://127.0.0.1:7300",
                    help="anchor service base URL for DID resolution (empty: did:key only)")
+    p.add_argument("--anchor-did", default=os.environ.get("WITNESS_ANCHOR_DID"),
+                   help="DID whose witness.anchor mirrors become anchors (default: "
+                        "$WITNESS_ANCHOR_DID, else the `anchor` entry of "
+                        "deploy/identity/<rebased network>.json; empty: off)")
+    p.add_argument("--rebased-network",
+                   default=os.environ.get("WITNESS_REBASED_NETWORK") or "testnet",
+                   help="IOTA Rebased network of the identity file (default: testnet)")
     p.add_argument("--orion", default="http://127.0.0.1:1026",
                    help="Orion-LD base URL for the drift / unknown-IE rules (empty: off)")
     p.add_argument("--periodic-s", type=float, default=30.0,
@@ -83,6 +91,8 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     args = p.parse_args(argv)
     if not args.db:
         p.error("--db (or WITNESS_DB) is required")
+    if args.anchor_did is None:
+        args.anchor_did = default_anchor_did(args.rebased_network)
     return args
 
 
@@ -150,7 +160,8 @@ async def amain(args: argparse.Namespace, *, stop: asyncio.Event | None = None) 
         if rules.anchor is not None:
             closers.insert(0, rules.anchor.aclose)
         indexer = Indexer(source, store, policy=pol, policy_mode=policy_mode,
-                          resolve=resolver, rules=rules)
+                          resolve=resolver, rules=rules, anchor_did=args.anchor_did or None)
+        await indexer.anchors.publish_status(store)
         services.append(("indexer", indexer.run, indexer.stop))
         # Outside milestone transactions, in their own tasks.
         periodic = Every("rules", args.periodic_s,

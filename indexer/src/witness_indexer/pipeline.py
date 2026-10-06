@@ -27,6 +27,7 @@ from witness_core.envelope import KeyInfo
 from witness_core.policy import TagRule, WriterPolicy
 
 from . import events
+from .anchors import AnchorIngest
 from .classify import (
     Classifier,
     Decoded,
@@ -104,6 +105,7 @@ class Indexer:
                  policy: WriterPolicy | None = None,
                  resolve: KeyResolver | Callable[[str], KeyInfo | None] | None = None, *,
                  policy_mode: str | None = None,
+                 anchor_did: str | None = None,
                  sleep: Callable[[float], Awaitable[Any]] = asyncio.sleep,
                  now_ms: Callable[[], int] = _now_ms,
                  initial_backoff_s: float = 0.5, max_backoff_s: float = 8.0) -> None:
@@ -116,6 +118,8 @@ class Indexer:
         self.policy_mode = policy_mode or (
             "none" if policy is None else "allow-any" if policy == ALLOW_ALL else "file")
         self.resolver = as_key_resolver(resolve if resolve is not None else OfflineResolver())
+        # witness.anchor mirrors of this DID become rows of `anchors`; None: never.
+        self.anchors = AnchorIngest(anchor_did)
         self._sleep = sleep
         self._now_ms = now_ms
         self._initial = initial_backoff_s
@@ -333,6 +337,7 @@ class Indexer:
             "encrypted": row.encrypted, "reason": j.reason, "first": result == "inserted",
         }))
         await self._confirm_lifecycle(m, b.block_id, pending)
+        await self.anchors.on_message(self.store, row, d, self._now_ms(), pending)
         if self.rules is not None:
             alerts = self.rules.on_message(row)
             if inspect.isawaitable(alerts):

@@ -383,6 +383,9 @@ class Store:
             "UPDATE anchors SET status = %s, tx = COALESCE(%s, tx), "
             "record = COALESCE(%s, record) WHERE seq = %s", (status, tx, record, seq))
 
+    async def anchor(self, seq: int) -> dict | None:
+        return await self._one("SELECT * FROM anchors WHERE seq = %s", (seq,))
+
     async def anchor_covering(self, ms_index: int) -> dict | None:
         return await self._one(
             "SELECT * FROM anchors WHERE from_ms <= %s AND to_ms >= %s "
