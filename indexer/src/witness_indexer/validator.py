@@ -16,7 +16,8 @@ data, and tag and data must be byte-for-byte what the Messages API sent. Each co
 kept in `content_checks`; a mismatch carries a field diff and a canonical-JSON diff for the UI.
 
 A validation that could not conclude keeps its current status and is retried by the worker
-with a growing delay; a periodic `resume` also re-queues anything left unfinished.
+with a growing delay; a periodic `resume` also re-queues anything left unfinished. One that
+cannot run because no usable copy of the received content is stored is not retried.
 
 `reverify_all` repeats (d) later for every block whose content ever matched, against the
 copies held in the parallel database. If those no longer match the Tangle, the database was
@@ -216,6 +217,11 @@ class _Expected:
     sub_id: str | None
 
 
+class NoUsableContent(LookupError):
+    """No stored copy of what was received for a block can be compared with the Tangle (all
+    gone, NULL, or not valid hex). Retrying cannot fix it, so the worker does not."""
+
+
 class _Unavailable:
     pass
 
@@ -270,10 +276,11 @@ class Validator:
         return len(self._pending)
 
     def is_in_flight(self, block_id: bytes) -> bool:
-        """Whether this validator has the block queued, being validated or waiting for a
-        retry. Held in memory only, so no database row can fake it; it clears when the
-        block's validation concludes."""
-        return block_id in self._pending
+        """Whether the block is on its first validation attempt in this validator (queued or
+        running). Held in memory only, so no database row can fake it. It lasts one attempt:
+        once a block waits for a retry it no longer counts, so nothing that makes validation
+        fail can keep a block in flight for good."""
+        return block_id in self._pending and self._attempts.get(block_id, 0) == 0
 
     def enqueue(self, block_id: bytes | None, sub_id: str) -> None:
         """Queue a submission for validation. A failed submit (no block id) has nothing on the
@@ -300,7 +307,8 @@ class Validator:
         """Validate queued blocks, up to `max_concurrent` at a time, until stopped.
 
         A validation that ends without an outcome (node unreachable, content check still
-        owed) or raises is queued again after `retry_initial_s`, doubling up to `retry_max_s`.
+        owed) or raises is queued again after `retry_initial_s`, doubling up to `retry_max_s`;
+        one that raises NoUsableContent is dropped instead (`resume` may queue it again).
         """
         self._task = asyncio.current_task()
         slots = asyncio.Semaphore(self.cfg.max_concurrent)
@@ -331,15 +339,17 @@ class Validator:
 
     async def _work(self, block_id: bytes, sub_id: str, slots: asyncio.Semaphore) -> None:
         status = None
+        permanent = False
         try:
             status = await self.validate_once(block_id, sub_id)
-        except LookupError as e:  # nothing stored to compare with; retried, no traceback
-            log.warning("validation of block %s cannot run: %s", _hex(block_id), e)
+        except NoUsableContent as e:  # nothing usable to compare with; a retry cannot help
+            permanent = True
+            log.warning("validation of block %s cannot run: %s; not retried", _hex(block_id), e)
         except Exception:
             log.exception("validation of block %s failed", _hex(block_id))
         finally:
             slots.release()
-        if status in TERMINAL:
+        if permanent or status in TERMINAL:
             self._attempts.pop(block_id, None)
             self._pending.discard(block_id)
         else:
@@ -409,12 +419,16 @@ class Validator:
         if sub is None or sub["block_id"] != block_id:
             sub = await self.store.submission(block_id=block_id)
         if sub is not None and sub["tag"] is not None and sub["data_hex"] is not None:
-            return _Expected(sub["tag"].encode("utf-8"), from_hex(sub["data_hex"]),
-                             sub["sub_id"])
+            try:
+                data = from_hex(sub["data_hex"])
+            except ValueError as e:
+                raise NoUsableContent(f"stored data_hex of block {_hex(block_id)} is not "
+                                      f"hex: {e}") from e
+            return _Expected(sub["tag"].encode("utf-8"), data, sub["sub_id"])
         msg = await self.store.get_message(block_id)
         if msg is not None and msg["tag"] is not None and msg["data"] is not None:
             return _Expected(msg["tag"].encode("utf-8"), bytes(msg["data"]), sub_id)
-        raise LookupError(f"no received content stored for block {_hex(block_id)}")
+        raise NoUsableContent(f"no received content stored for block {_hex(block_id)}")
 
     async def _await_confirmation(self, run: _Run) -> str | None:
         """Check (c): poll metadata until the block is referenced by a milestone (CONFIRMED).
@@ -576,15 +590,17 @@ class Validator:
 
         Candidates come from four tables (MATCH content checks, submissions, messages and
         CONTENT_VERIFIED lifecycle rows), so deleting one kind of row does not hide a block.
-        The only block skipped is one in flight in this validator (queued, being validated or
-        waiting for a retry: `is_in_flight`), which is in-memory state and cannot be forged
-        through the database; lifecycle rows and content checks never exempt a block. A block
-        that was verified once is always judged, and all its copies being gone is itself
-        DB_TAMPER ("content removed"). A block never verified is judged once the node confirms
-        it is referenced by a milestone (definitive answers only), so an unconfirmed block can
-        never raise DB_TAMPER. A block the validator found CONTENT_MISMATCH also gets DB_TAMPER
-        when its stored copy differs from the Tangle, which is true; the alert is deduplicated
-        per block and stored content.
+        The only block skipped is one on its first validation attempt in this validator
+        (queued or running: `is_in_flight`). That is in-memory state no database row can
+        forge, and it lasts one attempt: a block waiting for a retry is judged, and one whose
+        stored content is unusable is dropped by the worker rather than retried, so making its
+        validation fail cannot keep a block exempt. Lifecycle rows and content checks never
+        exempt a block. A block that was verified once is always judged, and all its copies
+        being gone or NULL is itself DB_TAMPER ("content removed"). A block never verified is
+        judged once the node confirms it is referenced by a milestone (definitive answers
+        only), so an unconfirmed block can never raise DB_TAMPER. A block the validator found
+        CONTENT_MISMATCH also gets DB_TAMPER when its stored copy differs from the Tangle,
+        which is true; the alert is deduplicated per block and stored content.
 
         The parallel DB is not the trust root: an attacker who wipes every copy of a block from
         all four tables leaves nothing to re-verify here. That is detected by re-indexing the
@@ -642,7 +658,7 @@ class Validator:
             return None
         if not isinstance(payload, TaggedData):
             return None
-        if verified and not row["has_submission"] and not row["has_message"]:
+        if verified and not _has_stored_content(row):
             reason = "content removed"
             fields = [{"field": "content", "expected": _hex(payload.data), "actual": None}]
         else:
@@ -665,6 +681,14 @@ class Validator:
             run, "CONTENT_MISMATCH", at, detail, alert=alert,
             check=("MISMATCH", {"cause": "DB_TAMPER", "reason": reason, "fields": fields}))
         return alert if new else None
+
+
+def _has_stored_content(row: dict) -> bool:
+    """Whether any stored copy of the block's content is left: a submission or message row
+    with a non-NULL tag or data."""
+    sub = row["has_submission"] and (row["sub_tag"] is not None or row["data_hex"] is not None)
+    msg = row["has_message"] and (row["msg_tag"] is not None or row["msg_data"] is not None)
+    return bool(sub or msg)
 
 
 def _stored_differences(row: dict, payload: TaggedData) -> list[dict]:

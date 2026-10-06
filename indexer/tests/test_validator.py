@@ -725,6 +725,127 @@ async def test_reverify_skips_only_blocks_in_flight(env):
         "CONTENT_MISMATCH", "DB_TAMPER", "DB_TAMPER"]
 
 
+FUTURE_MS = 4_000_000_000_000
+
+
+def count_attempts(validator):
+    """Record the block id of every validation attempt (each starts by reading the stored
+    content)."""
+    seen = []
+    real = validator._expected
+
+    async def spy(block_id, sub_id):
+        seen.append(block_id)
+        return await real(block_id, sub_id)
+
+    validator._expected = spy
+    return seen
+
+
+async def reverify_after_resumed_attempts(store, v, clock, bid):
+    """Forge an unfinished validation (a SUBMITTED row dated in the future) so resume() queues
+    the block on every pass, let the worker try it twice (the start-up resume, then one more),
+    and re-verify with that same worker's validator."""
+    await store.set_lifecycle(block_id=bid, sub_id="s-a", status="SUBMITTED", at_ms=FUTURE_MS)
+    worker_v = quick_retry_validator(store, v.hornet, clock, resume_every_s=3600)
+    seen = count_attempts(worker_v)
+    worker = asyncio.create_task(worker_v.run())
+    try:
+        async def dropped_after(n):
+            return len(seen) == n and worker_v.pending == 0
+
+        assert await eventually(lambda: dropped_after(1))  # given up, not retried
+        assert await worker_v.resume() == 1
+        assert await eventually(lambda: dropped_after(2))
+        assert not worker_v.is_in_flight(bid)
+        return await worker_v.reverify_all()
+    finally:
+        await worker_v.stop()
+        await asyncio.wait_for(worker, 5)
+
+
+@respx.mock
+async def test_removed_content_cannot_keep_a_block_in_flight(env):
+    store, v, clock = env
+    bid, data, _ = await verified_block(store, v, "a")
+    await store._fetch("UPDATE submissions SET tag = NULL, data_hex = NULL WHERE block_id = %s "
+                       "RETURNING 1", (bid,))
+    await store._fetch("UPDATE messages SET tag = NULL, data = NULL WHERE block_id = %s "
+                       "RETURNING 1", (bid,))
+    [alert] = await reverify_after_resumed_attempts(store, v, clock, bid)
+    assert (alert.rule, alert.severity, alert.block_id) == ("DB_TAMPER", "critical", bid)
+    assert alert.evidence["reason"] == "content removed"
+    assert alert.evidence["fields"] == [
+        {"field": "content", "expected": "0x" + data.hex(), "actual": None}]
+
+
+@respx.mock
+async def test_unparsable_stored_data_cannot_keep_a_block_in_flight(env):
+    store, v, clock = env
+    bid, data, _ = await verified_block(store, v, "a")
+    await tamper_submission(store, bid, "zz")
+    [alert] = await reverify_after_resumed_attempts(store, v, clock, bid)
+    assert (alert.rule, alert.severity, alert.block_id) == ("DB_TAMPER", "critical", bid)
+    assert alert.evidence["fields"] == [
+        {"field": "submissions.data_hex", "expected": "0x" + data.hex(), "actual": "zz"}]
+
+
+@respx.mock
+async def test_reverify_skips_a_block_on_its_first_attempt(env):
+    store, v, _ = env
+    raw, bid, data = make_block({"id": "fresh"})
+    meta_route, block_route = serve(bid, raw, confirmed_always(bid))
+    # Its forwarded bytes differ from the Tangle: judged now, this would be DB_TAMPER.
+    await handle_record(store, v, rec("s-f", bid, data.replace(b"fresh", b"FRESH")),
+                        source="mqtt")
+    assert v.is_in_flight(bid)  # queued for its first attempt
+    assert await v.reverify_all() == []
+    assert not meta_route.called and not block_route.called
+    assert await store.alerts() == []
+
+
+@respx.mock
+@pytest.mark.parametrize("stored", ["same", "altered"])
+async def test_reverify_judges_a_block_waiting_to_retry(env, stored):
+    store, v, clock = env
+    raw, bid, data = make_block({"id": "retrying"})
+    # The first attempt finds the node unreachable for its whole window; then it is back.
+    meta_route, block_route = serve(bid, raw, [503] * 12 + [meta(bid, ms=3)])
+    worker_v = Validator(store, v.hornet,
+                         ValidatorConfig(retry_initial_s=3600, retry_max_s=3600,
+                                         resume_every_s=3600),
+                         sleep=clock.sleep, clock=clock.clock)
+    worker = asyncio.create_task(worker_v.run())
+    try:
+        await handle_record(store, worker_v, rec("s-r", bid, data), source="mqtt")
+
+        async def retry_scheduled():
+            return bid in worker_v._attempts
+
+        assert await eventually(retry_scheduled)
+        assert meta_route.call_count == 12
+        assert worker_v.pending == 1
+        assert not worker_v.is_in_flight(bid)
+        if stored == "altered":
+            await tamper_submission(store, bid,
+                                    "0x" + data.replace(b"retrying", b"RETRYING").hex())
+
+        alerts = await worker_v.reverify_all()
+        assert (meta_route.call_count, block_route.call_count) == (13, 1)  # judged
+        if stored == "same":
+            assert alerts == []
+            assert await store.alerts() == []
+            assert await statuses(store, bid) == ["RECEIVED", "SUBMITTED"]
+        else:
+            [alert] = alerts
+            assert alert.rule == "DB_TAMPER"
+            assert [f["field"] for f in alert.evidence["fields"]] == ["submissions.data_hex"]
+        assert worker_v.pending == 1  # its retry is still due
+    finally:
+        await worker_v.stop()
+        await asyncio.wait_for(worker, 5)
+
+
 @respx.mock
 async def test_reverify_judges_confirmed_indexed_message(env):
     store, v, _ = env
