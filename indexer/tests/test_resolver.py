@@ -82,13 +82,14 @@ def test_historical_lookups_reuse_a_complete_document_for_the_ttl():
 
 
 @respx.mock
-@pytest.mark.parametrize("live", ["now", "at_fetch", "window_edge", "future"])
+@pytest.mark.parametrize("live", ["now", "at_fetch", "skewed", "window_edge", "future"])
 def test_lookups_near_the_live_tip_refetch_after_3s(live):
     route = respx.get(URL).mock(return_value=httpx.Response(200, json=reply(entry(NEW, None))))
     r, clock = clocked(cache_ttl_s=60)
     fetched = clock.wall_ms()
-    at_ms = {"now": None, "at_fetch": fetched, "window_edge": fetched - 2000,
-             "future": fetched + 5000}[live]
+    # The window is 30 s wide so a node clock running behind ours still counts as the tip.
+    at_ms = {"now": None, "at_fetch": fetched, "skewed": fetched - 25_000,
+             "window_edge": fetched - 30_000, "future": fetched + 5000}[live]
     r.resolve_kid(KID, at_ms=at_ms)
     clock.t += 2.9
     r.resolve_kid(KID, at_ms=at_ms)
@@ -110,10 +111,13 @@ def test_a_historical_fetch_does_not_serve_the_live_tip_for_long():
     clock.t += 2.5
     r.resolve_kid(KID, at_ms=clock.wall_ms() - 1000)
     assert route.call_count == 2
-    # Just outside the window of the new fetch, a complete document is still historical.
+    second = clock.wall_ms()
+    # Just outside the 30 s window of the new fetch, a complete document is historical.
     clock.t += 30
-    r.resolve_kid(KID, at_ms=clock.wall_ms() - 30_000 - 2001)
+    r.resolve_kid(KID, at_ms=second - 30_001)
     assert route.call_count == 2
+    r.resolve_kid(KID, at_ms=second - 30_000)
+    assert route.call_count == 3
 
 
 @respx.mock

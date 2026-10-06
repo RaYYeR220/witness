@@ -137,7 +137,9 @@ _MISS = object()
 # not a 200 says nothing about the DID: an auth or proxy failure (401, 403, 407) must not turn
 # every did:iota signer into FORGED.
 DEFINITIVE = frozenset({400, 404, 410, 414, 431})
-LIVE_WINDOW_MS = 2000  # at_ms this close to the fetch (or later) asks about the live tip
+# at_ms this close to the fetch, or later, asks about the live tip. Wide enough that a node
+# whose clock (milestone timestamps) runs behind ours still counts as the tip.
+LIVE_WINDOW_MS = 30_000
 LIVE_MAX_AGE_S = 3.0
 SHORT_TTL_S = 5.0  # "no such DID", and documents whose history is incomplete
 
