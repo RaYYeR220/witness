@@ -127,6 +127,69 @@ describe("loadConfig", () => {
   });
 });
 
+describe("checkpoint settings", () => {
+  it("defaults to a read-only service with the documented endpoints and windows", () => {
+    const cp = loadConfig({}, "/srv/anchor").checkpoints;
+    expect(cp).toEqual({
+      loop: false,
+      apiUrl: "http://127.0.0.1:7200",
+      relayUrl: "http://127.0.0.1:5555",
+      relayNode: "iota-hornet",
+      every: 60,
+      startIndex: 1,
+      domain: null,
+      tangleNetwork: "private_tangle1",
+      policyPath: null,
+      statePath: path.resolve("/srv/anchor", "data", "anchor-state.json"),
+      identity: "anchor",
+      pollMs: 10_000,
+      httpTimeoutMs: 10_000,
+    });
+    expect(loadConfig({ SECRETS_DIR: "/data/secrets" }, "/srv/anchor").checkpoints.statePath).toBe(path.resolve("/data", "data", "anchor-state.json"));
+  });
+
+  it("reads the loop settings", () => {
+    const cp = loadConfig(
+      {
+        ANCHOR_LOOP: "on",
+        ANCHOR_KEYSTORE_PATH: "/keys/iota.keystore",
+        ANCHOR_ADDRESS: ADDR,
+        ANCHOR_POLICY_PATH: "deploy/policy.json",
+        ANCHOR_API_URL: "http://api:7200/",
+        ANCHOR_RELAY_URL: "http://relay:5555",
+        ANCHOR_EVERY: "12",
+        ANCHOR_START_INDEX: "3601",
+        ANCHOR_DOMAIN: "MyDomain",
+        ANCHOR_NETWORK_NAME: "private_tangle2",
+        ANCHOR_STATE_PATH: "state/a.json",
+        ANCHOR_POLL_MS: "2000",
+      },
+      "/srv/anchor",
+    ).checkpoints;
+    expect(cp).toMatchObject({
+      loop: true,
+      apiUrl: "http://api:7200",
+      relayUrl: "http://relay:5555",
+      every: 12,
+      startIndex: 3601,
+      domain: "MyDomain",
+      tangleNetwork: "private_tangle2",
+      policyPath: path.resolve("/srv/anchor", "deploy/policy.json"),
+      statePath: path.resolve("/srv/anchor", "state/a.json"),
+      pollMs: 2000,
+    });
+  });
+
+  it("refuses a loop without keystore or policy, and out-of-range windows", () => {
+    expect(issuesOf({ ANCHOR_LOOP: "on" })).toEqual([expect.stringContaining("ANCHOR_KEYSTORE_PATH"), expect.stringContaining("ANCHOR_POLICY_PATH")]);
+    expect(issuesOf({ ANCHOR_LOOP: "maybe" })).toEqual([expect.stringContaining("ANCHOR_LOOP")]);
+    expect(issuesOf({ ANCHOR_EVERY: "0" })).toEqual([expect.stringContaining("ANCHOR_EVERY")]);
+    expect(issuesOf({ ANCHOR_EVERY: "10001" })).toEqual([expect.stringContaining("ANCHOR_EVERY")]);
+    expect(issuesOf({ ANCHOR_API_URL: "ftp://x" })).toEqual([expect.stringContaining("ANCHOR_API_URL")]);
+    expect(issuesOf({ ANCHOR_RELAY_NODE: "http://evil" })).toEqual([expect.stringContaining("ANCHOR_RELAY_NODE")]);
+  });
+});
+
 describe("explorerLink", () => {
   it("points at the configured network", () => {
     const cfg = loadConfig({}, "/");

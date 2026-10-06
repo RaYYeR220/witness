@@ -196,7 +196,9 @@ describe("other routes", () => {
 
   it("returns 404 for unknown paths and 405 for writes", async () => {
     const s = await start();
-    expect((await s.get("/checkpoints")).status).toBe(404);
+    expect((await s.get("/nothing-here")).status).toBe(404);
+    // Without a checkpoint reader the checkpoint routes exist but are unavailable.
+    expect((await s.get("/checkpoints")).status).toBe(503);
     expect((await s.get(`/resolve/${DID}`, { method: "POST" })).status).toBe(405);
     const pre = await s.get(`/resolve/${DID}`, { method: "OPTIONS" });
     expect(pre.status).toBe(204);

@@ -1,0 +1,246 @@
+import path from "node:path";
+import { checkpointShapeError, merkleRoot, toHex } from "@witness/verify";
+import { afterEach, describe, expect, it } from "vitest";
+import { buildNextCheckpoint, checkpointHashHex } from "../src/checkpoint.js";
+import { AnchorLoop, type LoopDeps } from "../src/loop.js";
+import { ANCHOR_TAG } from "../src/mirror.js";
+import { StateStore, type AnchorState } from "../src/state.js";
+import { ANCHOR_DID, FakeRelay, FakeTangle, FakeTrail, POLICY_HASH, TRAIL, WRITER, cleanupDirs, makeSigner, mid, tmpDir } from "./helpers.js";
+
+afterEach(cleanupDirs);
+
+const PARAMS = { network: "private_tangle1", domain: "MyDomain", policyHash: POLICY_HASH };
+
+function setup(over: Partial<LoopDeps> = {}, latest = 24) {
+  const trail = new FakeTrail();
+  const tangle = new FakeTangle(latest);
+  const { signer, keyInfo } = makeSigner();
+  const relay = new FakeRelay([keyInfo]);
+  const store = new StateStore(path.join(tmpDir(), "data", "anchor-state.json"));
+  const deps: LoopDeps = {
+    network: "testnet",
+    writer: WRITER,
+    trail,
+    source: tangle,
+    relay,
+    signer,
+    store,
+    params: PARAMS,
+    every: 12,
+    startIndex: 1,
+    pollMs: 60_000,
+    ...over,
+  };
+  return { deps, trail, tangle, relay, store, loop: new AnchorLoop(deps), restart: () => new AnchorLoop(deps) };
+}
+
+describe("AnchorLoop", () => {
+  it("anchors a complete window, saves it, then mirrors it as a producer-signed witness.anchor", async () => {
+    const { loop, trail, relay, store } = setup();
+    const r = await loop.runOnce();
+    expect(r).toMatchObject({ status: "anchored", seq: 1, window: { from: 1, to: 12 }, record: 1, tx: "Tx1", mirrored: true });
+
+    const state = store.load()!;
+    const [cp] = state.checkpoints;
+    expect(cp).toMatchObject({ seq: 1, record: 1, tx: "Tx1", trail: TRAIL, addedBy: WRITER, mirror: { status: "posted", envelopeSeq: 1 } });
+    expect(cp!.checkpoint.msRoot).toBe(toHex(merkleRoot(Array.from({ length: 12 }, (_, i) => mid(i + 1)))));
+    expect(cp!.checkpoint.prev).toBeNull();
+    expect(state.pending).toBeNull();
+
+    // The trail record holds the checkpoint's JCS text; metadata names seq and hash.
+    expect(JSON.parse(trail.records[1]!.data)).toEqual(cp!.checkpoint);
+    expect(JSON.parse(trail.records[1]!.metadata!)).toEqual({ kind: "witness.checkpoint", seq: 1, checkpointHash: cp!.checkpointHash });
+
+    expect(relay.posted).toHaveLength(1);
+    const { env, blockId } = relay.posted[0]!;
+    expect(env).toMatchObject({ tag: ANCHOR_TAG, iss: ANCHOR_DID, kid: `${ANCHOR_DID}#sig-1`, seq: 1, att: { mode: "producer" } });
+    expect(env.prev).toBeUndefined();
+    const body = env.body as any;
+    // The shape witness_core.schema checks for witness.anchor.
+    expect(checkpointShapeError(body.checkpoint)).toBeNull();
+    expect(body.checkpointHash).toBe(checkpointHashHex(body.checkpoint));
+    expect(body).toEqual({ seq: 1, checkpoint: cp!.checkpoint, checkpointHash: cp!.checkpointHash, rebased: { network: "testnet", trail: TRAIL, record: 1, tx: "Tx1" } });
+    expect(state.mirror).toEqual({ lastSeq: 1, lastBlockId: blockId });
+  });
+
+  it("waits while the next window is incomplete and never anchors a partial one", async () => {
+    const { loop, trail, tangle } = setup({}, 11);
+    expect(await loop.runOnce()).toEqual({ status: "waiting", window: { from: 1, to: 12 }, reason: expect.any(String) });
+    expect(trail.appends).toBe(0);
+    tangle.latest = 12;
+    expect((await loop.runOnce()).status).toBe("anchored");
+    expect(await loop.runOnce()).toMatchObject({ status: "waiting", window: { from: 13, to: 24 } });
+    expect(trail.appends).toBe(1);
+  });
+
+  it("chains windows: contiguous indexes, prev hash, mirror seq and prev block", async () => {
+    const { loop, store, relay } = setup({ startIndex: 101 }, 200);
+    await loop.runOnce();
+    await loop.runOnce();
+    const [a, b] = store.load()!.checkpoints;
+    expect(a!.checkpoint.from.index).toBe(101);
+    expect(b!.checkpoint.from.index).toBe(a!.checkpoint.to.index + 1);
+    expect(b!.checkpoint.to.index).toBe(124);
+    expect(b!.checkpoint.prev).toBe(a!.checkpointHash);
+    expect(b!.seq).toBe(2);
+    expect(relay.posted.map((p) => p.env.seq)).toEqual([1, 2]);
+    expect(relay.posted[1]!.env.prev).toBe(relay.posted[0]!.blockId);
+  });
+
+  it("joins a running tick instead of starting a second one", async () => {
+    const { loop, trail } = setup();
+    const [x, y] = await Promise.all([loop.runOnce(), loop.runOnce()]);
+    expect(x).toBe(y);
+    expect(trail.appends).toBe(1);
+  });
+});
+
+describe("restarts", () => {
+  it("mirrors an appended-but-unmirrored checkpoint after a restart without appending again", async () => {
+    const { loop, trail, relay, store, restart } = setup({}, 12);
+    relay.down = true;
+    const r = await loop.runOnce();
+    expect(r).toMatchObject({ status: "anchored", seq: 1, mirrored: false, mirrorError: expect.stringMatching(/unreachable/) });
+    expect(store.load()!.checkpoints[0]!.mirror).toBeNull();
+
+    relay.down = false;
+    const again = await restart().runOnce();
+    expect(again).toMatchObject({ status: "waiting", window: { from: 13, to: 24 } });
+    expect(trail.appends).toBe(1);
+    expect(relay.posted).toHaveLength(1);
+    const entry = store.load()!.checkpoints[0]!;
+    expect(entry.mirror).toMatchObject({ status: "posted", envelopeSeq: 1 });
+    expect(entry.mirrorError).toBeNull();
+  });
+
+  it("finishes an append that was persisted before a crash instead of anchoring the window twice", async () => {
+    const { loop, trail, store, relay, restart } = setup({}, 24);
+    trail.crashNext = true;
+    trail.landOnCrash = false; // signed and saved, not yet on chain
+    expect(await loop.runOnce()).toMatchObject({ status: "error", stage: "append" });
+    const saved = store.load()!;
+    expect(saved.pending).toMatchObject({ seq: 1, append: { digest: "Tx1" } });
+    expect(saved.checkpoints).toHaveLength(0);
+
+    const r = await restart().runOnce();
+    expect(trail.resumeCalls).toEqual(["Tx1"]);
+    // The pending checkpoint 1 is settled with its original transaction, then window 2 is anchored.
+    expect(r).toMatchObject({ status: "anchored", seq: 2, window: { from: 13, to: 24 } });
+    const state = store.load()!;
+    expect(state.pending).toBeNull();
+    expect(state.checkpoints.map((c) => [c.seq, c.tx, c.record])).toEqual([
+      [1, "Tx1", 1],
+      [2, "Tx2", 2],
+    ]);
+    expect(trail.appends).toBe(2);
+    expect(trail.records.filter((x) => x.metadata?.includes('"seq":1')).length).toBe(1);
+    expect(relay.posted.map((p) => (p.env.body as any).seq)).toEqual([1, 2]);
+  });
+
+  it("adopts an append that reached the chain although the process died", async () => {
+    const { loop, trail, store, restart } = setup({}, 12);
+    trail.crashNext = true;
+    trail.landOnCrash = true;
+    await loop.runOnce();
+    expect(trail.appends).toBe(1);
+    expect(await restart().runOnce()).toMatchObject({ status: "waiting" });
+    expect(trail.appends).toBe(1);
+    expect(store.load()!.checkpoints.map((c) => c.tx)).toEqual(["Tx1"]);
+  });
+
+  it("rebuilds the same window when the persisted transaction never executed", async () => {
+    const { loop, trail, store, restart } = setup({}, 12);
+    trail.crashNext = true;
+    trail.landOnCrash = false;
+    await loop.runOnce();
+    const first = store.load()!.pending!;
+    // Simulate a transaction that can never execute (its gas coin was spent elsewhere).
+    trail.resumeAppend = async () => ({ status: "dropped", reason: "gas coin version consumed" });
+    const r = await restart().runOnce();
+    expect(r).toMatchObject({ status: "anchored", seq: 1, tx: "Tx2" });
+    expect(store.load()!.checkpoints[0]!.checkpointHash).toBe(first.checkpointHash);
+    expect(trail.appends).toBe(1);
+  });
+
+  it("does nothing new while a pending append cannot be settled", async () => {
+    const { loop, trail, restart } = setup({}, 24);
+    trail.crashNext = true;
+    trail.landOnCrash = false;
+    await loop.runOnce();
+    trail.resumeError = new Error("rpc timeout");
+    expect(await restart().runOnce()).toMatchObject({ status: "error", stage: "pending" });
+    expect(trail.appends).toBe(0);
+  });
+
+  it("recovers a mirror whose reply was lost from the relay receipt", async () => {
+    const { loop, relay, store, restart } = setup({}, 12);
+    relay.loseReply = true;
+    expect(await loop.runOnce()).toMatchObject({ mirrored: false });
+    await restart().runOnce();
+    expect(relay.posted).toHaveLength(1);
+    expect(store.load()!.checkpoints[0]!.mirror).toMatchObject({ status: "posted", envelopeSeq: 1, recovered: true, blockId: relay.posted[0]!.blockId });
+  });
+
+  it("moves past a seq the relay claimed without a receipt", async () => {
+    const { loop, relay, store, restart } = setup({}, 12);
+    relay.claimWithoutReceipt.add(1);
+    await loop.runOnce(); // seq 1 claimed, connection reset
+    await restart().runOnce(); // REPLAY, no receipt: seq 1 is burnt
+    expect(store.load()!.mirror.lastSeq).toBe(1);
+    await restart().runOnce();
+    const entry = store.load()!.checkpoints[0]!;
+    expect(entry.mirror).toMatchObject({ status: "posted", envelopeSeq: 2 });
+    expect((relay.posted[0]!.env.body as any).seq).toBe(1);
+  });
+
+  it("rebuilds a lost state file from the trail and continues the chain", async () => {
+    const { deps, trail, tangle, store, relay } = setup({}, 36);
+    // Two checkpoints written by an earlier run whose state file is gone.
+    const one = await buildNextCheckpoint(tangle, PARAMS, null, 1, 12);
+    if (one.status !== "ready") throw new Error("expected a checkpoint");
+    const two = await buildNextCheckpoint(tangle, PARAMS, one, 1, 12);
+    if (two.status !== "ready") throw new Error("expected a checkpoint");
+    trail.seed(1, one.checkpoint, one.checkpointHash);
+    trail.records.push({ data: "noise", metadata: "sha256:00", addedBy: WRITER, addedAtMs: 2, tx: "TxNoise" });
+    trail.seed(2, two.checkpoint, two.checkpointHash);
+
+    const r = await new AnchorLoop(deps).runOnce();
+    expect(r).toMatchObject({ status: "anchored", seq: 3, window: { from: 25, to: 36 } });
+    const state = store.load()!;
+    expect(state.checkpoints.map((c) => [c.seq, c.record, c.tx, c.mirror?.status])).toEqual([
+      [1, 1, "TxSeed1", "unknown"],
+      [2, 3, "TxSeed2", "unknown"],
+      [3, 4, "Tx1", "posted"],
+    ]);
+    expect(state.checkpoints[2]!.checkpoint.prev).toBe(two.checkpointHash);
+    // Only the new checkpoint is mirrored, with a seq past the recovered ones.
+    expect(relay.posted.map((p) => p.env.seq)).toEqual([3]);
+  });
+
+  it("ignores checkpoint records added by another address when rebuilding", async () => {
+    const { deps, trail, tangle, store } = setup({}, 12);
+    const one = await buildNextCheckpoint(tangle, PARAMS, null, 1, 12);
+    if (one.status !== "ready") throw new Error("expected a checkpoint");
+    trail.seed(1, one.checkpoint, one.checkpointHash, "0x" + "ee".repeat(32));
+    expect(await new AnchorLoop(deps).runOnce()).toMatchObject({ status: "anchored", seq: 1, record: 2 });
+    expect(store.load()!.checkpoints).toHaveLength(1);
+  });
+
+  it("refuses a state file that belongs to another trail", async () => {
+    const { loop, store, trail } = setup();
+    const foreign: AnchorState = { v: 1, network: "testnet", trail: "0x" + "9".repeat(64), checkpoints: [], pending: null, mirror: { lastSeq: 0, lastBlockId: null } };
+    store.save(foreign);
+    expect(await loop.runOnce()).toMatchObject({ status: "error", stage: "trail", error: expect.stringMatching(/move it aside/) });
+    expect(trail.appends).toBe(0);
+  });
+
+  it("refuses a tampered state file", async () => {
+    const { loop, store, trail } = setup({}, 24);
+    await loop.runOnce();
+    const s = store.load()!;
+    s.checkpoints[0]!.checkpoint.msRoot = "0x" + "00".repeat(32);
+    store.save(s);
+    expect(await loop.runOnce()).toMatchObject({ status: "error", stage: "state", error: expect.stringMatching(/hash/) });
+    expect(trail.appends).toBe(1);
+  });
+});

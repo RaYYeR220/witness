@@ -4,7 +4,7 @@ import { inspect } from "node:util";
 import { IotaClient, IotaHTTPTransport, type IotaTransactionBlockResponse } from "@iota/iota-sdk/client";
 import { decodeIotaPrivateKey, type PublicKey } from "@iota/iota-sdk/cryptography";
 import { Ed25519Keypair } from "@iota/iota-sdk/keypairs/ed25519";
-import type { Transaction } from "@iota/iota-sdk/transactions";
+import { TransactionDataBuilder, type Transaction } from "@iota/iota-sdk/transactions";
 import type { AnchorConfig } from "./config.js";
 
 /**
@@ -156,6 +156,52 @@ class KeypairTransactionSigner implements WasmTransactionSigner {
   }
 }
 
+/**
+ * A signed transaction that has not necessarily been executed yet. Persisting it before
+ * submission lets a restarted process find out whether it landed (by digest) or submit the very
+ * same bytes again; it never builds a second, different transaction for the same work.
+ * Nothing here is secret: the bytes and signature become public once executed.
+ */
+export interface SignedTransaction {
+  digest: string;
+  /** BCS transaction data, base64. */
+  txBytes: string;
+  /** Serialized user signature, base64. */
+  signature: string;
+}
+
+const RESPONSE_OPTIONS = { showEffects: true, showEvents: true } as const;
+
+/** Executes (or re-executes: identical bytes are idempotent) a signed transaction and waits for it. */
+async function submitSigned(client: IotaClient, signed: SignedTransaction): Promise<IotaTransactionBlockResponse> {
+  const sent = await client.executeTransactionBlock({ transactionBlock: signed.txBytes, signature: signed.signature, options: RESPONSE_OPTIONS });
+  if (sent.digest !== signed.digest) throw new Error(`node executed ${sent.digest}, expected ${signed.digest}`);
+  const res = await client.waitForTransaction({ digest: signed.digest, options: RESPONSE_OPTIONS });
+  assertSuccess(res);
+  return res;
+}
+
+/** The transaction with this digest, or null when the node does not know it (yet). */
+export async function findTransaction(client: Pick<IotaClient, "getTransactionBlock">, digest: string): Promise<IotaTransactionBlockResponse | null> {
+  try {
+    return await client.getTransactionBlock({ digest, options: RESPONSE_OPTIONS });
+  } catch (err) {
+    if (/could not find the referenced transaction|not found/i.test((err as Error).message ?? "")) return null;
+    throw err;
+  }
+}
+
+/**
+ * True for errors meaning the transaction can never execute: one of its owned inputs (the gas coin,
+ * the writer capability) was consumed at that version by another transaction, or it expired.
+ */
+export function isPermanentlyInvalid(err: unknown): boolean {
+  const msg = (err as Error)?.message ?? "";
+  return /unavailable for consumption|not available for consumption|ObjectVersionUnavailable|ObjectNotFound|TransactionExpired|has been deleted|needs to be rebuilt/i.test(
+    msg,
+  );
+}
+
 /** The service's gas and sender account. The key pair is held privately and never serialized. */
 export class AnchorWallet {
   readonly address: string;
@@ -214,6 +260,31 @@ export class AnchorWallet {
       assertSuccess(res);
       return res;
     });
+  }
+
+  /**
+   * Builds and signs `tx`, hands the signed transaction to `beforeSubmit` (which must persist it
+   * durably), then executes it. A crash after `beforeSubmit` leaves enough on disk for
+   * `resubmit` to finish the same transaction instead of building another one.
+   */
+  executeDurable(
+    client: IotaClient,
+    tx: Transaction,
+    beforeSubmit: (signed: SignedTransaction) => void | Promise<void>,
+  ): Promise<IotaTransactionBlockResponse> {
+    return this.exclusive(async () => {
+      tx.setSenderIfNotSet(this.address);
+      const bytes = await tx.build({ client });
+      const { signature, bytes: b64 } = await this.#keypair.signTransaction(bytes);
+      const signed: SignedTransaction = { digest: TransactionDataBuilder.getDigestFromBytes(bytes), txBytes: b64, signature };
+      await beforeSubmit(signed);
+      return submitSigned(client, signed);
+    });
+  }
+
+  /** Submits a previously signed transaction again; a no-op for the chain if it already ran. */
+  resubmit(client: IotaClient, signed: SignedTransaction): Promise<IotaTransactionBlockResponse> {
+    return this.exclusive(() => submitSigned(client, signed));
   }
 
   toJSON(): unknown {

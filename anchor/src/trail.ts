@@ -2,7 +2,16 @@ import { createHash } from "node:crypto";
 import path from "node:path";
 import type { IotaClient, IotaEvent, IotaTransactionBlockResponse } from "@iota/iota-sdk/client";
 import { Transaction } from "@iota/iota-sdk/transactions";
-import { assertSuccess, forWasm, gasUsedNanos, type AnchorWallet } from "./client.js";
+import {
+  TransactionFailedError,
+  assertSuccess,
+  findTransaction,
+  forWasm,
+  gasUsedNanos,
+  isPermanentlyInvalid,
+  type AnchorWallet,
+  type SignedTransaction,
+} from "./client.js";
 import { explorerLink, type AnchorConfig, type PackageIds } from "./config.js";
 import { readJsonIfExists, writeJsonAtomic } from "./fsutil.js";
 import { log } from "./log.js";
@@ -34,6 +43,14 @@ export interface AppendResult {
   gasNanos: string | null;
   links: { tx: string; trail: string };
 }
+
+/** An append that was signed and persisted before submission (see `appendRecordDurable`). */
+export interface PendingAppend extends SignedTransaction {
+  trailId: string;
+  metadata: string | null;
+}
+
+export type ResumeResult = { status: "done"; result: AppendResult } | { status: "dropped"; reason: string };
 
 export interface TrailRecord {
   trailId: string;
@@ -301,12 +318,7 @@ export class TrailService {
     return null;
   }
 
-  /** Appends one record (text or bytes). Metadata defaults to `sha256:<hex>` of the data. */
-  async appendRecord(
-    trailId: string,
-    data: string | Uint8Array,
-    opts: { metadata?: string | null; writerCapId?: string } = {},
-  ): Promise<AppendResult> {
+  async #prepare(trailId: string, data: string | Uint8Array, opts: { metadata?: string | null; writerCapId?: string }) {
     const wallet = this.#requireWallet();
     const size = typeof data === "string" ? Buffer.byteLength(data, "utf8") : data.length;
     if (size > MAX_RECORD_BYTES) throw new Error(`record is ${size} bytes, the limit is ${MAX_RECORD_BYTES}`);
@@ -314,10 +326,12 @@ export class TrailService {
     const writerCapId =
       opts.writerCapId ?? (state?.trailId === trailId ? state.writerCapId : undefined) ?? (await this.#findWriterCap(trailId));
     if (!writerCapId) throw new Error(`no writer capability for trail ${trailId} owned by ${wallet.address}`);
-
     const metadata = opts.metadata === undefined ? sha256Metadata(data) : opts.metadata;
     const tx = buildAddRecordTx(this.#cfg.packages, trailId, writerCapId, data, metadata, this.#cfg.gasBudget);
-    const res = await wallet.execute(this.#iota, tx);
+    return { wallet, tx, metadata };
+  }
+
+  #appendResult(trailId: string, res: IotaTransactionBlockResponse, metadata: string | null): AppendResult {
     const ev = recordAddedEvents(res.events, this.#cfg.packages, trailId)[0];
     if (!ev) throw new Error(`transaction ${res.digest} emitted no RecordAdded event for ${trailId}`);
     const gas = gasUsedNanos(res);
@@ -331,6 +345,74 @@ export class TrailService {
       gasNanos: gas === null ? null : gas.toString(),
       links: { tx: this.link("txblock", res.digest), trail: this.link("object", trailId) },
     };
+  }
+
+  /** Appends one record (text or bytes). Metadata defaults to `sha256:<hex>` of the data. */
+  async appendRecord(
+    trailId: string,
+    data: string | Uint8Array,
+    opts: { metadata?: string | null; writerCapId?: string } = {},
+  ): Promise<AppendResult> {
+    const { wallet, tx, metadata } = await this.#prepare(trailId, data, opts);
+    const res = await wallet.execute(this.#iota, tx);
+    return this.#appendResult(trailId, res, metadata);
+  }
+
+  /**
+   * Appends one record like `appendRecord`, but signs first and passes the signed transaction to
+   * `persist` before submitting it. If the process dies in between, `resumeAppend` with what was
+   * persisted finishes the very same transaction, so a record is never written twice.
+   */
+  async appendRecordDurable(
+    trailId: string,
+    data: string | Uint8Array,
+    opts: { metadata?: string | null; writerCapId?: string; persist: (pending: PendingAppend) => void | Promise<void> },
+  ): Promise<AppendResult> {
+    const { wallet, tx, metadata } = await this.#prepare(trailId, data, opts);
+    const res = await wallet.executeDurable(this.#iota, tx, (signed) => opts.persist({ ...signed, trailId, metadata }));
+    return this.#appendResult(trailId, res, metadata);
+  }
+
+  /**
+   * Settles an append persisted by `appendRecordDurable`: `done` with the record if the
+   * transaction executed (now or earlier), `dropped` if it failed or can never execute. Throws
+   * when that cannot be decided yet (node unreachable), so the caller keeps it pending.
+   */
+  async resumeAppend(pending: PendingAppend): Promise<ResumeResult> {
+    const wallet = this.#requireWallet();
+    let res = await findTransaction(this.#iota, pending.digest);
+    if (!res) {
+      try {
+        res = await wallet.resubmit(this.#iota, pending);
+      } catch (err) {
+        if (err instanceof TransactionFailedError) return { status: "dropped", reason: err.message };
+        const again = await findTransaction(this.#iota, pending.digest);
+        if (!again) {
+          if (isPermanentlyInvalid(err)) return { status: "dropped", reason: `transaction ${pending.digest} can no longer execute: ${(err as Error).message}` };
+          throw err;
+        }
+        res = again;
+      }
+    }
+    const status = res.effects?.status;
+    if (status?.status !== "success") return { status: "dropped", reason: `transaction ${pending.digest} failed: ${status?.error ?? "no effects"}` };
+    return { status: "done", result: this.#appendResult(pending.trailId, res, pending.metadata) };
+  }
+
+  /** Trail id from ANCHOR_TRAIL_ID or the trail state file, without touching the chain. */
+  knownTrailId(): string | null {
+    return this.#cfg.trailId ?? this.#readState()?.trailId ?? null;
+  }
+
+  /** Number of records and the last sequence number, read from the trail object. */
+  async trailHead(trailId: string): Promise<{ records: number; tail: number | null }> {
+    const obj = await this.#iota.getObject({ id: trailId, options: { showContent: true, showType: true } });
+    const expected = `${this.#cfg.packages.auditTrailOriginal}::main::AuditTrail<`;
+    if (!obj.data?.type?.startsWith(expected)) throw new Error(`${trailId} is not an Audit Trail`);
+    const fields = obj.data.content?.dataType === "moveObject" ? (obj.data.content.fields as Record<string, any>) : null;
+    const records = fields?.records?.fields;
+    if (!records || typeof records.size !== "string") throw new Error(`${trailId} has no records table`);
+    return { records: Number(records.size), tail: records.tail === null || records.tail === undefined ? null : Number(records.tail) };
   }
 
   async #recordsTable(trailId: string): Promise<string> {

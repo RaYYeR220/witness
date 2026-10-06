@@ -1,0 +1,187 @@
+{
+  "policy": {
+    "input": {
+      "version": 3,
+      "tags": {
+        "trust.score": {
+          "allowed": [
+            "did:iota:testnet:0x01",
+            "did:iota:testnet:0x02"
+          ],
+          "require_signature": true
+        },
+        "witness.anchor": {
+          "allowed": [
+            "did:iota:testnet:0x03"
+          ],
+          "require_signature": 1,
+          "legacy_grace": []
+        },
+        "LLO-K8s": {}
+      },
+      "default": {
+        "allowed": [
+          "*"
+        ],
+        "legacy_grace": true
+      },
+      "note": "ignored by the policy hash"
+    },
+    "normalized": {
+      "version": 3,
+      "tags": {
+        "trust.score": {
+          "allowed": [
+            "did:iota:testnet:0x01",
+            "did:iota:testnet:0x02"
+          ],
+          "require_signature": true,
+          "legacy_grace": true
+        },
+        "witness.anchor": {
+          "allowed": [
+            "did:iota:testnet:0x03"
+          ],
+          "require_signature": true,
+          "legacy_grace": false
+        },
+        "LLO-K8s": {
+          "allowed": [],
+          "require_signature": false,
+          "legacy_grace": true
+        }
+      },
+      "default": {
+        "allowed": [
+          "*"
+        ],
+        "require_signature": false,
+        "legacy_grace": true
+      }
+    },
+    "hash": "0xacf59a2d743eba7c58db62fa7660c4699783f27ff0b7a9a49506155cacd9d0da"
+  },
+  "checkpoints": [
+    {
+      "input": {
+        "network": "private_tangle1",
+        "domain": "Domäne-東京   \"q\"",
+        "first": 3601,
+        "milestoneIds": [
+          "0x40374c9823571d386596a8516df22d898d8f6da13426f90fc7f19a9dc2276520",
+          "0xf35950d142c8cf381c54d30ed656a69a63ff7320a83c9b690ad0cfdda896cc75",
+          "0x0dbdac5e428e9b7df963a04a8b13ecfc1b88272f9d8a35e010a27ec15b5ac3c4",
+          "0xb8fbca1658ed9a49b38119443bb35ccf5c5de1ac5cdc96140dd821073696cedf",
+          "0x811a4f14f9d1f4589b25f9b42e8329c368c0af895ce5f0b0c514759672627efa",
+          "0x9266f48d2348d16399e76d6dce4dfa094f34c103df1a92521cd27a4fa7571f89",
+          "0xa2fff05ab0841fde042108cb0a3028e1fd4379d67b853c5731f353157e01c5eb",
+          "0x1047aca585a4253754feca5a893a6bea4c952cb11aaede5e85cae080ef38da9b",
+          "0x6e24916b4dceb4b92079072ec350bd2f1984b926ef8f6053896c3fa75b3dd81c",
+          "0x333db41d786b7500753ac79f38f6e47bb10a3ba81682b25f03e69c9332ebb285",
+          "0x6367e9cef55601ff024f2c1e68a0c524131bf4158b27ce7f42776108f4ae977e",
+          "0x2b03ced2e0f98dce804eaf5a77a0c9e618f779edcf11b2d6767f19fb9331088a"
+        ],
+        "msgCount": 37,
+        "policyHash": "0xacf59a2d743eba7c58db62fa7660c4699783f27ff0b7a9a49506155cacd9d0da",
+        "prevHash": null
+      },
+      "checkpoint": {
+        "v": 1,
+        "kind": "witness.checkpoint",
+        "network": "private_tangle1",
+        "domain": "Domäne-東京   \"q\"",
+        "from": {
+          "index": 3601,
+          "id": "0x40374c9823571d386596a8516df22d898d8f6da13426f90fc7f19a9dc2276520"
+        },
+        "to": {
+          "index": 3612,
+          "id": "0x2b03ced2e0f98dce804eaf5a77a0c9e618f779edcf11b2d6767f19fb9331088a"
+        },
+        "msRoot": "0x3dde229355c0571bb3624168f937f7b1b7981c6b1f03d0f9afc8dcde88a52d47",
+        "msgCount": 37,
+        "policyHash": "0xacf59a2d743eba7c58db62fa7660c4699783f27ff0b7a9a49506155cacd9d0da",
+        "prev": null
+      },
+      "jcs": "{\"domain\":\"Domäne-東京   \\\"q\\\"\",\"from\":{\"id\":\"0x40374c9823571d386596a8516df22d898d8f6da13426f90fc7f19a9dc2276520\",\"index\":3601},\"kind\":\"witness.checkpoint\",\"msRoot\":\"0x3dde229355c0571bb3624168f937f7b1b7981c6b1f03d0f9afc8dcde88a52d47\",\"msgCount\":37,\"network\":\"private_tangle1\",\"policyHash\":\"0xacf59a2d743eba7c58db62fa7660c4699783f27ff0b7a9a49506155cacd9d0da\",\"prev\":null,\"to\":{\"id\":\"0x2b03ced2e0f98dce804eaf5a77a0c9e618f779edcf11b2d6767f19fb9331088a\",\"index\":3612},\"v\":1}",
+      "hash": "0x5188cab9813d74d9a9784cf0698fffce36248f03f0a8c1261adfa14102666d27"
+    },
+    {
+      "input": {
+        "network": "private_tangle1",
+        "domain": "Domäne-東京   \"q\"",
+        "first": 3613,
+        "milestoneIds": [
+          "0x0e11d89ce50ae1dfdff24efc9c5ea6c36631ed9ffaf601f20c12a2ea3c136145",
+          "0x105e610fb75a5a2e4c3e133cb37112c1e1908685f2ff6ba6cc36cc97ce26bffc",
+          "0x7d4073f9a900b48e6488e21a8589309006b18b68efda143fc04e1d8e3052c372",
+          "0x50e46c355acbc51f3a5ddabac25ea3d53d27e491b7f62235e690b1a9dcca1a10",
+          "0x31a69a78196b830eb583fcf53971a992f8d7f848f5d1949eeb6ed952c6298315",
+          "0x2b5f90a54dcf263006901b5999c2aa40855ad0e136499a18ce2fb9f722e24928",
+          "0x4dbf2d07481e7e48242059d08eb8827de7034842a3bb241b5c17b30ef3e4af31",
+          "0x11a384f8c25bfab31b244338a3614aff5430be409e7f0847c3e195ec1ac1fd35",
+          "0x6b8a11dec6c5a08d415f38d060239deadfef3bb1d42663c9e18e95d47fa4d0c9",
+          "0x536b158929b7725a15634e1dfb22e1560ff82a22a73d7273ba2b6570de684025",
+          "0x282a45b692dadc708e9ff229e66a0f5b64cafadf221127cad3519cbc6c7f6627",
+          "0xf4efd98a374294811b2ebc24e48d3c73c50f8318bf91c8fc379f52b045eba63d"
+        ],
+        "msgCount": 0,
+        "policyHash": "0xacf59a2d743eba7c58db62fa7660c4699783f27ff0b7a9a49506155cacd9d0da",
+        "prevHash": "0x5188cab9813d74d9a9784cf0698fffce36248f03f0a8c1261adfa14102666d27"
+      },
+      "checkpoint": {
+        "v": 1,
+        "kind": "witness.checkpoint",
+        "network": "private_tangle1",
+        "domain": "Domäne-東京   \"q\"",
+        "from": {
+          "index": 3613,
+          "id": "0x0e11d89ce50ae1dfdff24efc9c5ea6c36631ed9ffaf601f20c12a2ea3c136145"
+        },
+        "to": {
+          "index": 3624,
+          "id": "0xf4efd98a374294811b2ebc24e48d3c73c50f8318bf91c8fc379f52b045eba63d"
+        },
+        "msRoot": "0xbc355f186b380d23bbc3d73a8f92307c2619aab0129060bcc3b684eabd4e281d",
+        "msgCount": 0,
+        "policyHash": "0xacf59a2d743eba7c58db62fa7660c4699783f27ff0b7a9a49506155cacd9d0da",
+        "prev": "0x5188cab9813d74d9a9784cf0698fffce36248f03f0a8c1261adfa14102666d27"
+      },
+      "jcs": "{\"domain\":\"Domäne-東京   \\\"q\\\"\",\"from\":{\"id\":\"0x0e11d89ce50ae1dfdff24efc9c5ea6c36631ed9ffaf601f20c12a2ea3c136145\",\"index\":3613},\"kind\":\"witness.checkpoint\",\"msRoot\":\"0xbc355f186b380d23bbc3d73a8f92307c2619aab0129060bcc3b684eabd4e281d\",\"msgCount\":0,\"network\":\"private_tangle1\",\"policyHash\":\"0xacf59a2d743eba7c58db62fa7660c4699783f27ff0b7a9a49506155cacd9d0da\",\"prev\":\"0x5188cab9813d74d9a9784cf0698fffce36248f03f0a8c1261adfa14102666d27\",\"to\":{\"id\":\"0xf4efd98a374294811b2ebc24e48d3c73c50f8318bf91c8fc379f52b045eba63d\",\"index\":3624},\"v\":1}",
+      "hash": "0x5ecac8909b28d5457f9154dc07b71279b021be99f4425eef40330178dc1a6b20"
+    },
+    {
+      "input": {
+        "network": "private_tangle1",
+        "domain": "MyDomain",
+        "first": 1,
+        "milestoneIds": [
+          "0xad9befc0440382f1323f70aca01fbd034fe464fa3e45aa042cd865687d3da19d"
+        ],
+        "msgCount": 5,
+        "policyHash": "0xacf59a2d743eba7c58db62fa7660c4699783f27ff0b7a9a49506155cacd9d0da",
+        "prevHash": null
+      },
+      "checkpoint": {
+        "v": 1,
+        "kind": "witness.checkpoint",
+        "network": "private_tangle1",
+        "domain": "MyDomain",
+        "from": {
+          "index": 1,
+          "id": "0xad9befc0440382f1323f70aca01fbd034fe464fa3e45aa042cd865687d3da19d"
+        },
+        "to": {
+          "index": 1,
+          "id": "0xad9befc0440382f1323f70aca01fbd034fe464fa3e45aa042cd865687d3da19d"
+        },
+        "msRoot": "0x213683d93722860464221aed11d86a83b95dfaa8d3a77ce118dd000c8cd5111d",
+        "msgCount": 5,
+        "policyHash": "0xacf59a2d743eba7c58db62fa7660c4699783f27ff0b7a9a49506155cacd9d0da",
+        "prev": null
+      },
+      "jcs": "{\"domain\":\"MyDomain\",\"from\":{\"id\":\"0xad9befc0440382f1323f70aca01fbd034fe464fa3e45aa042cd865687d3da19d\",\"index\":1},\"kind\":\"witness.checkpoint\",\"msRoot\":\"0x213683d93722860464221aed11d86a83b95dfaa8d3a77ce118dd000c8cd5111d\",\"msgCount\":5,\"network\":\"private_tangle1\",\"policyHash\":\"0xacf59a2d743eba7c58db62fa7660c4699783f27ff0b7a9a49506155cacd9d0da\",\"prev\":null,\"to\":{\"id\":\"0xad9befc0440382f1323f70aca01fbd034fe464fa3e45aa042cd865687d3da19d\",\"index\":1},\"v\":1}",
+      "hash": "0xb48130877a5db9aa7b6e9994c193dcc8fa6725c228942562d9ea91a7f4f5988d"
+    }
+  ]
+}

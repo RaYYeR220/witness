@@ -34,6 +34,35 @@ export interface AnchorConfig {
   trailId: string | null;
   gasBudget: bigint;
   resolveCacheMs: number;
+  checkpoints: CheckpointConfig;
+}
+
+/** Settings of the checkpoint loop (window selection, sources, state and the mirror). */
+export interface CheckpointConfig {
+  /** Run the anchoring loop (ANCHOR_LOOP=on); needs the keystore and the writer policy. Off by default. */
+  loop: boolean;
+  /** witness-api base URL serving `GET /milestones?from=&to=`. */
+  apiUrl: string;
+  /** witness-relay base URL (`POST /upload?node=`) the `witness.anchor` mirror goes through. */
+  relayUrl: string;
+  /** Node name passed to the relay as `?node=`. */
+  relayNode: string;
+  /** Milestones per checkpoint window. */
+  every: number;
+  /** First milestone index of the first window, when no checkpoint exists yet. */
+  startIndex: number;
+  /** `domain` written into checkpoints; null means the domain DID of the identities file. */
+  domain: string | null;
+  /** Network name of the private Tangle (`network` of checkpoints and bundles). */
+  tangleNetwork: string;
+  /** Writer policy JSON whose hash every checkpoint commits to. */
+  policyPath: string | null;
+  /** Loop state: checkpoints written, the pending append, the mirror chain. */
+  statePath: string;
+  /** Component whose `#sig-1` key signs the mirror envelopes. */
+  identity: string;
+  pollMs: number;
+  httpTimeoutMs: number;
 }
 
 interface NetworkDefaults {
@@ -82,6 +111,12 @@ const MIN_ADMIN_TOKEN_LENGTH = 16;
 
 /** `deploy/identity/` of the repository, from either `anchor/src` or `anchor/dist`. */
 export const DEPLOY_IDENTITY_DIR = fileURLToPath(new URL("../../deploy/identity/", import.meta.url));
+
+export const DEFAULT_API_URL = "http://127.0.0.1:7200";
+export const DEFAULT_RELAY_URL = "http://127.0.0.1:5555";
+export const DEFAULT_EVERY = 60;
+export const MAX_EVERY = 10_000;
+export const DEFAULT_TANGLE_NETWORK = "private_tangle1";
 
 const OBJECT_ID = /^0x[0-9a-f]{64}$/;
 const ALIAS = /^[A-Za-z0-9][A-Za-z0-9_.-]{0,63}$/;
@@ -198,6 +233,8 @@ export function loadConfig(env: Env = process.env, cwd: string = process.cwd()):
   const cacheRaw = opt(env, "ANCHOR_RESOLVE_CACHE_MS");
   const resolveCacheMs = cacheRaw === undefined ? 60_000 : integer(issues, "ANCHOR_RESOLVE_CACHE_MS", cacheRaw, 0, 3_600_000);
 
+  const checkpoints = checkpointConfig(env, cwd, issues, secretsDir, keystorePath !== null);
+
   if (issues.length > 0) throw new ConfigError(issues);
 
   return {
@@ -218,6 +255,59 @@ export function loadConfig(env: Env = process.env, cwd: string = process.cwd()):
     trailId,
     gasBudget,
     resolveCacheMs,
+    checkpoints,
+  };
+}
+
+function flag(issues: string[], key: string, value: string | undefined, fallback: boolean): boolean {
+  if (value === undefined) return fallback;
+  const v = value.toLowerCase();
+  if (["1", "true", "on", "yes"].includes(v)) return true;
+  if (["0", "false", "off", "no"].includes(v)) return false;
+  issues.push(`${key} must be on or off`);
+  return fallback;
+}
+
+function checkpointConfig(env: Env, cwd: string, issues: string[], secretsDir: string, hasKeystore: boolean): CheckpointConfig {
+  const loop = flag(issues, "ANCHOR_LOOP", opt(env, "ANCHOR_LOOP"), false);
+  if (loop && !hasKeystore) issues.push("ANCHOR_LOOP needs ANCHOR_KEYSTORE_PATH and ANCHOR_ADDRESS (it writes to the trail)");
+
+  const everyRaw = opt(env, "ANCHOR_EVERY");
+  const every = everyRaw === undefined ? DEFAULT_EVERY : integer(issues, "ANCHOR_EVERY", everyRaw, 1, MAX_EVERY);
+  const startRaw = opt(env, "ANCHOR_START_INDEX");
+  const startIndex = startRaw === undefined ? 1 : integer(issues, "ANCHOR_START_INDEX", startRaw, 0, 0xffff_ffff);
+  const pollRaw = opt(env, "ANCHOR_POLL_MS");
+  const pollMs = pollRaw === undefined ? 10_000 : integer(issues, "ANCHOR_POLL_MS", pollRaw, 500, 86_400_000);
+  const timeoutRaw = opt(env, "ANCHOR_HTTP_TIMEOUT_MS");
+  const httpTimeoutMs = timeoutRaw === undefined ? 10_000 : integer(issues, "ANCHOR_HTTP_TIMEOUT_MS", timeoutRaw, 100, 120_000);
+
+  const relayNode = opt(env, "ANCHOR_RELAY_NODE") ?? "iota-hornet";
+  if (!/^[A-Za-z0-9][A-Za-z0-9_.-]{0,63}$/.test(relayNode)) issues.push("ANCHOR_RELAY_NODE must be a plain node name");
+  const identity = opt(env, "ANCHOR_IDENTITY") ?? "anchor";
+  if (!/^[a-z][a-z0-9-]{0,31}$/.test(identity)) issues.push("ANCHOR_IDENTITY must be a component name");
+  const domain = opt(env, "ANCHOR_DOMAIN") ?? null;
+  if (domain !== null && domain.length > 256) issues.push("ANCHOR_DOMAIN must be at most 256 characters");
+  const tangleNetwork = opt(env, "ANCHOR_NETWORK_NAME") ?? DEFAULT_TANGLE_NETWORK;
+  if (tangleNetwork.length > 64) issues.push("ANCHOR_NETWORK_NAME must be at most 64 characters");
+
+  const policyRaw = opt(env, "ANCHOR_POLICY_PATH");
+  if (loop && !policyRaw) issues.push("ANCHOR_POLICY_PATH is required when ANCHOR_LOOP is on (checkpoints commit to the writer policy hash)");
+  const stateRaw = opt(env, "ANCHOR_STATE_PATH");
+  return {
+    loop,
+    apiUrl: httpUrl(issues, "ANCHOR_API_URL", opt(env, "ANCHOR_API_URL") ?? DEFAULT_API_URL),
+    relayUrl: httpUrl(issues, "ANCHOR_RELAY_URL", opt(env, "ANCHOR_RELAY_URL") ?? DEFAULT_RELAY_URL),
+    relayNode,
+    every,
+    startIndex,
+    domain,
+    tangleNetwork,
+    policyPath: policyRaw ? path.resolve(cwd, policyRaw) : null,
+    // Next to the secrets, not inside them: the state holds nothing secret and is safe to back up.
+    statePath: stateRaw ? path.resolve(cwd, stateRaw) : path.join(path.dirname(secretsDir), "data", "anchor-state.json"),
+    identity,
+    pollMs,
+    httpTimeoutMs,
   };
 }
 

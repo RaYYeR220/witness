@@ -45,3 +45,23 @@ it. When that transaction cannot be identified (pruned object versions, the page
 lag), the date is the **earliest** time the removal could have happened, never a later one. The
 response then carries `historyComplete: false`. A key replaced under the same id counts as
 revoked at the replacement time. A deactivated document revokes all of its keys.
+
+## Checkpoints
+
+Each checkpoint is one trail record. Its data is the checkpoint's JCS text (the exact bytes its
+BLAKE2b-256 hash covers); its metadata is `{"kind":"witness.checkpoint","seq":N,"checkpointHash":"0x…"}`,
+so the chain alone says which record holds checkpoint `N`. `GET /checkpoints/:seq` reads that
+record from the trail on every request and answers 502 when it cannot; it never serves a stored
+copy as if it came from the chain. On top of the trail checks above, verifiers should check that
+the record's metadata names the seq they asked for and that `addedBy` is the anchor's writer.
+
+The loop state (`ANCHOR_STATE_PATH`) only maps seqs to records and keeps the mirror chain; it holds
+no key material. A signed `add_record` transaction is saved there before it is submitted, so a
+restart settles that very transaction (by digest, or by resubmitting the same bytes) instead of
+anchoring the window again. If the state file is lost, the loop rebuilds the chain from the
+records our writer address added. The `witness.anchor` mirror on the private Tangle is signed with
+the anchor component's `#sig-1` key; it is a convenience copy, and R11 compares the indexed
+milestones with the on-chain record, never with the mirror.
+
+**Honest limit:** anchoring bounds the forgery window to the anchor interval. Milestones newer than
+the last anchored window are not protected yet.
