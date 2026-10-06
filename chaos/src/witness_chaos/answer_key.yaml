@@ -20,6 +20,16 @@
 # because the relay's own policy gate would refuse them; the SHADOW alert such a
 # block also raises is expected and is not scored against the class.
 
+amendments:
+  - date: 2026-10-06
+    before_first_run: true
+    changes:
+      - "Added per-class allowed_side_alerts: alerts that legitimately accompany an attack (SHADOW on every hornet-direct block, the rule that explains the verdict). They are reported, not counted against the class; any other alert counts as unexpected."
+      - "A11 now needs sealed and blind_search assertions next to the verdict; the verdict alone was vacuous."
+      - "A17 additionally requires block_verdict PRODUCER_SIGNED; added a positive control: a relay-routed genuine block raises no SHADOW."
+      - "A07 flips a bit inside the tagged-data payload region only and requires that the block still parses (parses: true)."
+      - "per_trial_ie: classes that write about an IE use a fresh IE id and baseline per trial."
+
 version: 1
 network: testnet
 policy: demo-policy.json
@@ -36,6 +46,8 @@ classes:
     expect: {verdict: FORGED}
     trials: 20
     timeout_s: 15
+    allowed_side_alerts: [SHADOW, FORGED]
+
 
   - id: A02
     name: CROSS_TAG_REPLAY
@@ -47,6 +59,8 @@ classes:
     expect: {verdict: FORGED}
     trials: 20
     timeout_s: 15
+    allowed_side_alerts: [SHADOW, FORGED]
+
 
   - id: A03
     name: SEQ_REPLAY
@@ -58,6 +72,8 @@ classes:
     expect: {verdict: REPLAY}
     trials: 20
     timeout_s: 15
+    allowed_side_alerts: [SHADOW, REPLAY]
+
 
   - id: A04
     name: UNAUTHORIZED_WRITER
@@ -69,6 +85,8 @@ classes:
     expect: {verdict: UNAUTHORIZED_WRITER}
     trials: 20
     timeout_s: 15
+    allowed_side_alerts: [SHADOW, UNAUTHORIZED_WRITER]
+
 
   - id: A05
     name: REVOKED_KEY
@@ -80,6 +98,8 @@ classes:
     expect: {verdict: REVOKED_KEY}
     trials: 20
     timeout_s: 15
+    allowed_side_alerts: [SHADOW, REVOKED_KEY]
+
 
   - id: A06
     name: ORION_DRIFT
@@ -91,17 +111,23 @@ classes:
     expect: {alert: DRIFT, severity: medium}
     trials: 20
     timeout_s: 240
+    allowed_side_alerts: []
+    per_trial_ie: true
+
 
   - id: A07
     name: BLOCK_BYTE_FLIP
     description: >-
-      One byte of the raw block inside a valid proof bundle is flipped.
+      One bit inside the tagged-data payload region of the raw block of a valid proof
+      bundle is flipped. The block still parses; only its hash no longer matches.
     inject: a07_block_byte_flip
     channel: bundle-offline
     expect:
-      ladder: {step: block_hash, ok: false}
+      ladder: {step: block_hash, ok: false, parses: true}
     trials: 20
     timeout_s: 5
+    allowed_side_alerts: []
+
 
   - id: A08
     name: BAD_MERKLE_PATH
@@ -114,6 +140,8 @@ classes:
       ladder: {step: inclusion, ok: false}
     trials: 20
     timeout_s: 5
+    allowed_side_alerts: []
+
 
   - id: A09
     name: SAMPLE_KEY_FORGED_MILESTONE
@@ -127,6 +155,8 @@ classes:
       ladder: {step: anchor, ok: false}
     trials: 20
     timeout_s: 5
+    allowed_side_alerts: []
+
 
   - id: A10
     name: ANCHOR_MISMATCH
@@ -139,18 +169,24 @@ classes:
       ladder: {step: anchor, ok: false}
     trials: 20
     timeout_s: 5
+    allowed_side_alerts: []
+
 
   - id: A11
     name: SEALED_WITHOUT_KEY
     description: >-
       A sealed (encrypted) audit.report is posted through the relay and then read by
-      a party without the recipient key: the signature still verifies, the plaintext
-      stays unreadable, and the blind-index token finds it only with the search key.
+      a party without the recipient key. Detected only if all hold: the verdict is
+      RELAY_ATTESTED, the stored message has `enc` and no plaintext `body` and decrypting
+      without the key fails (`sealed`), and a blind-token lookup with the domain search
+      key finds the block (`blind_search`).
     inject: a11_sealed_without_key
     channel: relay
-    expect: {verdict: RELAY_ATTESTED}
+    expect: {verdict: RELAY_ATTESTED, sealed: true, blind_search: true}
     trials: 20
     timeout_s: 15
+    allowed_side_alerts: []
+
 
   - id: A12
     name: UNKNOWN_IE
@@ -162,6 +198,9 @@ classes:
     expect: {alert: UNKNOWN_IE, severity: low}
     trials: 20
     timeout_s: 30
+    allowed_side_alerts: [SHADOW]
+    per_trial_ie: true
+
 
   - id: A13
     name: SCORE_JUMP
@@ -173,6 +212,9 @@ classes:
     expect: {alert: ANOMALY, severity: medium}
     trials: 20
     timeout_s: 30
+    allowed_side_alerts: [SHADOW]
+    per_trial_ie: true
+
 
   - id: A14
     name: STALE_IE
@@ -184,6 +226,9 @@ classes:
     expect: {alert: STALE, severity: low}
     trials: 20
     timeout_s: 240
+    allowed_side_alerts: [SHADOW]
+    per_trial_ie: true
+
 
   - id: A15
     name: MALFORMED_PAYLOAD
@@ -195,6 +240,8 @@ classes:
     expect: {verdict: MALFORMED}
     trials: 20
     timeout_s: 15
+    allowed_side_alerts: [SHADOW, MALFORMED]
+
 
   - id: A16
     name: CONTENT_MISMATCH
@@ -206,17 +253,24 @@ classes:
     expect: {alert: CONTENT_MISMATCH, severity: critical}
     trials: 20
     timeout_s: 30
+    allowed_side_alerts: []
+    per_trial_ie: true
+
 
   - id: A17
     name: SHADOW
     description: >-
-      A tagged block is posted straight to HORNET, bypassing the Messages API, so no
-      submission record ever names it.
+      A valid, producer-signed tagged block is posted straight to HORNET, bypassing the
+      Messages API, so no submission record ever names it. Its verdict must still be
+      PRODUCER_SIGNED: the block is genuine, only the route is wrong.
     inject: a17_shadow
     channel: hornet-direct
-    expect: {alert: SHADOW, severity: high}
+    expect: {alert: SHADOW, severity: high, block_verdict: PRODUCER_SIGNED}
     trials: 20
     timeout_s: 90
+    allowed_side_alerts: []
+    per_trial_ie: true
+
 
   - id: A18
     name: ORPHANED
@@ -227,6 +281,9 @@ classes:
     expect: {alert: ORPHANED, severity: high}
     trials: 20
     timeout_s: 120
+    allowed_side_alerts: []
+    per_trial_ie: true
+
 
   - id: A19
     name: DB_TAMPER
@@ -238,6 +295,8 @@ classes:
     expect: {alert: DB_TAMPER, severity: critical}
     trials: 20
     timeout_s: 120
+    allowed_side_alerts: []
+
 
   - id: A20
     name: CHAIN_GAP
@@ -249,6 +308,21 @@ classes:
     expect: {alert: CHAIN_GAP, severity: medium}
     trials: 20
     timeout_s: 30
+    allowed_side_alerts: []
+    per_trial_ie: true
+
+
+# Positive control for A17: a relay-routed genuine block must raise no SHADOW.
+controls:
+  - id: C01
+    name: RELAY_ROUTED_NO_SHADOW
+    description: >-
+      A genuine, producer-signed trust.score goes through the Messages API. Its block
+      must raise no SHADOW alert (and no alert at all) within the A17 timeout.
+    channel: relay
+    expect: {no_alert: SHADOW, alerts: 0}
+    trials: 20
+    timeout_s: 90
 
 # Genuine traffic: nothing here may raise an alert or a verdict outside `verdicts`.
 traps:
