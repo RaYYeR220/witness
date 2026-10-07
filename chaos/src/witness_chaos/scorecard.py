@@ -140,7 +140,11 @@ def trap_false_positives(trap: dict, allowed_verdicts: Iterable[str]) -> int:
 
 
 def build_scorecard(results: list[dict], trap: dict | None, key: dict,
-                    control_results: list[dict] | None = None) -> dict:
+                    control_results: list[dict] | None = None,
+                    not_run: list[dict] | None = None) -> dict:
+    """`not_run`: [{"class", "trials", "reason"}] for planned trials that were never
+    injected (missing setup, injection errors). They are not in the denominator, but the
+    headline and the markdown say so."""
     classes = key["classes"]
     rows = per_class(results, classes)
     detected = sum(r["detected"] for r in rows)
@@ -159,6 +163,7 @@ def build_scorecard(results: list[dict], trap: dict | None, key: dict,
         "unexpected_alerts": sum(sum(r["unexpected_alerts"].values()) for r in rows),
         "traps": None,
         "controls": None,
+        "not_run": list(not_run or []),
     }
     if control_results is not None:
         by_id = {c["id"]: c for c in key.get("controls", [])}
@@ -187,6 +192,11 @@ def headline(card: dict) -> str:
     if card.get("traps"):
         t = card["traps"]
         text += f", {t['false_positives']}/{t['messages']} false positives"
+    skipped = card.get("not_run") or []
+    if skipped:
+        n = sum(s.get("trials", 0) for s in skipped)
+        classes = sorted({s["class"] for s in skipped})
+        text += f" ({n} planned trials not run: {', '.join(classes)})"
     return text
 
 
@@ -218,6 +228,11 @@ def render_markdown(card: dict) -> str:
             side = ", ".join(f"{k} x{v}" for k, v in sorted(r["side_alerts"].items())) or "-"
             bad = ", ".join(f"{k} x{v}" for k, v in sorted(r["unexpected_alerts"].items())) or "-"
             lines.append(f"- {r['id']}: side {side}; unexpected {bad}")
+    skipped = card.get("not_run") or []
+    if skipped:
+        lines += ["", "Not run (not counted above):", ""]
+        for s in skipped:
+            lines.append(f"- {s['class']}: {s.get('trials', 0)} trial(s), {s['reason']}")
     c = card.get("controls")
     if c:
         lines += ["", (f"Positive control: {c['passed']}/{c['trials']} relay-routed genuine "

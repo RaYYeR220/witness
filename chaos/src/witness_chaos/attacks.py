@@ -1,9 +1,10 @@
-"""The twenty attacks of the answer key, one function each.
+"""The twenty attacks of the answer key, one function each, and the positive control.
 
 Every attack is `async def aNN_*(ctx) -> InjectionRecord`. The `build_*` helpers hold
 the exact bytes, requests and SQL an attack sends and are pure, so tests can check
 them without any service. Offline attacks (A07-A10) run completely here; the others
 refuse to send anything unless `ctx.live is True`, which only the runner sets.
+`CONTROLS` maps the answer key's controls (C01) to their injectors.
 """
 
 from __future__ import annotations
@@ -12,10 +13,11 @@ import json
 import random
 import time
 import uuid
-from collections.abc import Callable
+from collections.abc import Awaitable, Callable
 from dataclasses import dataclass, field
 from importlib import resources
 from typing import Any
+from urllib.parse import unquote, urlsplit
 
 import httpx
 import yaml
@@ -57,6 +59,11 @@ class AttackContext:
     relay_token: str | None = None
     ingest_url: str = "http://127.0.0.1:8000/ingest"
     ingest_token: str | None = None
+    # Forged submission records (A16, A18) travel the way the relay forwards real ones:
+    # "http" (POST /ingest), "mqtt" (aerios/iota/submissions/{tag}) or "both".
+    ingest_via: str = "http"
+    mqtt_url: str | None = None
+    mqtt_publish: Callable[[str, bytes], Awaitable[None]] | None = None
     orion_url: str = "http://127.0.0.1:1026"
     db_dsn: str | None = None
     # Identities of the run.
@@ -83,13 +90,22 @@ class AttackContext:
     rng: random.Random = field(default_factory=random.Random)
     clock_ms: Callable[[], int] = field(default=lambda: int(time.time() * 1000))
     live: bool = False
+    # Called at the end of every begin_trial (the runner sets the trial IEs' trustScore in
+    # Orion there, as the Trust Manager would). Synchronous: it runs inside the attack.
+    on_trial: Callable[[AttackContext], None] | None = None
+    # Two-block attacks (A03, A13, A20) are about order: the second block must come after
+    # the first. When set, they await this with the first block's id before sending the
+    # second; the runner waits there until the explorer has indexed it, since two blocks
+    # in one milestone are otherwise processed in white-flag order, not sending order.
+    wait_indexed: Callable[[str], Awaitable[None]] | None = None
+    # Block ids A19 rewrote in this run (the runner restores them at the end).
+    tampered: list[bytes] = field(default_factory=list)
     _seq: dict[str, int] = field(default_factory=dict, repr=False)
 
     def next_seq(self, iss: str) -> int:
-        """Strictly increasing per issuer, starting above any seq of an earlier run."""
-        if iss not in self._seq:
-            self._seq[iss] = self.clock_ms()
-        self._seq[iss] += 1
+        """Strictly increasing per issuer and never behind the clock (epoch ms), so it stays
+        above any seq an earlier run or a signer that jumped to the time has used."""
+        self._seq[iss] = max(self.clock_ms(), self._seq.get(iss, 0) + 1)
         return self._seq[iss]
 
     def begin_trial(self) -> None:
@@ -98,6 +114,8 @@ class AttackContext:
         self.stale_ie_id = (self.stale_pool.pop(0) if self.stale_pool
                             else random_ie_id(self.rng))
         self.baseline_score = round(self.rng.uniform(0.4, 0.6), 3)
+        if self.on_trial is not None:
+            self.on_trial(self)
 
     def require_live(self) -> None:
         if self.live is not True:
@@ -126,7 +144,8 @@ def answer_key() -> dict:
 
 
 def expected_for(class_id: str) -> dict:
-    for c in answer_key()["classes"]:
+    key = answer_key()
+    for c in [*key["classes"], *key.get("controls", [])]:
         if c["id"] == class_id:
             return dict(c["expect"])
     raise KeyError(class_id)
@@ -299,9 +318,11 @@ def orion_patch(ctx: AttackContext, ie_id: str, ledger_score: float) -> tuple[st
     return url, {"type": "Property", "value": wrong}
 
 
+# The victim is a confirmed message the run's own producer signed (never another writer's
+# data), and never one an earlier trial already rewrote: flipping it again would restore it.
 VICTIM_SQL = (
-    "SELECT block_id FROM messages WHERE tag = %s AND data IS NOT NULL "
-    "AND confirmed_at_ms IS NOT NULL ORDER BY random() LIMIT 1"
+    "SELECT block_id FROM messages WHERE tag = %s AND iss = %s AND data IS NOT NULL "
+    "AND confirmed_at_ms IS NOT NULL AND NOT (block_id = ANY(%s)) ORDER BY random() LIMIT 1"
 )
 TAMPER_SQL = (
     "UPDATE messages SET data = set_byte(data, 0, get_byte(data, 0) # 1) WHERE block_id = %s"
@@ -343,16 +364,81 @@ async def _post_relay(ctx: AttackContext, tag: str, message: Any) -> dict:
             await client.aclose()
 
 
-async def _post_ingest(ctx: AttackContext, record: dict) -> None:
+SUBMISSIONS_TOPIC = "aerios/iota/submissions/"
+INGEST_ROUTES = ("http", "mqtt", "both")
+
+
+def submission_topic(tag: str) -> str:
+    """The relay's MQTT topic for a submission record of `tag` (wildcards replaced)."""
+    return SUBMISSIONS_TOPIC + tag.replace("+", "_").replace("#", "_").replace("\x00", "_")
+
+
+def record_payload(record: dict) -> bytes:
+    """A submission record as the relay publishes it: compact UTF-8 JSON."""
+    return json.dumps(record, separators=(",", ":"), ensure_ascii=False).encode("utf-8")
+
+
+async def mqtt_publish_once(url: str, topic: str, payload: bytes) -> None:
+    """Publish one QoS 1 message (connect, publish, disconnect)."""
+    import aiomqtt
+
+    parts = urlsplit(url)
+    if parts.scheme not in ("mqtt", "tcp"):
+        raise ValueError(f"unsupported MQTT URL scheme: {parts.scheme!r}")
+    async with aiomqtt.Client(
+        hostname=parts.hostname or "127.0.0.1", port=parts.port or 1883,
+        username=unquote(parts.username) if parts.username else None,
+        password=unquote(parts.password) if parts.password else None,
+        identifier=f"witness-chaos-{uuid.uuid4().hex[:8]}",
+    ) as client:
+        await client.publish(topic, payload=payload, qos=1)
+
+
+async def _post_ingest(ctx: AttackContext, record: dict) -> list[str]:
+    """Deliver a forged submission record the way the relay forwards real ones; returns
+    the routes used. With "both" the explorer receives it twice and dedupes by subId."""
     ctx.require_live()
-    headers = {"Authorization": f"Bearer {ctx.ingest_token}"} if ctx.ingest_token else {}
-    client, own = await _client(ctx)
-    try:
-        resp = await client.post(ctx.ingest_url, json=record, headers=headers)
-        resp.raise_for_status()
-    finally:
-        if own:
-            await client.aclose()
+    if ctx.ingest_via not in INGEST_ROUTES:
+        raise ValueError(f"ingest_via must be one of {INGEST_ROUTES}")
+    used: list[str] = []
+    failures: list[Exception] = []
+
+    async def mqtt() -> None:
+        payload = record_payload(record)
+        topic = submission_topic(record["tag"])
+        if ctx.mqtt_publish is not None:
+            await ctx.mqtt_publish(topic, payload)
+        else:
+            await mqtt_publish_once(ctx.need("mqtt_url"), topic, payload)
+
+    async def http() -> None:
+        headers = {"Authorization": f"Bearer {ctx.ingest_token}"} if ctx.ingest_token else {}
+        client, own = await _client(ctx)
+        try:
+            resp = await client.post(ctx.ingest_url, json=record, headers=headers)
+            resp.raise_for_status()
+        finally:
+            if own:
+                await client.aclose()
+
+    for name, send in (("mqtt", mqtt), ("http", http)):
+        if ctx.ingest_via not in (name, "both"):
+            continue
+        try:
+            await send()
+        except Exception as exc:  # noqa: BLE001 - one route failing must not hide the other
+            failures.append(exc)
+            used.append(f"{name}-failed: {type(exc).__name__}: {exc}"[:200])
+        else:
+            used.append(name)
+    if len(failures) == len(used):
+        raise failures[0]
+    return used
+
+
+async def _after(ctx: AttackContext, block_id: str | None) -> None:
+    if ctx.wait_indexed is not None and block_id:
+        await ctx.wait_indexed(block_id)
 
 
 async def _direct(ctx: AttackContext, cid: str, tag: str, data: bytes,
@@ -380,6 +466,7 @@ async def a03_seq_replay(ctx: AttackContext) -> InjectionRecord:
     ctx.require_live()
     (t1, d1), (t2, d2) = build_a03(ctx)
     first = await _post_hornet(ctx, t1, d1)
+    await _after(ctx, first)
     rec = await _direct(ctx, "A03", t2, d2, detail={"originalBlockId": first})
     return rec
 
@@ -397,9 +484,12 @@ async def a05_revoked_key(ctx: AttackContext) -> InjectionRecord:
 async def a06_orion_drift(ctx: AttackContext) -> InjectionRecord:
     ctx.require_live()
     ctx.begin_trial()
-    seed = env_bytes(seal_as(ctx.need("producer"), ctx,
-                             score_body(ctx.ie_id, ctx.baseline_score)))
-    await _post_hornet(ctx, TRUST_TAG, seed)  # the ledger score Orion will disagree with
+    # The ledger score Orion will disagree with. It is genuine and goes the genuine way,
+    # through the Messages API: posted around it, it would itself raise SHADOW, and the
+    # attack here is the Orion write alone.
+    seed = seal_as(ctx.need("producer"), ctx, score_body(ctx.ie_id, ctx.baseline_score))
+    reply = await _post_relay(ctx, TRUST_TAG, seed)
+    seed_bid = (reply.get("witness") or {}).get("blockId")
     url, body = orion_patch(ctx, ctx.ie_id, ctx.baseline_score)
     at = ctx.clock_ms()
     client, own = await _client(ctx)
@@ -409,7 +499,9 @@ async def a06_orion_drift(ctx: AttackContext) -> InjectionRecord:
     finally:
         if own:
             await client.aclose()
-    return _record(ctx, "A06", None, ctx.ie_id, {"orionValue": body["value"]}, at)
+    return _record(ctx, "A06", None, ctx.ie_id,
+                   {"orionValue": body["value"], "ledgerScore": ctx.baseline_score,
+                    "seedBlockId": seed_bid}, at)
 
 
 def build_a11(ctx: AttackContext) -> dict:
@@ -464,8 +556,10 @@ async def a13_score_jump(ctx: AttackContext) -> InjectionRecord:
     ctx.require_live()
     ctx.begin_trial()
     first, second = build_a13(ctx)
-    await _post_hornet(ctx, *first)
-    return await _direct(ctx, "A13", *second, detail={"from": 0.9, "to": 0.1})
+    first_bid = await _post_hornet(ctx, *first)
+    await _after(ctx, first_bid)
+    return await _direct(ctx, "A13", *second,
+                         detail={"from": 0.9, "to": 0.1, "firstBlockId": first_bid})
 
 
 async def a14_stale_ie(ctx: AttackContext) -> InjectionRecord:
@@ -486,8 +580,8 @@ async def a16_content_mismatch(ctx: AttackContext) -> InjectionRecord:
     tag, data = build_a17(ctx)
     at = ctx.clock_ms()
     bid = await _post_hornet(ctx, tag, data)
-    await _post_ingest(ctx, build_a16_record(bid, tag, data, at))
-    return _record(ctx, "A16", bid, ctx.ie_id, {"tag": tag}, at)
+    routes = await _post_ingest(ctx, build_a16_record(bid, tag, data, at))
+    return _record(ctx, "A16", bid, ctx.ie_id, {"tag": tag, "ingest": routes}, at)
 
 
 async def a17_shadow(ctx: AttackContext) -> InjectionRecord:
@@ -502,8 +596,9 @@ async def a18_orphaned(ctx: AttackContext) -> InjectionRecord:
     ctx.begin_trial()
     record = build_a18_record(ctx)
     at = ctx.clock_ms()
-    await _post_ingest(ctx, record)
-    return _record(ctx, "A18", record["blockId"], ctx.ie_id, {"subId": record["subId"]}, at)
+    routes = await _post_ingest(ctx, record)
+    return _record(ctx, "A18", record["blockId"], ctx.ie_id,
+                   {"subId": record["subId"], "ingest": routes}, at)
 
 
 async def a19_db_tamper(ctx: AttackContext) -> InjectionRecord:
@@ -511,25 +606,56 @@ async def a19_db_tamper(ctx: AttackContext) -> InjectionRecord:
     import psycopg
 
     dsn = ctx.need("db_dsn")
+    iss = ctx.need("producer").iss
     async with await psycopg.AsyncConnection.connect(dsn, autocommit=True) as conn:
-        cur = await conn.execute(VICTIM_SQL, (TRUST_TAG,))
+        cur = await conn.execute(VICTIM_SQL, (TRUST_TAG, iss, list(ctx.tampered)))
         row = await cur.fetchone()
         if row is None:
-            raise RuntimeError("no confirmed trust.score row to tamper with")
+            raise RuntimeError(f"no confirmed trust.score row signed by {iss} to tamper with")
         at = ctx.clock_ms()
         await conn.execute(TAMPER_SQL, (row[0],))
-    return _record(ctx, "A19", to_hex(bytes(row[0])), None, {"sql": TAMPER_SQL}, at)
+    ctx.tampered.append(bytes(row[0]))
+    return _record(ctx, "A19", to_hex(bytes(row[0])), None,
+                   {"sql": TAMPER_SQL, "victimIss": iss}, at)
 
 
 async def a20_chain_gap(ctx: AttackContext) -> InjectionRecord:
     ctx.require_live()
     ctx.begin_trial()
     m1, m3, missing = build_a20(ctx)
-    await _post_relay(ctx, TRUST_TAG, m1)
+    first = await _post_relay(ctx, TRUST_TAG, m1)
+    await _after(ctx, (first.get("witness") or {}).get("blockId"))
     at = ctx.clock_ms()
     reply = await _post_relay(ctx, TRUST_TAG, m3)
     bid = (reply.get("witness") or {}).get("blockId")
     return _record(ctx, "A20", bid, ctx.ie_id, {"missingPrev": missing}, at)
+
+
+# ------------------------------------------------------------------ positive control
+
+
+def build_c01(ctx: AttackContext) -> dict:
+    """A genuine producer-signed score, exactly what the Trust Manager uploads."""
+    return seal_as(ctx.need("producer"), ctx, score_body(ctx.ie_id, ctx.baseline_score))
+
+
+async def c01_relay_routed(ctx: AttackContext) -> InjectionRecord:
+    """C01: the A17 block's twin sent the right way, through the Messages API. Nothing may
+    alert on it (no SHADOW in particular) within the A17 timeout."""
+    ctx.require_live()
+    ctx.begin_trial()
+    env = build_c01(ctx)
+    at = ctx.clock_ms()
+    reply = await _post_relay(ctx, TRUST_TAG, env)
+    bid = (reply.get("witness") or {}).get("blockId")
+    return _record(ctx, "C01", bid, ctx.ie_id,
+                   {"tag": TRUST_TAG, "relayVerdict": (reply.get("witness") or {}).get("verdict")},
+                   at)
+
+
+CONTROLS: dict[str, Callable[[AttackContext], Awaitable[InjectionRecord]]] = {
+    "C01": c01_relay_routed,
+}
 
 
 # ------------------------------------------------------------------ offline attacks

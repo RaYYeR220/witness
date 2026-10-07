@@ -149,7 +149,8 @@ def test_orion_patch_moves_far_from_ledger(ctx):
 
 
 def test_db_sql_is_parameterised():
-    assert A.VICTIM_SQL.count("%s") == 1
+    assert A.VICTIM_SQL.count("%s") == 3
+    assert "iss = %s" in A.VICTIM_SQL  # only rows the run's own producer signed
     assert A.TAMPER_SQL.count("%s") == 1
     assert A.TAMPER_SQL.startswith("UPDATE messages SET data =")
 

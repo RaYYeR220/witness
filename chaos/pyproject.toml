@@ -12,6 +12,9 @@ dependencies = [
   "psycopg[binary,pool]>=3.2",
 ]
 
+[project.scripts]
+witness-chaos = "witness_chaos.runner:main"
+
 [build-system]
 requires = ["hatchling"]
 build-backend = "hatchling.build"
