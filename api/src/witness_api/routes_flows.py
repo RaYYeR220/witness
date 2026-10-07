@@ -7,6 +7,7 @@ from collections import Counter
 from typing import Annotated
 
 from fastapi import APIRouter, Path, Query
+from witness_core import verdicts
 
 from . import models as m
 from . import views
@@ -18,18 +19,30 @@ KEY_PATH = Annotated[str, Path(min_length=1, max_length=256, pattern=r"^[^/]+$",
                                examples=["did:iota:testnet:0x5e1f…"])]
 
 
+# Verdicts that prove the issuer wrote the message; anything else only claims it.
+PROVEN = frozenset({verdicts.PRODUCER_SIGNED, verdicts.RELAY_ATTESTED})
+
+
+def claims_issuer(iss: str | None, verdict: str | None) -> bool:
+    return iss is not None and verdict not in PROVEN
+
+
 def chain_view(items: list[m.FlowItem]) -> m.ChainView:
-    """Each message's `prev` against the issuer's previous message (flow in `seq` order)."""
+    """Each proven message's `prev` against the issuer's previous proven message (flow in
+    `seq` order). Anyone can name an issuer: a forged or unsigned message that does is
+    listed in the flow but never links, gaps or forks its chain (the same messages the
+    indexer's R15/R16 look at)."""
+    proven = [i for i in items if not i.claims_issuer]
     links, gaps = 0, []
     before: str | None = None
-    for item in items:
+    for item in proven:
         if item.prev is not None:
             if item.prev == before:
                 links += 1
             else:
                 gaps.append(item.block_id)
         before = item.block_id
-    claimed = Counter(i.prev for i in items if i.prev is not None)
+    claimed = Counter(i.prev for i in proven if i.prev is not None)
     forks = sorted(p for p, n in claimed.items() if n > 1)
     return m.ChainView(links=links, gaps=gaps, forks=forks)
 
@@ -52,8 +65,10 @@ async def flows(
 
 @router.get("/flows/{by}/{key}", response_model=m.Flow, summary="One flow",
             description="The messages of one flow in order (issuer flows by `seq`, others by "
-                        "time). Issuer flows also report their hash chain: messages linked by "
-                        "`prev`, gaps and forks.")
+                        "time). Issuer flows also report their hash chain over the messages "
+                        "that prove the issuer (PRODUCER_SIGNED, RELAY_ATTESTED): messages "
+                        "linked by `prev`, gaps and forks. Others only claim the issuer "
+                        "(`claimsIssuer`) and stay out of the chain.")
 async def flow(
     by: Annotated[m.FlowBy, Path()], key: KEY_PATH, svc: Svc,
     limit: Annotated[int, Query(ge=1, le=10_000, description="Newest messages returned")] = 1000,
@@ -66,6 +81,7 @@ async def flow(
             block_id=bid, prev=views.hx(r["prev"]), seq=r["seq"], tag=r["tag"], kind=r["kind"],
             verdict=r["verdict"], status=r["status"], iss=r["iss"], ie_id=r["ie_id"],
             corr=r["corr"], ms_index=r["ms_index"], wf_index=r["wf_index"], at_ms=at,
-            at=views.iso(at), links=svc.link.message(bid)))
+            at=views.iso(at), links=svc.link.message(bid),
+            claims_issuer=claims_issuer(r["iss"], r["verdict"])))
     return m.Flow(by=by, key=key, items=items[-limit:], total=len(items),
                   chain=chain_view(items) if by == "issuer" else None)

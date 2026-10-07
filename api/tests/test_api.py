@@ -348,6 +348,8 @@ async def test_flows_and_incidents(client, store, vectors):
     assert flow["chain"]["forks"] == []
     assert flow["total"] == 3
 
+    assert [i["claimsIssuer"] for i in flow["items"]] == [False, False, False]
+
     newest = (await client.get(f"/flows/issuer/{ISS}", params={"limit": 1})).json()
     assert ids(newest["items"]) == ["0x" + e3.hex()] and newest["total"] == 3
     assert newest["chain"]["gaps"] == ["0x" + e3.hex()]  # judged on the whole flow
@@ -358,6 +360,17 @@ async def test_flows_and_incidents(client, store, vectors):
     assert {f["key"] for f in by_ie} >= {IE}
     assert (await client.get("/flows/bogus/x")).status_code == 422
     assert (await client.get("/flows", params={"by": "bogus"})).status_code == 422
+
+    # A forgery naming the issuer and continuing from e1 is listed, but neither forks the
+    # chain nor breaks it: only proven messages form it (as R15/R16 count them).
+    forged = await put_signed(store, sealed_score({"id": IE, "score": 0.1}, seq=2,
+                                                  prev="0x" + e1.hex()),
+                              ms_index=393, ts=MS371_TS + 101, verdict="FORGED")
+    flow = (await client.get(f"/flows/issuer/{ISS}")).json()
+    assert flow["total"] == 4
+    claims = {i["blockId"]: i["claimsIssuer"] for i in flow["items"]}
+    assert claims["0x" + forged.hex()] is True
+    assert flow["chain"] == {"links": 1, "gaps": ["0x" + e3.hex()], "forks": []}
 
     iid = await store.put_incident(opened_at_ms=MS371_TS * 1000, severity="high",
                                    title="Trust drop on fa163e5e25ef", ie_id=IE)

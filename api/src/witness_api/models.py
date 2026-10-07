@@ -301,12 +301,19 @@ class FlowItem(ApiModel):
     at_ms: int | None = None
     at: str | None = None
     links: dict[str, str]
+    claims_issuer: bool = Field(
+        description="The message names `iss` but nothing proves that issuer wrote it (verdict "
+                    "other than PRODUCER_SIGNED or RELAY_ATTESTED, e.g. FORGED): it is listed "
+                    "in the issuer's flow but kept out of its hash chain")
 
 
 class ChainView(ApiModel):
-    links: int = Field(description="Messages whose `prev` is the issuer's previous message")
-    gaps: list[str] = Field(description="Messages whose `prev` is not the previous message")
-    forks: list[str] = Field(description="`prev` values claimed by more than one message")
+    links: int = Field(description="Proven messages whose `prev` is the issuer's previous "
+                                   "proven message")
+    gaps: list[str] = Field(description="Proven messages whose `prev` is not the previous "
+                                        "proven message")
+    forks: list[str] = Field(description="`prev` values claimed by more than one proven "
+                                         "message")
 
 
 class Flow(ApiModel):
@@ -314,8 +321,9 @@ class Flow(ApiModel):
     key: str
     items: list[FlowItem] = Field(description="Newest `limit` messages, in flow order")
     total: int = Field(description="Messages in the whole flow")
-    chain: ChainView | None = Field(None, description="Hash-chain view over the whole flow "
-                                    "(issuer flows only)")
+    chain: ChainView | None = Field(None, description="Hash-chain view over the whole flow's "
+                                    "proven messages (PRODUCER_SIGNED, RELAY_ATTESTED; issuer "
+                                    "flows only)")
 
 
 class Incident(ApiModel):
