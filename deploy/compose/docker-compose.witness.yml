@@ -45,7 +45,8 @@ services:
       - ${WITNESS_SECRETS_DIR:-../../secrets}/compose/db-init.env
     volumes:
       - ./db-init.sql:/etc/witness/db-init.sql:ro
-      - ../../indexer/src/witness_indexer/migrations/0005_api_role.sql:/etc/witness/api-grants.sql:ro
+      # db-init.sql includes it by this relative path (\ir).
+      - ../../indexer/src/witness_indexer/migrations/0005_api_role.sql:/indexer/src/witness_indexer/migrations/0005_api_role.sql:ro
     entrypoint:
       - /bin/sh
       - -c

@@ -452,10 +452,16 @@ that exist before the release:
 
 ```bash
 # Database URLs: postgres/*.dsn from setup-secrets.sh, edited for the cluster's database host.
-# Create the relay's role there first (the password goes through the environment):
-#   RELAY_DB_PASSWORD="$(cat secrets/postgres/relay.password)" psql -f deploy/compose/db-init.sql
+# The chart-wide one (the owner's) is the indexer's; the relay and the API have logins of
+# their own. Create those roles there first (passwords go through the environment; run from
+# the repository root, db-init.sql includes the API's grants by relative path):
+#   RELAY_DB_PASSWORD="$(cat secrets/postgres/relay.password)" \
+#   API_DB_PASSWORD="$(cat secrets/postgres/api.password)" psql -f deploy/compose/db-init.sql
 kubectl create secret generic witness-db --from-file=dsn=secrets/postgres/explorer.dsn
 kubectl create secret generic witness-relay-db --from-file=dsn=secrets/postgres/relay.dsn
+# The API's read-mostly login; install with --set api.database.existingSecret=witness-api-db
+# --set api.database.key=dsn --set api.migrate=false (left out, it uses the owner's).
+kubectl create secret generic witness-api-db --from-file=dsn=secrets/postgres/api.dsn
 kubectl create secret generic witness-relay-env --from-env-file=secrets/compose/relay.env
 kubectl create secret generic witness-relay-keys --from-file=secrets/relay/sig-1.pem \
   --from-file=secrets/relay/recipients.json --from-file=secrets/relay/search.key

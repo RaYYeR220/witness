@@ -58,6 +58,7 @@ SELECT format('ALTER ROLE witness_api WITH LOGIN NOSUPERUSER NOCREATEDB NOCREATE
 -- by its migration 0005; on a database migrated before that, the same grants run here.
 CREATE SCHEMA IF NOT EXISTS witness;
 SET search_path TO witness;
-\i /etc/witness/api-grants.sql
+-- Relative to this file, in the repository and in the witness-db-init container alike.
+\ir ../../indexer/src/witness_indexer/migrations/0005_api_role.sql
 RESET search_path;
 \endif

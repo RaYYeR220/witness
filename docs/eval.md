@@ -162,7 +162,9 @@ pnpm --filter @witness/anchor bootstrap:identities --chaos-revoked
 # /identity shows the producer on trust.score.
 WITNESS_POLICY_FILE="$PWD/secrets/chaos/eval-policy.json" \
   docker compose -f deploy/compose/docker-compose.witness.yml up -d
-WITNESS_CHAOS_DB=postgresql://postgres:witness@127.0.0.1:5432/postgres \
+# A19 rewrites rows as the database owner: the DSN setup-secrets.sh wrote (random password
+# on a fresh setup), pointed at the port the base stack publishes on loopback.
+WITNESS_CHAOS_DB="$(sed 's/@witness-postgres:/@127.0.0.1:/' secrets/postgres/explorer.dsn)" \
 uv run witness-chaos run \
   --api http://127.0.0.1:7200 --relay http://127.0.0.1:5557 --relay-node iota-hornet \
   --hornet http://127.0.0.1:14265 --orion http://127.0.0.1:1026 --anchor http://127.0.0.1:7300 \
