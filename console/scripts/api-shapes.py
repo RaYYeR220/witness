@@ -30,6 +30,7 @@ MODELS = [
     m.AnchorList, m.AnchorOut, m.Identity, m.AnchorIdentities, m.PolicySummary, m.TagRuleOut,
     m.Posture, m.Finding, m.Stats, m.ValidatorStatus, m.NodeRouteStatus,
     m.ReportList, m.ReportSummary, m.ReportResult,
+    m.FlowList, m.FlowSummary, m.Flow, m.FlowItem, m.ChainView,
 ]
 
 

@@ -26,6 +26,10 @@ import {
   ReplayAdapter,
   type Alert,
   type AnchorCheckpoint,
+  type ChainView,
+  type Flow,
+  type FlowItem,
+  type FlowSummary,
   type Finding,
   type IeSummary,
   type Incident,
@@ -137,6 +141,25 @@ const READS = {
     links: 1,
   } satisfies Record<keyof ReportSummary, 1>,
   ReportResult: { report: 1 } satisfies Record<Exclude<keyof ReportResult, keyof ReportSummary>, 1>,
+  FlowSummary: { key: 1, count: 1, firstAtMs: 1, lastAtMs: 1 } satisfies Record<keyof FlowSummary, 1>,
+  Flow: { by: 1, key: 1, items: 1, total: 1, chain: 1 } satisfies Record<keyof Flow, 1>,
+  FlowItem: {
+    blockId: 1,
+    prev: 1,
+    seq: 1,
+    tag: 1,
+    kind: 1,
+    verdict: 1,
+    status: 1,
+    iss: 1,
+    ieId: 1,
+    corr: 1,
+    msIndex: 1,
+    wfIndex: 1,
+    atMs: 1,
+    links: 1,
+  } satisfies Record<keyof FlowItem, 1>,
+  ChainView: { links: 1, gaps: 1, forks: 1 } satisfies Record<keyof ChainView, 1>,
 };
 
 describe("API contract", () => {
@@ -181,6 +204,8 @@ describe("API contract", () => {
       ...[L.reports, E.reports].flatMap((x) => [...misfit("ReportList", x), ...each("ReportSummary", x.items)]),
       ...misfit("ReportResult", E.report),
       ...misfit("Stats", L.stats),
+      ...[L.flowsIssuer, L.flowsIe, L.flowsCorr].flatMap((x) => [...misfit("FlowList", x), ...each("FlowSummary", x.items)]),
+      ...[L.flowIssuer, L.flowIe].flatMap((x) => [...misfit("Flow", x), ...each("FlowItem", x.items), ...(x.chain ? misfit("ChainView", x.chain) : [])]),
     ];
     expect(problems).toEqual([]);
   });

@@ -227,6 +227,47 @@
    "anchoredAt": false,
    "links": false,
    "report": true
+  },
+  "FlowList": {
+   "by": true,
+   "items": true
+  },
+  "FlowSummary": {
+   "key": true,
+   "count": true,
+   "firstAtMs": false,
+   "firstAt": false,
+   "lastAtMs": false,
+   "lastAt": false
+  },
+  "Flow": {
+   "by": true,
+   "key": true,
+   "items": true,
+   "total": true,
+   "chain": false
+  },
+  "FlowItem": {
+   "blockId": true,
+   "prev": false,
+   "seq": false,
+   "tag": false,
+   "kind": false,
+   "verdict": false,
+   "status": false,
+   "iss": false,
+   "ieId": false,
+   "corr": false,
+   "msIndex": false,
+   "wfIndex": false,
+   "atMs": false,
+   "at": false,
+   "links": true
+  },
+  "ChainView": {
+   "links": true,
+   "gaps": true,
+   "forks": true
   }
  }
 }

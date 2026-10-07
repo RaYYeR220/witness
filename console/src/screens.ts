@@ -30,6 +30,13 @@ export const SCREENS: Screen[] = [
     blurb: "The trust score history of one aeriOS entity as written to the ledger, next to what Orion reports now.",
   },
   {
+    path: "/flows",
+    name: "flows",
+    title: "Flows",
+    tab: true,
+    blurb: "IoT flow traceability: a producer's messages as a hash chain, or every message sharing a correlation id, with gaps and forks flagged.",
+  },
+  {
     path: "/integrity",
     name: "integrity",
     title: "Integrity",

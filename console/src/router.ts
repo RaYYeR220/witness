@@ -9,6 +9,7 @@ const VIEWS: Record<string, RouteRecordRaw["component"]> = {
   search: () => import("@/views/SearchView.vue"),
   verify: () => import("@/views/VerifyView.vue"),
   lineage: () => import("@/views/LineageView.vue"),
+  flows: () => import("@/views/FlowsView.vue"),
   integrity: () => import("@/views/IntegrityView.vue"),
   identity: () => import("@/views/IdentityView.vue"),
   anchors: () => import("@/views/AnchorsView.vue"),
@@ -33,7 +34,7 @@ export const router = createRouter({
   scrollBehavior(to, from, saved) {
     if (saved) return saved;
     if (to.hash) return { el: to.hash };
-    if (to.name === from.name && (to.name === "search" || to.name === "integrity")) return false; // paging, filtering and picking keep the place
+    if (to.name === from.name && (to.name === "search" || to.name === "integrity" || to.name === "flows")) return false; // paging, filtering and picking keep the place
     return { top: 0 };
   },
 });

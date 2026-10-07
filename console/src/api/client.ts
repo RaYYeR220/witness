@@ -428,6 +428,56 @@ export interface ReportDoc {
   text: string;
 }
 
+// ---------------------------------------------------------------- flows
+
+/** How messages are grouped into flows: by producer (issuer, with its prev hash chain), IE, service component or correlation id. */
+export const FLOW_BYS = ["issuer", "corr", "ie", "service"] as const;
+export type FlowBy = (typeof FLOW_BYS)[number];
+export const isFlowBy = (v: unknown): v is FlowBy => typeof v === "string" && (FLOW_BYS as readonly string[]).includes(v);
+
+/** One flow of `GET /flows`, most recently active first. */
+export interface FlowSummary {
+  key: string;
+  count: number;
+  firstAtMs: number | null;
+  lastAtMs: number | null;
+}
+
+/** One message of a flow, in flow order (issuer flows by `seq`, others by time). */
+export interface FlowItem {
+  blockId: string;
+  /** The issuer's previous message, as this one's envelope names it. */
+  prev: string | null;
+  seq: number | null;
+  tag: string | null;
+  kind: string | null;
+  verdict: string | null;
+  status: string | null;
+  iss: string | null;
+  ieId: string | null;
+  corr: string | null;
+  msIndex: number | null;
+  wfIndex: number | null;
+  atMs: number | null;
+  links: Record<string, string>;
+}
+
+/** The hash chain of an issuer flow, over the whole flow, as the explorer computed it. */
+export interface ChainView {
+  links: number;
+  gaps: string[];
+  forks: string[];
+}
+
+/** `GET /flows/{by}/{key}`. */
+export interface Flow {
+  by: FlowBy | string;
+  key: string;
+  items: FlowItem[];
+  total: number;
+  chain: ChainView | null;
+}
+
 // ---------------------------------------------------------------- evaluation
 
 export interface ScorecardClass {
@@ -560,6 +610,10 @@ export interface WitnessData {
   incident(id: number, page?: IncidentPage): Promise<IncidentDetail>;
   /** Checkpoints, newest first (`GET /anchors`). */
   anchors(limit?: number): Promise<AnchorCheckpoint[]>;
+  /** Flows of related messages, most recently active first (`GET /flows`). */
+  flows(by: FlowBy): Promise<FlowSummary[]>;
+  /** One flow, its newest `limit` messages in flow order (`GET /flows/{by}/{key}`). */
+  flow(by: FlowBy, key: string, options?: { limit?: number }): Promise<Flow>;
   /** Component DIDs as the anchor service publishes them, and the writer policy (`GET /identity`). */
   identity(): Promise<Identity>;
   /** The last node posture scan (`GET /posture`). Scans are started by the operator, never from here. */
@@ -674,6 +728,11 @@ function checkIncidentId(id: number) {
   if (!Number.isSafeInteger(id) || id < 1) throw new DataError(`no incident ${String(id)}`, 404);
 }
 
+function checkFlow(by: string, key?: string) {
+  if (!isFlowBy(by)) throw new DataError(`no flow grouping ${by}`, 400);
+  if (key !== undefined && (!key || key.length > 256 || key.includes("/"))) throw new DataError("a flow key is 1 to 256 characters, no slash", 400);
+}
+
 function checkReportHash(h: string) {
   if (!isReportHash(h)) throw new DataError("a report hash is 0x and 64 lowercase hex digits", 400);
 }
@@ -755,6 +814,14 @@ export class LiveAdapter implements WitnessData {
   }
   identity() {
     return get(`${this.base}/identity`) as Promise<Identity>;
+  }
+  async flows(by: FlowBy) {
+    checkFlow(by);
+    return ((await get(`${this.base}/flows${qs({ by })}`)) as { items: FlowSummary[] }).items;
+  }
+  async flow(by: FlowBy, key: string, options: { limit?: number } = {}) {
+    checkFlow(by, key);
+    return get(`${this.base}/flows/${by}/${encodeURIComponent(key)}${qs({ limit: options.limit })}`) as Promise<Flow>;
   }
   posture() {
     return get(`${this.base}/posture`) as Promise<Posture>;
@@ -1044,6 +1111,17 @@ export class ReplayAdapter implements WitnessData {
   }
   identity() {
     return this.file("identity.json") as Promise<Identity>;
+  }
+  async flows(by: FlowBy) {
+    checkFlow(by);
+    return (((await this.optional(`flows-${by}.json`)) as { items: FlowSummary[] } | null)?.items ?? []) as FlowSummary[];
+  }
+  async flow(by: FlowBy, key: string, options: { limit?: number } = {}) {
+    checkFlow(by, key);
+    const doc = (await this.optional(`flows/${by}/${fileKey(key)}.json`)) as Flow | null;
+    if (!doc || doc.by !== by || doc.key !== key) throw new DataError(`this snapshot holds no ${by} flow ${key}`, 404);
+    const limit = options.limit ?? 1000;
+    return doc.items.length > limit ? { ...doc, items: doc.items.slice(-limit) } : doc;
   }
   async posture() {
     return ((await this.optional("posture.json")) as Posture | null) ?? { scannedAtMs: null, active: false, summary: {}, findings: [] };

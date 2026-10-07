@@ -21,6 +21,8 @@
  *   alerts.json              GET /alerts (the newest 500)
  *   incidents.json           GET /incidents
  *   incidents/<id>.json      GET /incidents/{id} (first 500 events and alerts)
+ *   flows-<by>.json          GET /flows?by=issuer|corr|ie|service
+ *   flows/<by>/<key>.json    GET /flows/{by}/{key} for the 8 most active of each
  *   identity.json            GET /identity (its DIDs are resolved into dids/ too)
  *   posture.json, stats.json GET /posture, GET /stats
  *   reports.json             GET /reports, with reports/<hash>.json and .html
@@ -86,7 +88,7 @@ async function fetchText(url, init = {}) {
 
 /** The latest `keep` events: read the log from the start for a few seconds and keep the tail. */
 async function recentEvents(api, keep) {
-  const types = "message,milestone,alert,anchor,incident";
+  const types = "message,milestone,alert,anchor,incident,lifecycle";
   const ctl = new AbortController();
   const timer = setTimeout(() => ctl.abort(), 6000);
   const events = [];
@@ -173,6 +175,15 @@ async function main() {
     const detail = await getJson(`/incidents/${inc.id}?limit=500`);
     write(`incidents/${inc.id}.json`, json(detail));
     for (const e of detail.events) wanted.unshift(e.blockId);
+  }
+  for (const by of ["issuer", "corr", "ie", "service"]) {
+    const list = await getJson(`/flows?by=${by}`);
+    write(`flows-${by}.json`, json(list));
+    for (const f of list.items.slice(0, 8)) {
+      const flow = await getJson(`/flows/${by}/${encodeURIComponent(f.key)}?limit=300`);
+      write(`flows/${by}/${fileKey(f.key)}.json`, json(flow));
+      if (by === "issuer") for (const m of flow.items.slice(-4)) wanted.push(m.blockId);
+    }
   }
   const identity = await getJson("/identity");
   write("identity.json", json(identity));
