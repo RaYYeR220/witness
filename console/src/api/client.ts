@@ -175,55 +175,332 @@ export interface BlindMatch {
   milestoneAtMs: number | null;
 }
 
-export interface LineagePoint {
+// ------------------------------------------------- IEs and score lineage
+
+/** One row of `GET /ie`. */
+export interface IeSummary {
+  ieId: string;
+  count: number;
+  firstAtMs: number | null;
+  lastAtMs: number | null;
+  lastMsIndex: number | null;
+  latestScore: number | null;
+}
+
+/** One ledger message about an IE, in milestone order (`GET /ie/{id}/lineage`). */
+export interface LineageEntry {
   blockId: string;
-  atMs: number;
-  value: number;
-  verdict: Verdict;
+  prev: string | null;
+  seq: number | null;
+  kind: string | null;
+  verdict: string | null;
+  msIndex: number | null;
+  wfIndex: number | null;
+  atMs: number | null;
+  /** The trust score this message carries; null for a message about the IE without one. */
+  score: number | null;
+  links: Record<string, string>;
 }
 
-export interface Lineage {
+/** The latest score the ledger vouches for (signed, or legacy where the policy allows it). */
+export interface LedgerScore {
+  score: number;
+  blockId: string;
+  verdict: string | null;
+  msIndex: number | null;
+  atMs: number | null;
+}
+
+export const ORION_STATUSES = ["ok", "unknown_entity", "no_score", "unreachable", "not_configured"] as const;
+export type OrionStatus = (typeof ORION_STATUSES)[number];
+
+/** What the aeriOS context broker answered for the IE's `trustScore`; `value` is set only with status ok. */
+export interface OrionState {
+  status: OrionStatus | string;
+  value: number | null;
   entityId: string;
-  series: LineagePoint[];
-  orion: { value: number | null; reachable: boolean; atMs: number | null };
 }
 
+/** `GET /ie/{id}/lineage`. */
+export interface Lineage {
+  ieId: string;
+  /** The newest `limit` entries, oldest first. */
+  entries: LineageEntry[];
+  total: number;
+  ledger: LedgerScore | null;
+  orion: OrionState;
+  /** Orion differs from the ledger by more than `epsilon`; null when Orion could not be compared. */
+  drift: boolean | null;
+  epsilon: number;
+}
+
+// ------------------------------------------------------ alerts, incidents
+
+/** One integrity alert (`GET /alerts`, and the alerts of an incident). */
 export interface Alert {
-  id: string;
+  id: number;
   rule: string;
-  severity: "info" | "warning" | "critical";
+  severity: string;
   blockId: string | null;
-  openedAtMs: number;
-  summary: string;
-}
-
-export interface AnchorCheckpoint {
-  record: number;
-  fromIndex: number;
-  toIndex: number;
-  msRoot: string;
-  checkpointHash: string;
-  tx: string | null;
-  anchoredAtMs: number | null;
-}
-
-export interface IdentityRecord {
-  did: string;
-  version: string;
-  keys: { kid: string; type: "Ed25519" | "X25519"; publicKeyHex: string; revokedAtMs: number | null }[];
-}
-
-export interface Posture {
+  ieId: string | null;
+  /** What the rule saw. Untrusted data: shown as text only. */
+  evidence: unknown;
   atMs: number;
-  counts: Partial<Record<Verdict, number>>;
-  lastMilestone: number | null;
-  lastAnchorRecord: number | null;
+  dedupeKey: string | null;
 }
 
-export interface ReportSummary {
-  id: string;
+/** `GET /alerts` parameters, named as the API names them. */
+export interface AlertQuery {
+  rule?: string;
+  severity?: string;
+  ie?: string;
+  block_id?: string;
+  since?: string;
+  limit?: number;
+}
+
+/** One incident of `GET /incidents`. */
+export interface Incident {
+  id: number;
   title: string;
+  severity: string;
+  /** open, closed:recovered or closed:quiet. */
+  status: string;
+  ieId: string | null;
+  keys: string[];
+  openedAtMs: number;
+  lastEventMs: number | null;
+  closedAtMs: number | null;
+  /** Block id of the trust score that closed it on recovery. */
+  closedBy: string | null;
+  baselineScore: number | null;
+  lowScore: number | null;
+}
+
+export interface IncidentQuery {
+  status?: string;
+  severity?: string;
+  ie?: string;
+  since?: string;
+  limit?: number;
+}
+
+/** One event on an incident's timeline. */
+export interface IncidentEvent {
+  blockId: string;
+  /** trigger, trust-drop, security, deployment, remediation or alert. */
+  role: string;
+  atMs: number | null;
+  tag: string | null;
+  kind: string | null;
+  verdict: string | null;
+  status: string | null;
+  msIndex: number | null;
+  dateMs: number | null;
+  indexed: boolean;
+  /** What the correlation engine saw (`trust`: proven, relayed or untrusted). Untrusted data. */
+  detail: unknown;
+  links: Record<string, string>;
+}
+
+/** `GET /incidents/{id}`: one page of events and one of alerts, with cursors for the next. */
+export interface IncidentDetail extends Incident {
+  events: IncidentEvent[];
+  eventsTotal: number;
+  nextEventsCursor: string | null;
+  alerts: Alert[];
+  alertsTotal: number;
+  nextAlertsAfter: number | null;
+}
+
+/** Paging of `GET /incidents/{id}`: the cursors are the previous page's `nextEventsCursor` and `nextAlertsAfter`. */
+export interface IncidentPage {
+  eventsAfter?: string;
+  alertsAfter?: number;
+  limit?: number;
+}
+
+// ---------------------------------------------------------------- anchors
+
+/** One checkpoint of `GET /anchors` (newest first). */
+export interface AnchorCheckpoint {
+  seq: number;
+  fromMilestone: number;
+  toMilestone: number;
+  msRoot: string | null;
+  /** The checkpoint document as the explorer stored it. Untrusted until re-read from the chain. */
+  checkpoint: unknown;
+  checkpointHash: string | null;
+  /** IOTA Rebased network the record was written to. */
+  network: string | null;
+  /** Rebased transaction digest. */
+  tx: string | null;
+  /** Record index in the Audit Trail. */
+  record: number | null;
+  /** pending, anchored, failed or mismatch. */
+  status: string;
   createdAtMs: number;
+}
+
+// ---------------------------------------------------------------- identity
+
+export interface TagRule {
+  allowed: string[];
+  requireSignature: boolean;
+  legacyGrace: boolean;
+}
+
+/** The writer policy: who may write which tag, and the hash every checkpoint commits to. */
+export interface PolicySummary {
+  version: number;
+  hash: string;
+  tags: Record<string, TagRule>;
+  default: TagRule;
+}
+
+/** `GET /identity`. `identities` and `previous` are what the anchor service publishes, passed through unchecked. */
+export interface Identity {
+  anchor: {
+    status: "ok" | "unreachable" | "not_configured" | string;
+    network: string | null;
+    identities: unknown[];
+    previous: unknown[];
+  };
+  policy: PolicySummary | null;
+}
+
+// ---------------------------------------------------------------- posture
+
+export interface Finding {
+  id: string;
+  severity: "high" | "medium" | "low" | "info" | string;
+  title: string;
+  /** What the check observed. Untrusted data: shown as text only. */
+  evidence: unknown;
+  /** The remediation the scan proposes. */
+  fix: string;
+}
+
+/** `GET /posture`: the last scan, or an empty one with `scannedAtMs: null`. */
+export interface Posture {
+  scannedAtMs: number | null;
+  active: boolean;
+  summary: Record<string, number>;
+  findings: Finding[];
+}
+
+/** `GET /stats`. `services` (component statuses) is absent on APIs older than the deploy task. */
+export interface Stats {
+  counts: Record<string, number>;
+  services?: Record<string, string>;
+  validator: { configured: boolean; running: boolean; pending: number };
+  nodeRoute: { enabled: boolean; route: string | null; registered: boolean; error: string | null };
+  streamSubscribers: number;
+}
+
+// ---------------------------------------------------------------- reports
+
+/** One audit report of `GET /reports`. */
+export interface ReportSummary {
+  reportHash: string;
+  /** True once the relay accepted the audit.report message naming this hash. */
+  anchored: boolean;
+  blockId: string | null;
+  ie: string | null;
+  msFrom: number | null;
+  msTo: number | null;
+  iss: string | null;
+  seq: number | null;
+  generatedAtMs: number;
+  anchoredAtMs: number | null;
+  links: Record<string, string>;
+}
+
+/** `GET /reports/{hash}`. */
+export interface ReportResult extends ReportSummary {
+  /** The full report; its canonical form hashes to `reportHash`. */
+  report: unknown;
+}
+
+/** A report as served: the parsed answer and the exact text, so the browser hashes what it was given. */
+export interface ReportDoc {
+  result: ReportResult;
+  text: string;
+}
+
+// ---------------------------------------------------------------- evaluation
+
+export interface ScorecardClass {
+  id: string;
+  name: string;
+  expected: string;
+  trials: number;
+  detected: number;
+  rate: number;
+  latency_p50_ms: number | null;
+  latency_p95_ms: number | null;
+}
+
+/** An evaluation scorecard (witness-chaos `scorecard.json`), when the deployment publishes one. */
+export interface Scorecard {
+  schema: typeof SCORECARD_SCHEMA;
+  headline: string;
+  detected: number;
+  attacks: number;
+  detection_rate: number;
+  latency_p50_ms: number | null;
+  latency_p95_ms: number | null;
+  unexpected_alerts: number;
+  classes: ScorecardClass[];
+  traps: { messages: number; duration_s: number; false_positives: number; meets_profile: boolean } | null;
+  controls: { trials: number; passed: number } | null;
+}
+
+export const SCORECARD_SCHEMA = "witness-chaos/scorecard/v1";
+
+const isNum = (v: unknown): v is number => typeof v === "number" && Number.isFinite(v);
+const isNumOrNull = (v: unknown) => v === null || v === undefined || isNum(v);
+
+/** The scorecard if `doc` is one (schema and the fields the console shows), else null. Numbers are shown as written. */
+export function asScorecard(doc: unknown): Scorecard | null {
+  if (!isDict(doc) || doc.schema !== SCORECARD_SCHEMA) return null;
+  const d = doc as Record<string, unknown>;
+  if (!isNum(d.detected) || !isNum(d.attacks) || !isNum(d.detection_rate) || typeof d.headline !== "string") return null;
+  if (!isNumOrNull(d.latency_p50_ms) || !isNumOrNull(d.latency_p95_ms) || !Array.isArray(d.classes)) return null;
+  const classes: ScorecardClass[] = [];
+  for (const c of d.classes) {
+    if (!isDict(c)) return null;
+    const r = c as Record<string, unknown>;
+    if (typeof r.id !== "string" || typeof r.name !== "string" || !isNum(r.trials) || !isNum(r.detected) || !isNum(r.rate)) return null;
+    classes.push({
+      id: r.id,
+      name: r.name,
+      expected: typeof r.expected === "string" ? r.expected : "",
+      trials: r.trials,
+      detected: r.detected,
+      rate: r.rate,
+      latency_p50_ms: isNum(r.latency_p50_ms) ? r.latency_p50_ms : null,
+      latency_p95_ms: isNum(r.latency_p95_ms) ? r.latency_p95_ms : null,
+    });
+  }
+  const t = isDict(d.traps) ? (d.traps as Record<string, unknown>) : null;
+  const k = isDict(d.controls) ? (d.controls as Record<string, unknown>) : null;
+  return {
+    schema: SCORECARD_SCHEMA,
+    headline: d.headline,
+    detected: d.detected,
+    attacks: d.attacks,
+    detection_rate: d.detection_rate,
+    latency_p50_ms: isNum(d.latency_p50_ms) ? d.latency_p50_ms : null,
+    latency_p95_ms: isNum(d.latency_p95_ms) ? d.latency_p95_ms : null,
+    unexpected_alerts: isNum(d.unexpected_alerts) ? d.unexpected_alerts : 0,
+    classes,
+    traps:
+      t && isNum(t.messages) && isNum(t.duration_s) && isNum(t.false_positives)
+        ? { messages: t.messages, duration_s: t.duration_s, false_positives: t.false_positives, meets_profile: t.meets_profile === true }
+        : null,
+    controls: k && isNum(k.trials) && isNum(k.passed) ? { trials: k.trials, passed: k.passed } : null,
+  };
 }
 
 export const STREAM_TYPES = ["message", "milestone", "alert", "anchor", "incident", "lifecycle", "submission", "posture"] as const;
@@ -270,12 +547,32 @@ export interface WitnessData {
   health(): Promise<SourceHealth>;
   /** The last milestone an anchored checkpoint covers (`GET /anchors`), or null when none is anchored. */
   lastAnchoredMilestone(): Promise<number | null>;
-  lineage(entityId: string): Promise<Lineage>;
-  alerts(): Promise<Alert[]>;
-  anchors(): Promise<AnchorCheckpoint[]>;
-  identity(did: string): Promise<IdentityRecord>;
+  /** Infrastructure Elements with messages on the ledger, most recently active first (`GET /ie`). */
+  ies(): Promise<IeSummary[]>;
+  /** The IE's score lineage next to Orion's current value (`GET /ie/{id}/lineage`). */
+  lineage(ieId: string, options?: { limit?: number }): Promise<Lineage>;
+  /** Integrity alerts, newest first (`GET /alerts`). */
+  alerts(query?: AlertQuery): Promise<Alert[]>;
+  /** Incidents, newest first (`GET /incidents`). */
+  incidents(query?: IncidentQuery): Promise<Incident[]>;
+  /** One incident with a page of its timeline and of its alerts (`GET /incidents/{id}`). */
+  incident(id: number, page?: IncidentPage): Promise<IncidentDetail>;
+  /** Checkpoints, newest first (`GET /anchors`). */
+  anchors(limit?: number): Promise<AnchorCheckpoint[]>;
+  /** Component DIDs as the anchor service publishes them, and the writer policy (`GET /identity`). */
+  identity(): Promise<Identity>;
+  /** The last node posture scan (`GET /posture`). Scans are started by the operator, never from here. */
   posture(): Promise<Posture>;
-  reports(): Promise<ReportSummary[]>;
+  /** Row counts and component statuses (`GET /stats`). */
+  stats(): Promise<Stats>;
+  /** Audit reports, newest first (`GET /reports`). */
+  reports(query?: { cursor?: string; limit?: number }): Promise<Page<ReportSummary>>;
+  /** One report with its exact JSON text (`GET /reports/{hash}`). */
+  report(reportHash: string): Promise<ReportDoc>;
+  /** Where the report's self-contained HTML page is (`GET /reports/{hash}.html`), for a link; null for a malformed hash. */
+  reportHtmlUrl(reportHash: string): string | null;
+  /** The evaluation scorecard, when this deployment publishes one; null otherwise. */
+  scorecard(): Promise<Scorecard | null>;
   /** Subscribes to the event stream; returns the unsubscribe function. */
   stream(onEvent: (event: StreamEvent) => void, options?: StreamOptions): () => void;
   /**
@@ -336,7 +633,17 @@ async function request(url: string, init: RequestInit = {}, as: "json" | "text" 
     throw new DataError(`${url} is unreachable (${e instanceof Error ? e.message : String(e)})`, null);
   }
   if (!res.ok) throw await errorFrom(url, res);
-  return as === "json" ? res.json() : res.text();
+  // A static host answers a missing snapshot file with its index page: that is a 404, not data.
+  if ((res.headers.get("content-type") ?? "").includes("text/html")) {
+    void res.body?.cancel().catch(() => undefined);
+    throw new DataError(`${url} was not found`, 404);
+  }
+  if (as === "text") return res.text();
+  try {
+    return await res.json();
+  } catch {
+    throw new DataError(`${url} did not answer JSON`, null);
+  }
 }
 
 const get = (url: string, as: "json" | "text" = "json") => request(url, {}, as);
@@ -350,15 +657,35 @@ const qs = (params: object) => {
 
 const withLimit = (query: MessageQuery) => ({ limit: 50, ...query });
 
-/** A running witness-api at `baseUrl`. */
+const HASH32 = /^0x[0-9a-f]{64}$/;
+
+/** A report hash as the API names reports: 0x and 64 lowercase hex digits. */
+export const isReportHash = (h: unknown): h is string => typeof h === "string" && HASH32.test(h);
+
+function reportDoc(text: string): ReportDoc {
+  const result = JSON.parse(text) as ReportResult;
+  return { result, text };
+}
+
+function checkIncidentId(id: number) {
+  if (!Number.isSafeInteger(id) || id < 1) throw new DataError(`no incident ${String(id)}`, 404);
+}
+
+function checkReportHash(h: string) {
+  if (!isReportHash(h)) throw new DataError("a report hash is 0x and 64 lowercase hex digits", 400);
+}
+
+/** A running witness-api at `baseUrl`. `scorecardUrl` is a published evaluation scorecard (static JSON), if any. */
 export class LiveAdapter implements WitnessData {
   readonly mode = "live" as const;
   readonly source: string;
   private readonly base: string;
+  private readonly scorecardUrl: string | null;
 
-  constructor(baseUrl: string) {
+  constructor(baseUrl: string, options: { scorecardUrl?: string | null } = {}) {
     this.base = baseUrl.replace(/\/+$/, "");
     this.source = `witness-api at ${this.base}`;
+    this.scorecardUrl = options.scorecardUrl || null;
   }
 
   messages(query: MessageQuery = {}) {
@@ -402,23 +729,56 @@ export class LiveAdapter implements WitnessData {
   async lastAnchoredMilestone() {
     return lastAnchoredOf((await get(`${this.base}/anchors?limit=20`)) as { items: AnchorRow[] });
   }
-  lineage(entityId: string) {
-    return get(`${this.base}/lineage/${encodeURIComponent(entityId)}`) as Promise<Lineage>;
+  async ies() {
+    return ((await get(`${this.base}/ie`)) as { items: IeSummary[] }).items;
   }
-  alerts() {
-    return get(`${this.base}/alerts`) as Promise<Alert[]>;
+  lineage(ieId: string, options: { limit?: number } = {}) {
+    return get(`${this.base}/ie/${encodeURIComponent(ieId)}/lineage${qs({ limit: options.limit })}`) as Promise<Lineage>;
   }
-  anchors() {
-    return get(`${this.base}/checkpoints`) as Promise<AnchorCheckpoint[]>;
+  async alerts(query: AlertQuery = {}) {
+    return ((await get(`${this.base}/alerts${qs(query)}`)) as { items: Alert[] }).items;
   }
-  identity(did: string) {
-    return get(`${this.base}/identity/${encodeURIComponent(did)}`) as Promise<IdentityRecord>;
+  async incidents(query: IncidentQuery = {}) {
+    return ((await get(`${this.base}/incidents${qs(query)}`)) as { items: Incident[] }).items;
+  }
+  async incident(id: number, page: IncidentPage = {}) {
+    checkIncidentId(id);
+    return get(`${this.base}/incidents/${id}${qs({ limit: page.limit, eventsAfter: page.eventsAfter, alertsAfter: page.alertsAfter })}`) as Promise<IncidentDetail>;
+  }
+  async anchors(limit = 100) {
+    return ((await get(`${this.base}/anchors${qs({ limit })}`)) as { items: AnchorCheckpoint[] }).items;
+  }
+  identity() {
+    return get(`${this.base}/identity`) as Promise<Identity>;
   }
   posture() {
     return get(`${this.base}/posture`) as Promise<Posture>;
   }
-  reports() {
-    return get(`${this.base}/reports`) as Promise<ReportSummary[]>;
+  stats() {
+    return get(`${this.base}/stats`) as Promise<Stats>;
+  }
+  reports(query: { cursor?: string; limit?: number } = {}) {
+    return get(`${this.base}/reports${qs(query)}`) as Promise<Page<ReportSummary>>;
+  }
+  async report(reportHash: string) {
+    checkReportHash(reportHash);
+    return reportDoc((await get(`${this.base}/reports/${reportHash}`, "text")) as string);
+  }
+  reportHtmlUrl(reportHash: string) {
+    return isReportHash(reportHash) ? `${this.base}/reports/${reportHash}.html` : null;
+  }
+  async scorecard() {
+    if (!this.scorecardUrl) return null;
+    let doc: unknown;
+    try {
+      doc = await get(this.scorecardUrl);
+    } catch (e) {
+      if (e instanceof DataError && e.status === 404) return null;
+      throw e;
+    }
+    const card = asScorecard(doc);
+    if (!card) throw new DataError(`${this.scorecardUrl} is not a ${SCORECARD_SCHEMA} scorecard`, null);
+    return card;
   }
   stream(onEvent: (event: StreamEvent) => void, options: StreamOptions = {}) {
     const url = `${this.base}/stream${qs({ types: options.types?.join(",") })}`;
@@ -516,6 +876,59 @@ export function localCanonHash(text: string): { hash: string; bodyHash: string |
   }
 }
 
+/**
+ * The file name an id is recorded under in a snapshot: anything but
+ * [A-Za-z0-9._-] becomes "_" (scripts/record-replay.mjs writes the same).
+ * Readers check the id inside the file, so two ids sharing a name never mix.
+ */
+export const fileKey = (id: string) => id.replace(/[^A-Za-z0-9._-]/g, "_");
+
+/** `GET /alerts` filtering over a recorded list (newest first), for replay. */
+export function filterAlerts(items: Alert[], query: AlertQuery): Alert[] {
+  const since = dateBound(query.since, false);
+  return items.filter(
+    (a) =>
+      (!query.rule || a.rule === query.rule) &&
+      (!query.severity || a.severity === query.severity) &&
+      (!query.ie || a.ieId === query.ie) &&
+      (!query.block_id || lower(a.blockId) === lower(query.block_id)) &&
+      (since === null || a.atMs >= since),
+  );
+}
+
+/** `GET /incidents` filtering over a recorded list, for replay. */
+export function filterIncidents(items: Incident[], query: IncidentQuery): Incident[] {
+  const since = dateBound(query.since, false);
+  return items.filter(
+    (i) =>
+      (!query.status || i.status === query.status) &&
+      (!query.severity || i.severity === query.severity) &&
+      (!query.ie || i.ieId === query.ie) &&
+      (since === null || (i.lastEventMs ?? i.openedAtMs) >= since),
+  );
+}
+
+/**
+ * One page of a recorded incident, like `GET /incidents/{id}` cuts it: events
+ * after an offset cursor (opaque to screens, as the API's is), alerts after an
+ * alert id, `limit` of each.
+ */
+export function pageIncident(full: IncidentDetail, page: IncidentPage = {}): IncidentDetail {
+  const limit = page.limit ?? 500;
+  const start = page.eventsAfter && /^\d+$/.test(page.eventsAfter) ? Number(page.eventsAfter) : 0;
+  const events = full.events.slice(start, start + limit);
+  const after = page.alertsAfter ?? null;
+  const rest = full.alerts.filter((a) => after === null || a.id > after);
+  const alerts = rest.slice(0, limit);
+  return {
+    ...full,
+    events,
+    nextEventsCursor: start + limit < full.events.length ? String(start + limit) : null,
+    alerts,
+    nextAlertsAfter: rest.length > limit ? alerts[alerts.length - 1]!.id : null,
+  };
+}
+
 /** A recorded snapshot served as static files under `root` (default `/replay/`). */
 export class ReplayAdapter implements WitnessData {
   readonly mode = "replay" as const;
@@ -587,23 +1000,69 @@ export class ReplayAdapter implements WitnessData {
       return null; // a snapshot recorded before any checkpoint
     }
   }
-  lineage(entityId: string) {
-    return this.file(`lineage/${encodeURIComponent(entityId)}.json`) as Promise<Lineage>;
+  /** A file the snapshot may not have: null on 404. */
+  private async optional(name: string): Promise<unknown> {
+    try {
+      return await this.file(name);
+    } catch (e) {
+      if (e instanceof DataError && e.status === 404) return null;
+      throw e;
+    }
   }
-  alerts() {
-    return this.file("alerts.json") as Promise<Alert[]>;
+  async ies() {
+    return (((await this.optional("ie.json")) as { items: IeSummary[] } | null)?.items ?? []) as IeSummary[];
   }
-  anchors() {
-    return this.file("checkpoints.json") as Promise<AnchorCheckpoint[]>;
+  async lineage(ieId: string, options: { limit?: number } = {}) {
+    const doc = (await this.optional(`lineage/${fileKey(ieId)}.json`)) as Lineage | null;
+    if (!doc || doc.ieId !== ieId) throw new DataError(`this snapshot holds no lineage for ${ieId}`, 404);
+    const limit = options.limit ?? 1000;
+    return doc.entries.length > limit ? { ...doc, entries: doc.entries.slice(-limit) } : doc;
   }
-  identity(did: string) {
-    return this.file(`identity/${encodeURIComponent(did)}.json`) as Promise<IdentityRecord>;
+  async alerts(query: AlertQuery = {}) {
+    const all = (((await this.optional("alerts.json")) as { items: Alert[] } | null)?.items ?? []) as Alert[];
+    return filterAlerts(all, query).slice(0, query.limit ?? 200);
   }
-  posture() {
-    return this.file("posture.json") as Promise<Posture>;
+  async incidents(query: IncidentQuery = {}) {
+    const all = (((await this.optional("incidents.json")) as { items: Incident[] } | null)?.items ?? []) as Incident[];
+    return filterIncidents(all, query).slice(0, query.limit ?? 200);
   }
-  reports() {
-    return this.file("reports.json") as Promise<ReportSummary[]>;
+  async incident(id: number, page: IncidentPage = {}) {
+    checkIncidentId(id);
+    const doc = (await this.optional(`incidents/${id}.json`)) as IncidentDetail | null;
+    if (!doc || doc.id !== id) throw new DataError(`this snapshot holds no incident ${id}`, 404);
+    return pageIncident(doc, page);
+  }
+  async anchors(limit = 100) {
+    return ((((await this.optional("anchors.json")) as { items: AnchorCheckpoint[] } | null)?.items ?? []) as AnchorCheckpoint[]).slice(0, limit);
+  }
+  identity() {
+    return this.file("identity.json") as Promise<Identity>;
+  }
+  async posture() {
+    return ((await this.optional("posture.json")) as Posture | null) ?? { scannedAtMs: null, active: false, summary: {}, findings: [] };
+  }
+  stats() {
+    return this.file("stats.json") as Promise<Stats>;
+  }
+  async reports(query: { cursor?: string; limit?: number } = {}) {
+    const all = (((await this.optional("reports.json")) as { items: ReportSummary[] } | null)?.items ?? []) as ReportSummary[];
+    const limit = query.limit ?? 50;
+    const start = query.cursor ? Number(query.cursor) || 0 : 0;
+    return { items: all.slice(start, start + limit), nextCursor: start + limit < all.length ? String(start + limit) : null, limit };
+  }
+  async report(reportHash: string) {
+    checkReportHash(reportHash);
+    return reportDoc((await this.file(`reports/${reportHash}.json`, "text")) as string);
+  }
+  reportHtmlUrl(reportHash: string) {
+    return isReportHash(reportHash) ? `${this.root}reports/${reportHash}.html` : null;
+  }
+  async scorecard() {
+    const doc = await this.optional("scorecard.json");
+    if (doc === null) return null;
+    const card = asScorecard(doc);
+    if (!card) throw new DataError(`the snapshot's scorecard.json is not a ${SCORECARD_SCHEMA} scorecard`, null);
+    return card;
   }
   /** Plays the recorded events back, keeping their spacing (at most 4 s apart). */
   stream(onEvent: (event: StreamEvent) => void, options: StreamOptions = {}) {
@@ -642,5 +1101,5 @@ export class ReplayAdapter implements WitnessData {
 /** The adapter for this build: `VITE_MODE=replay` (or `vite build --mode replay`) serves the snapshot, otherwise `VITE_API_URL`. */
 export function createData(env: Record<string, string | undefined> = import.meta.env): WitnessData {
   if (env.VITE_MODE === "replay" || env.MODE === "replay") return new ReplayAdapter(env.VITE_REPLAY_ROOT ?? `${import.meta.env.BASE_URL}replay/`);
-  return new LiveAdapter(env.VITE_API_URL ?? "/api");
+  return new LiveAdapter(env.VITE_API_URL ?? "/api", { scorecardUrl: env.VITE_SCORECARD_URL ?? null });
 }

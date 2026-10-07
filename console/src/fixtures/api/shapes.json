@@ -1,0 +1,231 @@
+{
+ "about": "JSON field names of the witness-api response models (true = required), written by console/scripts/api-shapes.py",
+ "models": {
+  "IeList": {
+   "items": true
+  },
+  "IeSummary": {
+   "ieId": true,
+   "count": true,
+   "firstAtMs": false,
+   "firstAt": false,
+   "lastAtMs": false,
+   "lastAt": false,
+   "lastMsIndex": false,
+   "latestScore": false
+  },
+  "Lineage": {
+   "ieId": true,
+   "entries": true,
+   "total": true,
+   "ledger": true,
+   "orion": true,
+   "drift": true,
+   "epsilon": true
+  },
+  "LineageEntry": {
+   "blockId": true,
+   "prev": false,
+   "seq": false,
+   "kind": false,
+   "verdict": false,
+   "msIndex": false,
+   "wfIndex": false,
+   "atMs": false,
+   "at": false,
+   "score": false,
+   "links": true
+  },
+  "LedgerScore": {
+   "score": true,
+   "blockId": true,
+   "verdict": false,
+   "msIndex": false,
+   "atMs": false,
+   "at": false
+  },
+  "OrionState": {
+   "status": true,
+   "value": false,
+   "entityId": true
+  },
+  "AlertList": {
+   "items": true
+  },
+  "AlertOut": {
+   "id": true,
+   "rule": true,
+   "severity": true,
+   "blockId": false,
+   "ieId": false,
+   "evidence": false,
+   "atMs": true,
+   "at": true,
+   "dedupeKey": false
+  },
+  "IncidentList": {
+   "items": true
+  },
+  "Incident": {
+   "id": true,
+   "title": true,
+   "severity": true,
+   "status": true,
+   "ieId": false,
+   "keys": false,
+   "openedAtMs": true,
+   "openedAt": true,
+   "lastEventMs": false,
+   "lastEventAt": false,
+   "closedAtMs": false,
+   "closedAt": false,
+   "closedBy": false,
+   "baselineScore": false,
+   "lowScore": false
+  },
+  "IncidentDetail": {
+   "id": true,
+   "title": true,
+   "severity": true,
+   "status": true,
+   "ieId": false,
+   "keys": false,
+   "openedAtMs": true,
+   "openedAt": true,
+   "lastEventMs": false,
+   "lastEventAt": false,
+   "closedAtMs": false,
+   "closedAt": false,
+   "closedBy": false,
+   "baselineScore": false,
+   "lowScore": false,
+   "events": true,
+   "eventsTotal": false,
+   "nextEventsCursor": false,
+   "alerts": false,
+   "alertsTotal": false,
+   "nextAlertsAfter": false
+  },
+  "IncidentEvent": {
+   "blockId": true,
+   "role": true,
+   "atMs": false,
+   "at": false,
+   "tag": false,
+   "kind": false,
+   "verdict": false,
+   "status": false,
+   "msIndex": false,
+   "dateMs": false,
+   "date": false,
+   "indexed": false,
+   "detail": false,
+   "links": true
+  },
+  "AnchorList": {
+   "items": true
+  },
+  "AnchorOut": {
+   "seq": true,
+   "fromMilestone": true,
+   "toMilestone": true,
+   "msRoot": false,
+   "checkpoint": false,
+   "checkpointHash": false,
+   "network": false,
+   "tx": false,
+   "record": false,
+   "status": true,
+   "createdAtMs": true,
+   "createdAt": true
+  },
+  "Identity": {
+   "anchor": true,
+   "policy": false
+  },
+  "AnchorIdentities": {
+   "status": true,
+   "network": false,
+   "identities": false,
+   "previous": false
+  },
+  "PolicySummary": {
+   "version": true,
+   "hash": true,
+   "tags": true,
+   "default": true
+  },
+  "TagRuleOut": {
+   "allowed": true,
+   "requireSignature": true,
+   "legacyGrace": true
+  },
+  "Posture": {
+   "scannedAtMs": false,
+   "scannedAt": false,
+   "active": false,
+   "summary": false,
+   "findings": false
+  },
+  "Finding": {
+   "id": true,
+   "severity": true,
+   "title": true,
+   "evidence": true,
+   "fix": true
+  },
+  "Stats": {
+   "counts": true,
+   "validator": true,
+   "nodeRoute": true,
+   "streamSubscribers": true
+  },
+  "ValidatorStatus": {
+   "configured": true,
+   "running": true,
+   "pending": true
+  },
+  "NodeRouteStatus": {
+   "enabled": true,
+   "route": false,
+   "registered": false,
+   "error": false
+  },
+  "ReportList": {
+   "items": true,
+   "nextCursor": false,
+   "limit": true
+  },
+  "ReportSummary": {
+   "reportHash": true,
+   "anchored": true,
+   "blockId": false,
+   "ie": false,
+   "msFrom": false,
+   "msTo": false,
+   "iss": false,
+   "seq": false,
+   "generatedAtMs": true,
+   "generatedAt": true,
+   "anchoredAtMs": false,
+   "anchoredAt": false,
+   "links": false
+  },
+  "ReportResult": {
+   "reportHash": true,
+   "anchored": true,
+   "blockId": false,
+   "ie": false,
+   "msFrom": false,
+   "msTo": false,
+   "iss": false,
+   "seq": false,
+   "generatedAtMs": true,
+   "generatedAt": true,
+   "anchoredAtMs": false,
+   "anchoredAt": false,
+   "links": false,
+   "report": true
+  }
+ }
+}

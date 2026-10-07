@@ -1,0 +1,218 @@
+{
+ "about": "Answers built through the witness-api models (console/scripts/api-shapes.py) for states a fresh stack has none of yet. Values are illustrative.",
+ "posture": {
+  "scannedAtMs": 1791331200000,
+  "scannedAt": "2026-10-07T00:00:00.000Z",
+  "active": false,
+  "summary": {
+   "high": 1,
+   "low": 1
+  },
+  "findings": [
+   {
+    "id": "sample-coordinator-keys",
+    "severity": "high",
+    "title": "The node trusts the sample coordinator keys",
+    "evidence": {
+     "keys": [
+      "0xed3c\u2026248c"
+     ],
+     "source": "protocol config"
+    },
+    "fix": "Generate a coordinator key pair for this network and pin its public key."
+   },
+   {
+    "id": "dashboard-exposed",
+    "severity": "low",
+    "title": "The node dashboard answers",
+    "evidence": {
+     "status": 200,
+     "path": "/dashboard/"
+    },
+    "fix": "Bind the dashboard to localhost or put it behind the operator's login."
+   }
+  ]
+ },
+ "reports": {
+  "items": [
+   {
+    "reportHash": "0xb03db2060e91b92a1a7fb78e5feb8f05b02e0447cb6708cf54429467e4cde7e8",
+    "anchored": true,
+    "blockId": "0xabababababababababababababababababababababababababababababababab",
+    "ie": null,
+    "msFrom": 1,
+    "msTo": 1440,
+    "iss": "did:iota:testnet:0x6b9a693ebf2ac6fb771a75d25b1284ba75aeb0ae16618eaf5d41d24828a6f7a2",
+    "seq": 1791331200000,
+    "generatedAtMs": 1791331200000,
+    "generatedAt": "2026-10-07T00:00:00.000Z",
+    "anchoredAtMs": 1791331204000,
+    "anchoredAt": "2026-10-07T00:00:04.000Z",
+    "links": {
+     "self": "/reports/0xb03db2060e91b92a1a7fb78e5feb8f05b02e0447cb6708cf54429467e4cde7e8",
+     "html": "/reports/0xb03db2060e91b92a1a7fb78e5feb8f05b02e0447cb6708cf54429467e4cde7e8.html"
+    }
+   }
+  ],
+  "nextCursor": null,
+  "limit": 50
+ },
+ "report": {
+  "reportHash": "0xb03db2060e91b92a1a7fb78e5feb8f05b02e0447cb6708cf54429467e4cde7e8",
+  "anchored": true,
+  "blockId": "0xabababababababababababababababababababababababababababababababab",
+  "ie": null,
+  "msFrom": 1,
+  "msTo": 1440,
+  "iss": "did:iota:testnet:0x6b9a693ebf2ac6fb771a75d25b1284ba75aeb0ae16618eaf5d41d24828a6f7a2",
+  "seq": 1791331200000,
+  "generatedAtMs": 1791331200000,
+  "generatedAt": "2026-10-07T00:00:00.000Z",
+  "anchoredAtMs": 1791331204000,
+  "anchoredAt": "2026-10-07T00:00:04.000Z",
+  "links": {
+   "self": "/reports/0xb03db2060e91b92a1a7fb78e5feb8f05b02e0447cb6708cf54429467e4cde7e8",
+   "html": "/reports/0xb03db2060e91b92a1a7fb78e5feb8f05b02e0447cb6708cf54429467e4cde7e8.html"
+  },
+  "report": {
+   "v": 1,
+   "kind": "witness.audit-report",
+   "network": "private_tangle1",
+   "generatedAt": 1791331200000,
+   "range": {
+    "msFrom": 1,
+    "msTo": 1440
+   },
+   "ie": null,
+   "messages": {
+    "total": 318,
+    "encrypted": 0,
+    "plaintext": 318,
+    "confirmed": 318,
+    "byVerdict": {
+     "PRODUCER_SIGNED": 172,
+     "UNSIGNED_LEGACY": 146
+    }
+   },
+   "alerts": {
+    "total": 2,
+    "bySeverity": {
+     "medium": 2
+    },
+    "byRule": {
+     "UNSIGNED": 2
+    }
+   },
+   "anchors": {
+    "total": 2,
+    "byStatus": {
+     "anchored": 2
+    },
+    "latest": {
+     "seq": 2,
+     "fromMilestone": 721,
+     "toMilestone": 1440,
+     "status": "anchored",
+     "network": "testnet",
+     "record": 2,
+     "tx": "5K3CqSHNQR7t3yuuUqjZYxk2cRmDPwtPHuHYQhy7coj5"
+    }
+   },
+   "proofs": [
+    {
+     "blockId": "0xabababababababababababababababababababababababababababababababab",
+     "tag": "trust.score",
+     "kind": "trust.score",
+     "ieId": "MyDomain:fa163e5e25ef",
+     "iss": null,
+     "verdict": "PRODUCER_SIGNED",
+     "msIndex": 1433,
+     "wfIndex": 3,
+     "proof": "/proofs/0xabababababababababababababababababababababababababababababababab"
+    }
+   ],
+   "proofsTruncated": true
+  }
+ },
+ "lineageOrionOk": {
+  "ieId": "MyDomain:fa163e5e25ef",
+  "entries": [
+   {
+    "blockId": "0x0101010101010101010101010101010101010101010101010101010101010101",
+    "prev": null,
+    "seq": 1791331200001,
+    "kind": "trust.score",
+    "verdict": "PRODUCER_SIGNED",
+    "msIndex": 1401,
+    "wfIndex": 1,
+    "atMs": 1791331260000,
+    "at": null,
+    "score": 0.82,
+    "links": {
+     "self": "/messages/0x0101010101010101010101010101010101010101010101010101010101010101"
+    }
+   },
+   {
+    "blockId": "0x0202020202020202020202020202020202020202020202020202020202020202",
+    "prev": null,
+    "seq": 1791331200002,
+    "kind": "trust.score",
+    "verdict": "PRODUCER_SIGNED",
+    "msIndex": 1402,
+    "wfIndex": 1,
+    "atMs": 1791331320000,
+    "at": null,
+    "score": 0.8,
+    "links": {
+     "self": "/messages/0x0202020202020202020202020202020202020202020202020202020202020202"
+    }
+   },
+   {
+    "blockId": "0x0303030303030303030303030303030303030303030303030303030303030303",
+    "prev": null,
+    "seq": 1791331200003,
+    "kind": "trust.score",
+    "verdict": "PRODUCER_SIGNED",
+    "msIndex": 1403,
+    "wfIndex": 1,
+    "atMs": 1791331380000,
+    "at": null,
+    "score": 0.41,
+    "links": {
+     "self": "/messages/0x0303030303030303030303030303030303030303030303030303030303030303"
+    }
+   },
+   {
+    "blockId": "0x0404040404040404040404040404040404040404040404040404040404040404",
+    "prev": null,
+    "seq": 1791331200004,
+    "kind": "trust.score",
+    "verdict": "PRODUCER_SIGNED",
+    "msIndex": 1404,
+    "wfIndex": 1,
+    "atMs": 1791331440000,
+    "at": null,
+    "score": 0.43,
+    "links": {
+     "self": "/messages/0x0404040404040404040404040404040404040404040404040404040404040404"
+    }
+   }
+  ],
+  "total": 4,
+  "ledger": {
+   "score": 0.43,
+   "blockId": "0x0404040404040404040404040404040404040404040404040404040404040404",
+   "verdict": "PRODUCER_SIGNED",
+   "msIndex": 1404,
+   "atMs": 1791331440000,
+   "at": null
+  },
+  "orion": {
+   "status": "ok",
+   "value": 0.82,
+   "entityId": "urn:ngsi-ld:InfrastructureElement:MyDomain:fa163e5e25ef"
+  },
+  "drift": true,
+  "epsilon": 0.01
+ }
+}

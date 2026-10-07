@@ -12,4 +12,6 @@ interface ImportMetaEnv {
   readonly VITE_REPLAY_ROOT?: string;
   /** Trusted DID resolver (the anchor service's /resolve), default /anchor. */
   readonly VITE_RESOLVER_URL?: string;
+  /** A published evaluation scorecard (witness-chaos scorecard.json) shown on Integrity; none when unset. */
+  readonly VITE_SCORECARD_URL?: string;
 }
