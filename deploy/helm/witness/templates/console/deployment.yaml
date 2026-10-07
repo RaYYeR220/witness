@@ -30,6 +30,9 @@ spec:
             # nginx resolves the API per request, by its fully qualified name.
             - name: WITNESS_API_UPSTREAM
               value: {{ printf "%s:%v" (include "witness.serviceHost" (dict "ctx" . "component" "api")) .Values.api.service.port | quote }}
+            # Only /anchor/resolve/ is proxied to the anchor (DID resolution for step 4).
+            - name: WITNESS_ANCHOR_UPSTREAM
+              value: {{ printf "%s:%v" (include "witness.serviceHost" (dict "ctx" . "component" "anchor")) .Values.anchor.service.port | quote }}
             - name: WITNESS_REBASED_RPC_ORIGIN
               value: {{ .Values.rebased.rpcOrigin | quote }}
           ports:

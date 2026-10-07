@@ -197,7 +197,9 @@ services:
       context: ../..
       dockerfile: console/Dockerfile
       args:
+        # The in-browser verifier pins this deployment's trail and the address that writes it.
         ANCHOR_TRAIL_ID: ${WITNESS_TRAIL_ID:-}
+        ANCHOR_WRITER_ADDRESS: ${WITNESS_ANCHOR_WRITER_ADDRESS:-${WITNESS_ANCHOR_ADDRESS:-}}
     image: witness-console:local
     container_name: witness-console
     mem_limit: 128m
@@ -206,12 +208,15 @@ services:
       - /etc/nginx/conf.d:uid=101,gid=101,mode=0755,size=1m
     environment:
       WITNESS_API_UPSTREAM: witness-api:7200
+      # Only /anchor/resolve/ is proxied to it (DID resolution for the browser's step 4).
+      WITNESS_ANCHOR_UPSTREAM: witness-anchor:7300
       WITNESS_REBASED_RPC_ORIGIN: ${WITNESS_REBASED_RPC_ORIGIN:-https://api.testnet.iota.cafe}
     ports:
       - "127.0.0.1:${WITNESS_CONSOLE_PORT:-8080}:8080"
       - "[::1]:${WITNESS_CONSOLE_PORT:-8080}:8080"
     depends_on:
       witness-api: {condition: service_healthy}
+      witness-anchor: {condition: service_started}
 
   trust-manager-witness:
     <<: *service

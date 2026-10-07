@@ -1,5 +1,10 @@
-# Witness console: the built Vue app plus a same-origin proxy to the witness-api at /api/.
-# Rendered at container start by the nginx image (envsubst, WITNESS_* variables only).
+# Witness console: the built Vue app plus two same-origin proxies, rendered at container start
+# by the nginx image (envsubst, WITNESS_* variables only):
+#   /api/             -> witness-api (messages, bundles, stream, report pages)
+#   /anchor/resolve/  -> the anchor service's DID resolver, and nothing else of that service:
+#                        its admin endpoints (POST /checkpoints/run) stay unreachable.
+# Proxied answers keep the upstream's own headers; the console's CSP is for the app's pages
+# (the API's HTML report pages carry their own).
 server {
     listen 8080;
     server_name _;
@@ -8,10 +13,11 @@ server {
     charset utf-8;
     client_max_body_size 1m;
 
-    # Look the API up per request (Docker's or the cluster's DNS, from /etc/resolv.conf), so a
-    # restarted API with a new address is found again.
+    # Look the upstreams up per request (Docker's or the cluster's DNS, from /etc/resolv.conf),
+    # so a restarted service with a new address is found again.
     resolver ${NGINX_LOCAL_RESOLVERS} valid=10s ipv6=off;
     set $witness_api http://${WITNESS_API_UPSTREAM};
+    set $witness_anchor http://${WITNESS_ANCHOR_UPSTREAM};
 
     location = /healthz {
         access_log off;
@@ -19,9 +25,8 @@ server {
         return 200 "ok\n";
     }
 
-    # Live event stream (SSE): no buffering, long reads.
+    # Live event stream (SSE): no buffering, long reads, Last-Event-ID passed through.
     location = /api/stream {
-        include /etc/nginx/conf.d/security-headers.inc;
         rewrite ^/api(/.*)$ $1 break;
         proxy_pass $witness_api;
         proxy_http_version 1.1;
@@ -33,7 +38,6 @@ server {
     }
 
     location /api/ {
-        include /etc/nginx/conf.d/security-headers.inc;
         rewrite ^/api(/.*)$ $1 break;
         proxy_pass $witness_api;
         proxy_http_version 1.1;
@@ -41,6 +45,23 @@ server {
         proxy_set_header Host $host;
         proxy_connect_timeout 5s;
         proxy_read_timeout 60s;
+    }
+
+    # Read-only DID resolution for step 4 of the in-browser verifier. GET only, no redirects.
+    location /anchor/resolve/ {
+        limit_except GET { deny all; }
+        rewrite ^/anchor(/resolve/.*)$ $1 break;
+        proxy_pass $witness_anchor;
+        proxy_http_version 1.1;
+        proxy_set_header Connection "";
+        proxy_set_header Host $host;
+        proxy_redirect off;
+        proxy_connect_timeout 5s;
+        proxy_read_timeout 20s;
+    }
+
+    location /anchor/ {
+        return 404;
     }
 
     # Content-hashed build output: cache for good.

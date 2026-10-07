@@ -289,7 +289,7 @@ the base stack, on `iota-net`. HORNET is reached only there, by name: REST
 | `witness-indexer` | same, target `indexer` | INX milestones and cones, verdicts, rules, incidents; **the only validator** (`--validate`) |
 | `witness-api` | same, target `api` | REST API on 7200, also mounted on the node as `/api/witness/v1`; `WITNESS_VALIDATE=0` |
 | `witness-anchor` | `anchor/Dockerfile` | DID resolver for relay and indexer; checkpoints on IOTA Rebased; `witness.anchor` mirror through the relay |
-| `witness-console` | `console/Dockerfile` | the app in live mode behind nginx, `/api/` proxied to the API |
+| `witness-console` | `console/Dockerfile` | the app in live mode behind nginx: `/api/` proxied to the API, only `/anchor/resolve/` to the anchor; trail and writer pinned at build time |
 | `trust-manager-witness` | `deploy/compose/trust-manager-witness/Dockerfile` | the aeriOS Trust Manager signing its own `trust.score` (key `trust-manager`) |
 
 ```bash
