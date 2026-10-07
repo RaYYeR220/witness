@@ -17,7 +17,7 @@ from typing import Any, Literal
 
 from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
 
-from . import canon, ed25519, verdicts
+from . import canon, ed25519, nesting, verdicts
 
 
 @dataclass(frozen=True)
@@ -131,6 +131,20 @@ def is_envelope(obj: Any) -> bool:
         and obj["w"] == 1
         and isinstance(obj.get("sig"), str)
     )
+
+
+def relay_sealed(data: bytes | None, message: Any) -> bool:
+    """True when `data`, the bytes posted for a submission, is a sealed envelope (`enc`, no
+    body) and `message`, what the caller sent, is not an envelope: the relay sealed a legacy
+    message, and its plaintext must not be kept or shown next to the ciphertext. A
+    producer's own sealed envelope is not this case: the message is the envelope."""
+    if data is None or is_envelope(message):
+        return False
+    try:
+        obj = nesting.loads(data.decode("utf-8"))
+    except (ValueError, nesting.JsonTooDeep):
+        return False
+    return is_envelope(obj) and "enc" in obj and "body" not in obj
 
 
 def _malformed(reason: str) -> EnvelopeCheck:

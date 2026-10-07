@@ -183,6 +183,28 @@ async def test_a11_needs_sealed_storage_and_blind_lookup(key):
     assert json.loads(blind.calls[0].request.content) == {"tokens": ["tok"]}
 
 
+@respx.mock
+async def test_a11_is_missed_when_the_submission_record_shows_the_plaintext(key):
+    """Sealed on the Tangle is not enough: the plaintext must not show anywhere in the
+    explorer's answer for the block, the forwarded submission record included."""
+    clock = Clock()
+    plain = {"reportId": "r1", "secret": "s0123456789abcdef"}
+    kp = X25519PrivateKey.generate()
+    enc = S.encrypt_body(plain, [S.Recipient("did:x#kex-1", kp.public_key().public_bytes_raw())])
+    stored = {"w": 1, "tag": "audit.report", "enc": enc}
+    respx.get(f"{API}/messages/{BID}").mock(return_value=httpx.Response(200, json={
+        "verdict": "RELAY_ATTESTED", "indexed": True,
+        "dataHex": "0x" + json.dumps(stored).encode().hex(),
+        "submission": {"message": plain}}))
+    respx.get(f"{API}/alerts").mock(return_value=httpx.Response(200, json={"items": []}))
+    respx.post(f"{API}/lookup/blind").mock(
+        return_value=httpx.Response(200, json={"matches": [{"blockId": BID}]}))
+    r = rec("A11", at=clock.ms, plaintext=plain, blindToken="tok")
+    o = await run_observe(key, "A11", r, clock, by_ie=False)
+    assert not o.detected and o.sealed is False
+    assert o.sealed_why == "plaintext visible in the explorer's answer for the block"
+
+
 # ---------------------------------------------------------------------------- bundles
 
 

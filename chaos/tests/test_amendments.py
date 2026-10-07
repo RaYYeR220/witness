@@ -104,6 +104,17 @@ def test_a11_sealed_check_fails_on_plaintext_or_missing_enc(ctx):
     assert not A.check_sealed("nope", plain)[0]
 
 
+def test_a11_sealed_check_scans_everything_the_explorer_serves(ctx):
+    plain, stored = _sealed_message(ctx)
+    clean = {"verdict": "RELAY_ATTESTED", "content": None,
+             "submission": {"message": None, "dataHex": "0x00"}}
+    assert A.check_sealed(stored, plain, served=clean)[0]
+    leaked = {**clean, "submission": {"message": plain, "dataHex": "0x00"}}
+    ok, why = A.check_sealed(stored, plain, served=leaked)
+    assert not ok and "explorer's answer" in why
+    assert not A.check_sealed(stored, plain, served={**clean, "content": plain})[0]
+
+
 def test_a11_blind_search(ctx):
     ctx.search_key = b"k" * 32
     tok = A.blind_token_for(ctx)

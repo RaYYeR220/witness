@@ -115,6 +115,13 @@ arrive after the trial window are collected once at the end and reported separat
 unscored. A trial the harness could not inject (a service refused it) is reported as not run,
 never counted as detected.
 
+A11's `sealed` assertion reads "no plaintext body" over everything the explorer serves for the
+block: the stored envelope must carry `enc` and no `body`, decrypting it without the recipient
+key must fail, and neither value of the plaintext the harness posted may appear anywhere in
+the `/messages/{id}` answer, the forwarded submission record in it included. (The check
+first looked at the stored envelope only; the expectation is unchanged, the check is
+stricter.)
+
 **Bundle classes.** A07-A10 tamper with a genuine proof bundle and never touch a node. The
 genuine bundle is an anchored block taken from the live explorer (`/proofs/{id}`), with the
 on-chain checkpoint record read through the anchor service; if none is available the captured

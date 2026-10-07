@@ -326,3 +326,52 @@ async def test_lifecycle_pages_validations(client, store):
 
     assert (await client.get(url, params={"cursor": "x"})).status_code == 422
     assert (await client.get(url, params={"limit": 501})).status_code == 422
+
+
+SECRET = {"reportId": "r-41", "secret": "s0123456789abcdef"}
+
+
+def sealed_block():
+    """What the relay posts for a legacy audit.report on an encrypted tag: ciphertext only."""
+    env = {"w": 1, "tag": "audit.report", "iss": "did:iota:testnet:0x01", "kid": "k", "seq": 1,
+           "iat": 1, "nonce": "n", "att": {"mode": "relay", "sub": "anonymous"},
+           "enc": {"protected": "e30", "ciphertext": "AAAA", "recipients": []},
+           "bix": ["tok"], "sig": "x"}
+    return make_block(env, tag="audit.report")
+
+
+def no_plaintext(answer: dict) -> None:
+    text = json.dumps(answer)
+    assert "r-41" not in text and "s0123456789abcdef" not in text, answer
+
+
+async def test_sealed_legacy_plaintext_is_never_served(client, store):
+    from witness_indexer.store import MessageRow, Submission
+
+    # Forwarded by the relay as sealed: nothing to store but the ciphertext.
+    _, bid, data = sealed_block()
+    rec = record("sub-s", bid, data, tag="audit.report", message=None, messageSealed=True)
+    assert (await client.post("/ingest", json=rec, headers=AUTH)).status_code == 202
+    pre = (await client.get(f"/messages/{to_hex(bid)}")).json()
+    assert pre["indexed"] is False and pre.get("content") is None
+    assert pre["submission"].get("message") is None
+    no_plaintext(pre)
+
+    # A row an older relay forwarded with the plaintext still in it: not served, before or
+    # after the block is indexed.
+    _, old, old_data = make_block({**json.loads(data), "seq": 2}, tag="audit.report")
+    await store.put_submission(Submission(
+        sub_id="sub-old", source="mqtt", received_at_ms=1_791_283_570_000, tag="audit.report",
+        message_json=SECRET, data_hex=to_hex(old_data), block_id=old))
+    no_plaintext((await client.get(f"/messages/{to_hex(old)}")).json())
+    await store.put_message(MessageRow(block_id=old, tag="audit.report", kind="audit.report",
+                                       data=old_data, verdict="RELAY_ATTESTED", encrypted=True,
+                                       ms_index=1, ts=1_791_283_571))
+    indexed = (await client.get(f"/messages/{to_hex(old)}")).json()
+    assert indexed["indexed"] is True and indexed["submission"].get("message") is None
+    no_plaintext(indexed)
+
+    # An unsealed submission keeps its message.
+    _, plain, plain_data = make_block()
+    await client.post("/ingest", json=record("sub-p", plain, plain_data), headers=AUTH)
+    assert (await client.get(f"/messages/{to_hex(plain)}")).json()["submission"]["message"] == MSG

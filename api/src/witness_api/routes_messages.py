@@ -132,7 +132,7 @@ async def get_message(block_id: BlockIdPath, svc: Svc) -> m.MessageDetail:
     return m.MessageDetail(
         block_id=hexid, tag=sub["tag"], status=status, received_at_ms=received,
         received_at=views.iso(received), date_ms=received, date=views.iso(received),
-        content=sub["message_json"], links=svc.link.message(hexid), indexed=False,
+        content=views.submitted_message(sub), links=svc.link.message(hexid), indexed=False,
         data_hex=sub["data_hex"], submission=views.submission(sub), checks=checks)
 
 

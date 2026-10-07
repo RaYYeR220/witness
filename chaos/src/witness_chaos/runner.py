@@ -454,7 +454,8 @@ async def snapshot(api: ExplorerApi, cls: dict, rec: InjectionRecord, o: Observa
     if e.get("sealed") and msg is not None:
         stored = stored_envelope(msg)
         if stored is not None:
-            o.sealed, o.sealed_why = attacks.check_sealed(stored, rec.detail.get("plaintext", {}))
+            o.sealed, o.sealed_why = attacks.check_sealed(
+                stored, rec.detail.get("plaintext", {}), served=msg)
     if e.get("blind_search") and o.indexed and rec.detail.get("blindToken"):
         o.blind_search = attacks.check_blind_search(
             await api.blind([rec.detail["blindToken"]]), rec.block_id)

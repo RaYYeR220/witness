@@ -5,6 +5,8 @@ from __future__ import annotations
 from datetime import UTC, datetime
 from typing import Any
 
+from witness_core import envelope
+
 from . import models as m
 
 
@@ -65,12 +67,24 @@ def message(row: dict, link: Linker) -> m.Message:
     )
 
 
+def submitted_message(row: dict) -> Any:
+    """What the caller sent with a submission, unless the relay sealed it: then only the
+    ciphertext it posted is shown (rows stored before the relay stopped forwarding the
+    plaintext included)."""
+    message = row["message_json"]
+    try:
+        data = bytes.fromhex(row["data_hex"][2:]) if row["data_hex"] else None
+    except ValueError:
+        data = None
+    return None if envelope.relay_sealed(data, message) else message
+
+
 def submission(row: dict | None) -> m.Submission | None:
     if row is None:
         return None
     return m.Submission(
         sub_id=row["sub_id"], source=row["source"], received_at_ms=row["received_at_ms"],
-        received_at=iso(row["received_at_ms"]), tag=row["tag"], message=row["message_json"],
+        received_at=iso(row["received_at_ms"]), tag=row["tag"], message=submitted_message(row),
         data_hex=row["data_hex"], hornet_status=row["hornet_status"],
         relay_verdict=row["relay_verdict"], iss=row["iss"], seq=row["seq"])
 

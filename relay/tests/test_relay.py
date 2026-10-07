@@ -460,6 +460,50 @@ async def test_encrypt_tag_seals_legacy_writes_only(make_cfg, hornet, relay, ids
     assert "body" not in attested and decrypt_body(attested["enc"], ids.kex_kid, ids.kex) == SCORE
 
 
+async def test_sealed_legacy_plaintext_never_leaves_the_relay(
+    make_cfg, hornet, relay, ids, helpers, eventually
+):
+    """What the relay seals goes out only sealed: the forwarded record (MQTT and /ingest)
+    carries no `message` for it, accepted or refused, and none of its bytes show the
+    plaintext. A producer's own envelope on the same tag is forwarded as sent."""
+    secret = {"reportId": "r-77", "secret": "s0123456789abcdef"}
+
+    class Encoded(helpers.Recording):
+        def __init__(self):
+            super().__init__()
+            self.raw: list[bytes] = []
+
+        async def send(self, item) -> None:
+            self.raw.append(item.payload)
+            await super().send(item)
+
+    rec = Encoded()
+    cfg = make_cfg(encrypt_tags=["audit.report"])
+    report = _seal(ids.producer, tag="audit.report",
+                   body={"reportHash": "0x" + "ab" * 32, "generatedAt": 1}, seq=1)
+    async with relay(cfg, forwarders=[rec]) as client:
+        ok = await client.post("/upload", params=UPLOAD,
+                               json={"tag": "audit.report", "message": secret})
+        assert ok.status_code == 200
+        big = {**secret, "pad": "x" * 40_000}
+        too_big = await client.post("/upload", params=UPLOAD,
+                                    json={"tag": "audit.report", "message": big})
+        assert too_big.status_code == 413
+        signed = await client.post("/upload", params=UPLOAD,
+                                   json={"tag": "audit.report", "message": report})
+        assert signed.status_code == 200
+        await eventually(lambda: len(rec.records) == 3)
+    sealed_ok, sealed_refused, producer = rec.records
+    for r in (sealed_ok, sealed_refused):
+        assert (r["message"], r["messageSealed"]) == (None, True)
+    assert sealed_ok["dataHex"] is not None and sealed_refused["dataHex"] is None
+    for raw in rec.raw[:2]:
+        assert b"r-77" not in raw and b"s0123456789abcdef" not in raw
+    assert (producer["message"], producer["messageSealed"]) == (report, False)
+    sent = helpers.sent_envelope(hornet.sent[0])
+    assert "body" not in sent and decrypt_body(sent["enc"], ids.kex_kid, ids.kex) == secret
+
+
 async def test_signed_body_that_breaks_the_schema_refused(
     make_cfg, hornet, relay, ids, recorder, eventually
 ):

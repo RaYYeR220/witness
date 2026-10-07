@@ -106,6 +106,31 @@ def test_parse_record_rejects(bad):
         parse_record(bad, source="mqtt")
 
 
+SEALED_DATA = json.dumps({"w": 1, "tag": "audit.report", "sig": "x", "enc": {"ciphertext": "AA"},
+                          "bix": ["tok"]}).encode()
+
+
+def test_sealed_legacy_plaintext_is_never_kept():
+    secret = {"reportId": "r-1", "secret": "s0123456789abcdef"}
+    flagged = parse_record(record(tag="audit.report", message=None, messageSealed=True,
+                                  dataHex="0x" + SEALED_DATA.hex()), source="mqtt")
+    assert flagged.message_json is None
+    # The record says sealed but still carries a message (refused before anything was
+    # posted, so there are no bytes to look at): dropped all the same.
+    refused = parse_record(record(tag="audit.report", message=secret, messageSealed=True,
+                                  dataHex=None, blockId=None), source="http")
+    assert refused.message_json is None
+    # An older relay that still forwards the plaintext next to the sealed bytes.
+    older = parse_record(record(tag="audit.report", message=secret,
+                                dataHex="0x" + SEALED_DATA.hex()), source="mqtt")
+    assert older.message_json is None
+    # A producer's own sealed envelope is not plaintext: kept as sent.
+    own = json.loads(SEALED_DATA)
+    producer = parse_record(record(tag="audit.report", message=own,
+                                   dataHex="0x" + SEALED_DATA.hex()), source="mqtt")
+    assert producer.message_json == own
+
+
 def test_parse_record_rejects_unknown_source():
     with pytest.raises(ValueError):
         parse_record(record(), source="ftp")

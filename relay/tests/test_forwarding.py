@@ -28,6 +28,7 @@ RECORD_KEYS = {
     "receivedAtMs",
     "tag",
     "message",
+    "messageSealed",
     "dataHex",
     "blockId",
     "hornetStatus",

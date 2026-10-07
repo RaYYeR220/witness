@@ -17,7 +17,7 @@ from contextlib import AbstractAsyncContextManager, asynccontextmanager
 from typing import Any, Literal, Protocol
 from urllib.parse import unquote, urlsplit
 
-from witness_core import nesting
+from witness_core import envelope, nesting
 
 from . import events
 from .store import Store, Submission
@@ -103,12 +103,19 @@ def parse_record(obj: dict, *, source: Literal["mqtt", "http"]) -> Submission:
     if not isinstance(relay, dict):
         raise MalformedRecord("relay must be an object")
 
+    # A message the relay sealed is kept only as the ciphertext it posted: never its
+    # plaintext, whether the record says so (messageSealed) or the posted bytes show it.
+    message = obj["message"]
+    if obj.get("messageSealed") is True or envelope.relay_sealed(
+            None if data_hex is None else bytes.fromhex(data_hex[2:]), message):
+        message = None
+
     return Submission(
         sub_id=sub_id,
         source=source,
         received_at_ms=received,
         tag=tag,
-        message_json=obj["message"],
+        message_json=message,
         data_hex=data_hex,
         block_id=block_id,
         hornet_status=_int(obj["hornetStatus"], "hornetStatus", optional=True),

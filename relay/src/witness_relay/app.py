@@ -86,6 +86,9 @@ class Submission:
     data: bytes | None = None
     block_id: str | None = None
     hornet_status: int | None = None
+    # A legacy message on an encrypted tag: its plaintext leaves the relay only sealed, so
+    # the forwarded record carries no `message` (whether or not the upload succeeded).
+    sealed: bool = False
 
     def apply(self, d: Decision) -> None:
         self.verdict, self.iss, self.seq = d.verdict, d.iss, d.seq
@@ -95,7 +98,8 @@ class Submission:
             "subId": self.sub_id,
             "receivedAtMs": self.received_at_ms,
             "tag": self.tag,
-            "message": self.message,
+            "message": None if self.sealed else self.message,
+            "messageSealed": self.sealed,
             "dataHex": "0x" + self.data.hex() if self.data is not None else None,
             "blockId": self.block_id,
             "hornetStatus": self.hornet_status,
@@ -451,7 +455,8 @@ def create_app(cfg: RelayConfig, *, forwarders: list[Forwarder] | None = None) -
         if len(tag.encode("utf-8")) > TAG_MAX_BYTES:
             return JSONResponse({"error": f"tag exceeds {TAG_MAX_BYTES} bytes"}, status_code=400)
 
-        sub = Submission(str(uuid.uuid4()), received_at, tag, message)
+        sealed = tag in relay.cfg.encrypt_tags and not envelope.is_envelope(message)
+        sub = Submission(str(uuid.uuid4()), received_at, tag, message, sealed=sealed)
         try:
             return await _handle(relay, request, node, base_url, sub)
         finally:

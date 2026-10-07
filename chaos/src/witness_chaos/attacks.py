@@ -561,9 +561,11 @@ def build_a11(ctx: AttackContext) -> dict:
     return {"reportId": str(uuid.uuid4()), "secret": f"s{ctx.rng.getrandbits(64):016x}"}
 
 
-def check_sealed(stored: Any, plaintext: dict) -> tuple[bool, str]:
+def check_sealed(stored: Any, plaintext: dict, served: Any = None) -> tuple[bool, str]:
     """A11 `sealed`: the stored envelope has `enc` and no `body`, none of the plaintext is
-    visible in it, and decrypting without the recipient key fails."""
+    visible in it nor anywhere in what the explorer serves for the block (`served`: the
+    whole /messages/{id} answer, the submission record included), and decrypting without
+    the recipient key fails."""
     if not isinstance(stored, dict) or not isinstance(stored.get("enc"), dict):
         return False, "stored message has no enc"
     if "body" in stored:
@@ -571,6 +573,10 @@ def check_sealed(stored: Any, plaintext: dict) -> tuple[bool, str]:
     text = json.dumps(stored)
     if any(str(v) in text for v in plaintext.values()):
         return False, "plaintext visible in the stored message"
+    if served is not None:
+        shown = json.dumps(served)
+        if any(str(v) in shown for v in plaintext.values()):
+            return False, "plaintext visible in the explorer's answer for the block"
     try:
         sealed.decrypt_body(stored["enc"], "did:none#kex-1", X25519PrivateKey.generate())
     except (sealed.NotARecipient, sealed.DecryptError):
