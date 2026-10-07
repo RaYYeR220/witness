@@ -27,15 +27,33 @@ export interface TrustedLookups {
   recordedDids: boolean;
 }
 
-async function getJson(url: string, fetchImpl: typeof fetch): Promise<unknown> {
-  const res = await fetchImpl(url, { headers: { accept: "application/json" } });
-  if (res.status === 404) return null;
-  if (!res.ok) throw new Error(`${url} answered ${res.status}`);
+/** How long the issuer's DID document may take before step 4 is left unresolved. */
+export const RESOLVE_TIMEOUT_MS = 15_000;
+
+/**
+ * GET a JSON document: null on 404; throws on any other failure, a redirect
+ * or the timeout. The ladder reads a throw as "signer identity not resolved"
+ * (step 4 not evaluated, PARTIAL), never as a pass.
+ */
+async function getJson(url: string, fetchImpl: typeof fetch, timeoutMs: number): Promise<unknown> {
+  const res = await fetchImpl(url, { headers: { accept: "application/json" }, redirect: "error", signal: AbortSignal.timeout(timeoutMs) });
+  if (res.status === 404) {
+    void res.body?.cancel().catch(() => undefined);
+    return null;
+  }
+  if (!res.ok) {
+    void res.body?.cancel().catch(() => undefined);
+    throw new Error(`${url} answered ${res.status}`);
+  }
   return res.json();
 }
 
-export function createLookups(env: Record<string, string | undefined> = import.meta.env, fetchImpl?: typeof fetch): TrustedLookups {
-  const f = fetchImpl ?? ((input: RequestInfo | URL, init?: RequestInit) => globalThis.fetch(input, init));
+export function createLookups(
+  env: Record<string, string | undefined> = import.meta.env,
+  fetchImpl?: typeof fetch,
+  { timeoutMs = RESOLVE_TIMEOUT_MS }: { timeoutMs?: number } = {},
+): TrustedLookups {
+  const f: typeof fetch = fetchImpl ?? ((input, init) => globalThis.fetch(input, init));
   const anchorSource = PINNED.rebasedRpc
     ? `the pinned Audit Trail, read from IOTA Rebased ${PINNED.rebasedNetwork ?? ""} at ${PINNED.rebasedRpc}`.replace("  ", " ")
     : "nowhere: the console pins no Rebased RPC";
@@ -43,18 +61,18 @@ export function createLookups(env: Record<string, string | undefined> = import.m
     const root = (env.VITE_REPLAY_ROOT ?? `${import.meta.env.BASE_URL}replay/`).replace(/\/?$/, "/");
     return {
       // file names as scripts/record-replay.mjs writes them: anything but [A-Za-z0-9._-] becomes "_"
-      resolveDid: (did) => getJson(`${root}dids/${did.replace(/[^A-Za-z0-9._-]/g, "_")}.json`, f),
+      resolveDid: (did) => getJson(`${root}dids/${did.replace(/[^A-Za-z0-9._-]/g, "_")}.json`, f, timeoutMs),
       fetchAnchorRecord: anchorFetcher(undefined, fetchImpl),
       didSource: "copies recorded from the anchor service's resolver with this snapshot (not a live read)",
       anchorSource,
       recordedDids: true,
     };
   }
-  const base = (env.VITE_RESOLVER_URL ?? "/anchor").replace(/\/+$/, "");
+  const resolver = (env.VITE_RESOLVER_URL ?? "/anchor").replace(/\/+$/, "");
   return {
-    resolveDid: (did) => getJson(`${base}/resolve/${encodeURIComponent(did)}`, f),
+    resolveDid: (did) => getJson(`${resolver}/resolve/${encodeURIComponent(did)}`, f, timeoutMs),
     fetchAnchorRecord: anchorFetcher(undefined, fetchImpl),
-    didSource: `the anchor service's DID resolver at ${base}, which reads did:iota from IOTA Rebased`,
+    didSource: `the anchor service's DID resolver at ${resolver}/resolve`,
     anchorSource,
     recordedDids: false,
   };
