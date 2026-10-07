@@ -54,7 +54,7 @@ class Identity:
 class AttackContext:
     # Endpoints.
     hornet_url: str = "http://127.0.0.1:14265"
-    relay_url: str = "http://127.0.0.1:8080"
+    relay_url: str = "http://127.0.0.1:5557"
     relay_node: str = "default"
     relay_token: str | None = None
     ingest_url: str = "http://127.0.0.1:8000/ingest"
