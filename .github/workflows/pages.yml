@@ -1,0 +1,57 @@
+name: pages
+# Publishes the replay console to GitHub Pages: the console built with VITE_MODE=replay and the
+# snapshot committed in console/public/replay, as static files with no backend. Proofs are still
+# checked in the visitor's browser, and step 5 reads IOTA Rebased testnet live.
+#
+# Run by hand only (Actions > pages > Run workflow), after Pages is enabled for the repository
+# with "GitHub Actions" as its source. Nothing here runs on a push.
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: pnpm/action-setup@ea17c68df8912ef543352723c149a84f56e3d413 # v6.1.0
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: 22
+          cache: pnpm
+      - name: snapshot present
+        run: test -f console/public/replay/manifest.json
+      - run: pnpm install --frozen-lockfile --filter "console..."
+      - run: pnpm --filter @witness/verify build
+      - run: pnpm --filter console typecheck
+      # A project site is served under /<repository>/. The build adds a 404.html that is the app,
+      # so a deep link such as /<repository>/m/0x… opens its screen.
+      - name: build the replay console
+        run: pnpm --filter console exec vite build --mode replay --base "/${REPO_NAME}/"
+        env:
+          VITE_MODE: replay
+          REPO_NAME: ${{ github.event.repository.name }}
+      - uses: actions/upload-pages-artifact@fc324d3547104276b827a68afc52ff2a11cc49c9 # v5.0.0
+        with:
+          path: console/dist
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      pages: write
+      id-token: write
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - id: deployment
+        uses: actions/deploy-pages@368f82528645a54fb793d4d04e342629a3f51346 # v5.0.1
