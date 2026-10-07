@@ -212,7 +212,10 @@ services:
     volumes:
       - ${WITNESS_POLICY_FILE:-../policy.json}:/etc/witness/policy.json:ro
     depends_on:
-      # The anchor resolves signing keys; the indexer waits (and retries) while it is down.
+      # The anchor resolves signing keys; the indexer retries while it cannot. Started, not
+      # healthy: the anchor's health check reports its anchoring loop, which turns unhealthy
+      # whenever no window has been anchored for a while (for instance while the indexer is
+      # down and no milestones reach the API), and the resolver works regardless.
       witness-anchor: {condition: service_started}
 
   witness-console:

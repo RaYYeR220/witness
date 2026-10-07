@@ -1,4 +1,7 @@
 {{- $c := dict "ctx" . "component" "api" "values" .Values.api }}
+{{- if gt (int .Values.api.replicaCount) 1 }}
+{{- fail "api.replicaCount must be 1: one API writes signed audit reports (their sequence numbers come from one table)" }}
+{{- end }}
 apiVersion: apps/v1
 kind: Deployment
 metadata:

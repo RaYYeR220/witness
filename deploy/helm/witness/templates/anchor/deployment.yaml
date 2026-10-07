@@ -1,4 +1,7 @@
 {{- $c := dict "ctx" . "component" "anchor" "values" .Values.anchor }}
+{{- if gt (int .Values.anchor.replicaCount) 1 }}
+{{- fail "anchor.replicaCount must be 1: one anchoring loop per trail and wallet (its state volume is ReadWriteOnce)" }}
+{{- end }}
 apiVersion: apps/v1
 kind: Deployment
 metadata:

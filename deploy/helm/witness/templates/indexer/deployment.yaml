@@ -1,4 +1,7 @@
 {{- $c := dict "ctx" . "component" "indexer" "values" .Values.indexer }}
+{{- if gt (int .Values.indexer.replicaCount) 1 }}
+{{- fail "indexer.replicaCount must be 1: one indexer owns the cursor and the validation queue" }}
+{{- end }}
 apiVersion: apps/v1
 kind: Deployment
 metadata:
