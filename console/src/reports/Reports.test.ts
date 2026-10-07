@@ -66,6 +66,7 @@ function deps(b: { id: string; raw: Uint8Array } | string, verify?: CheckDeps["v
       return bundleOf(b);
     },
     verify: verify ?? ((text) => verifyBundleText(text, PINS, {})),
+    reportSigner: REPORT.iss,
   };
 }
 
@@ -112,10 +113,11 @@ describe("checkReport", () => {
   };
   const PASS = async () => ladderOf([true, true, true, true, null]);
 
-  it("is verified only when the block passes checks 1 to 4 and every hash agrees", async () => {
+  it("is verified only when the block passes checks 1 to 4, every hash agrees and the pinned signer signed it", async () => {
     const b = block(envelope(REPORT.reportHash));
     const c = await checkReport(anchoredIn(b), deps(b, PASS));
     expect(c.state).toBe("verified");
+    expect(c.signer).toBe(REPORT.iss);
     expect([c.browserHash, c.ledgerHash, c.explorerHash]).toEqual([REPORT.reportHash, REPORT.reportHash, REPORT.reportHash]);
     expect(c.rebased).toBeNull();
   });
@@ -138,11 +140,27 @@ describe("checkReport", () => {
     expect(c.reasons).toEqual(["the audit.report on the ledger names another hash than the report served"]);
   });
 
+  it("is a mismatch when someone else than the pinned report signer signed the audit.report", async () => {
+    const other = "did:iota:testnet:0x" + "77".repeat(32);
+    const b = block({ ...envelope(REPORT.reportHash), iss: other, kid: `${other}#sig-1` });
+    const c = await checkReport(anchoredIn(b), deps(b, PASS));
+    expect(c.state).toBe("mismatch");
+    expect(c.reasons).toEqual([`the audit.report was signed by ${other}, not by the report signer pinned in this console`]);
+    expect(c.signer).toBeNull();
+  });
+
+  it("is not checked when the console pins no report signer", async () => {
+    const b = block(envelope(REPORT.reportHash));
+    const c = await checkReport(anchoredIn(b), { ...deps(b, PASS), reportSigner: null });
+    expect(c.state).toBe("unchecked");
+    expect(c.reasons).toEqual(["this console pins no report signer, so it cannot tell whose audit.report counts"]);
+  });
+
   it("is a mismatch when the explorer serves the proof of another block", async () => {
     const named = block(envelope(REPORT.reportHash));
     const served = block(envelope(REPORT.reportHash), "audit.report ");
     const verify = vi.fn(PASS);
-    const c = await checkReport(anchoredIn(named), { config: PINS, bundle: async () => bundleOf(served), verify });
+    const c = await checkReport(anchoredIn(named), { config: PINS, bundle: async () => bundleOf(served), verify, reportSigner: REPORT.iss });
     expect(c.state).toBe("mismatch");
     expect(c.reasons[0]).toContain("the explorer served the proof of another block");
     expect(verify).not.toHaveBeenCalled();
@@ -163,6 +181,7 @@ describe("checkReport", () => {
       config: w.config,
       bundle: async () => w.text,
       verify: (text) => verifyBundleText(text, w.config, w.lookups),
+      reportSigner: REPORT.iss,
     });
     expect(c.ladder?.overall).toBe("VALID");
     expect(c.state).toBe("mismatch");
@@ -241,6 +260,7 @@ describe("Reports screen", () => {
     expect(w.find(".detail .anch").text()).toBe("Anchored, checked in your browser");
     expect(w.findAll(".hashes .x-cmp").map((c) => c.attributes("data-c"))).toEqual(["same", "same"]);
     expect(w.find('.x-note[data-tone="ok"]').text()).toContain("The ledger vouches for this report");
+    expect(w.find('.x-note[data-tone="ok"]').text()).toContain("the report signer pinned in this console (checked in your browser)");
     // the list only repeats the explorer's claim
     expect(w.find(".list .anch").text()).toBe("Anchored, per the explorer");
     // the HTML page is a rendering, opened on its own, never embedded

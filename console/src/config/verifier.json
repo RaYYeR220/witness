@@ -8,7 +8,8 @@
     "trailId": "ANCHOR_TRAIL_ID (null until the anchor trail exists)",
     "rebasedRpc": "WITNESS_REBASED_RPC, else the public fullnode of rebasedNetwork",
     "auditTrailPackage": "IOTA_AUDIT_TRAIL_ORIGINAL_PKG_ID, else the Audit Trail package of rebasedNetwork (original id, as Move types name it)",
-    "anchorWriter": "ANCHOR_WRITER_ADDRESS, else deploy/identity/testnet.json: the domain DID's controller address"
+    "anchorWriter": "ANCHOR_WRITER_ADDRESS, else deploy/identity/testnet.json: the domain DID's controller address",
+    "reportSigner": "REPORT_SIGNER_DID, else deploy/identity/testnet.json: domain (the DID that signs audit.report)"
   },
   "network": "private_tangle1",
   "trustedCoordinatorKeys": [
@@ -20,5 +21,6 @@
   "trailId": "0x0715cfc56779f78cea48a3afb75dd44d7b9694008286acdb27a16f2c6e3ab313",
   "rebasedRpc": "https://api.testnet.iota.cafe",
   "auditTrailPackage": "0x51368931f28620c7f65b4ae2c5167b42390e69729357a6347be378755b46e7df",
-  "anchorWriter": "0xd40892daf5c81e3d67ffe9806575970b973ecf6625eb8a88562afae0d8c940c8"
+  "anchorWriter": "0xd40892daf5c81e3d67ffe9806575970b973ecf6625eb8a88562afae0d8c940c8",
+  "reportSigner": "did:iota:testnet:0x6b9a693ebf2ac6fb771a75d25b1284ba75aeb0ae16618eaf5d41d24828a6f7a2"
 }

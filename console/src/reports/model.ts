@@ -100,6 +100,8 @@ export interface ReportCheck {
   ledgerHash: string | null;
   iss: string | null;
   ladder: Ladder | null;
+  /** The pinned report signer the block's (step 4 checked) issuer matched, once verified. */
+  signer: string | null;
   /** Step 5: the block's milestone is in a checkpoint on IOTA Rebased (null: not run). */
   rebased: boolean | null;
   /** Why it is a mismatch, or why it could not be checked. */
@@ -113,13 +115,25 @@ export interface CheckDeps {
   bundle: (blockId: string) => Promise<string>;
   /** Runs the five-step ladder on the bundle text with the pinned config; null when it could not run. */
   verify: (bundleText: string) => Promise<Ladder | null>;
+  /** The DID pinned as the one that signs audit.report messages; null: none pinned, so never verified. */
+  reportSigner: string | null;
 }
 
 export async function checkReport(doc: ReportDoc, deps: CheckDeps): Promise<ReportCheck> {
   const r = doc.result;
   const explorerHash = String(r.reportHash).toLowerCase();
   const mine = recomputeReportHash(doc.text);
-  const out: ReportCheck = { state: "unchecked", explorerHash, browserHash: mine.hash, ledgerHash: null, iss: null, ladder: null, rebased: null, reasons: [] };
+  const out: ReportCheck = {
+    state: "unchecked",
+    explorerHash,
+    browserHash: mine.hash,
+    ledgerHash: null,
+    iss: null,
+    ladder: null,
+    signer: null,
+    rebased: null,
+    reasons: [],
+  };
   const bad: string[] = [];
   if (mine.hash === null) bad.push(`your browser cannot compute the report's hash: ${mine.problem}`);
   else if (mine.hash !== explorerHash) bad.push("the report the explorer served does not hash to the reportHash it states");
@@ -154,8 +168,14 @@ export async function checkReport(doc: ReportDoc, deps: CheckDeps): Promise<Repo
   if (msg.tag !== AUDIT_TAG) return finish("mismatch", [`the block is tagged ${JSON.stringify(msg.tag)}, not ${AUDIT_TAG}`]);
   if (msg.hash === null) return finish("mismatch", [msg.problem ?? "the block's message names no report hash"]);
   if (mine.hash !== null && msg.hash !== mine.hash) return finish("mismatch", ["the audit.report on the ledger names another hash than the report served"]);
+  // Check 4 proves who signed it; the pin says who may: only the pinned report signer anchors a report.
+  if (deps.reportSigner && msg.iss !== deps.reportSigner) {
+    return finish("mismatch", [`the audit.report was signed by ${msg.iss ?? "no one"}, not by the report signer pinned in this console`]);
+  }
   const open = steps.slice(0, 4).filter((s) => s.ok !== true);
   if (open.length) return finish("unchecked", open.map((s) => `check ${steps.indexOf(s) + 1} could not be evaluated: ${s.detail}`));
+  if (!deps.reportSigner) return finish("unchecked", ["this console pins no report signer, so it cannot tell whose audit.report counts"]);
+  out.signer = deps.reportSigner;
   return finish("verified", []);
 }
 

@@ -28,6 +28,8 @@
  * else the network's Audit Trail package as Move types name it) and
  * anchorWriter (ANCHOR_WRITER_ADDRESS, else the address that controls the
  * domain DID in the identity file, the wallet the anchor writes with).
+ * reportSigner (REPORT_SIGNER_DID, else the identity file's domain DID) is the
+ * DID whose audit.report messages the Reports screen accepts as anchoring a report.
  * Without the protocol config the committed Tangle pins are kept; without
  * ANCHOR_TRAIL_ID the committed trail is kept.
  *
@@ -297,6 +299,16 @@ export function rebasedPins(identity, env = {}) {
   return { rebasedRpc: rpc, auditTrailPackage: pkg, anchorWriter: writer };
 }
 
+const DID_IOTA = /^did:iota:(?:[a-z0-9]+:)?0x[0-9a-f]{64}$/;
+
+/** The DID that signs audit.report messages: REPORT_SIGNER_DID, else the domain DID of the identity file. */
+export function reportSigner(identity, env = {}) {
+  const did = env.REPORT_SIGNER_DID ?? identity?.domain ?? null;
+  if (did === null) return null;
+  if (typeof did !== "string" || !DID_IOTA.test(did)) throw new Error(`bad report signer DID ${did}`);
+  return did;
+}
+
 const SOURCES = {
   network: "private Tangle protocol config: protocol.targetNetworkName",
   trustedCoordinatorKeys: "private Tangle protocol config: protocol.publicKeyRanges[].key",
@@ -306,6 +318,7 @@ const SOURCES = {
   rebasedRpc: "WITNESS_REBASED_RPC, else the public fullnode of rebasedNetwork",
   auditTrailPackage: "IOTA_AUDIT_TRAIL_ORIGINAL_PKG_ID, else the Audit Trail package of rebasedNetwork (original id, as Move types name it)",
   anchorWriter: "ANCHOR_WRITER_ADDRESS, else deploy/identity/testnet.json: the domain DID's controller address",
+  reportSigner: "REPORT_SIGNER_DID, else deploy/identity/testnet.json: domain (the DID that signs audit.report)",
 };
 
 const ABOUT =
@@ -343,6 +356,7 @@ export function makeVerifierConfig({ protocol, tangle, identity, trailId, env = 
     rebasedNetwork: identity.network,
     trailId,
     ...rebasedPins(identity, env),
+    reportSigner: reportSigner(identity, env),
   };
 }
 

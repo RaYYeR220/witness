@@ -23,6 +23,8 @@ export interface PinnedConfig {
   readonly rebasedRpc: string | null;
   readonly auditTrailPackage: string | null;
   readonly anchorWriter: string | null;
+  /** The DID whose audit.report messages anchor a report (Reports screen). */
+  readonly reportSigner: string | null;
 }
 
 const str = (v: unknown): string | null => (typeof v === "string" && v ? v : null);
@@ -36,6 +38,7 @@ export const PINNED: PinnedConfig = Object.freeze({
   rebasedRpc: str((pinned as { rebasedRpc?: unknown }).rebasedRpc),
   auditTrailPackage: str((pinned as { auditTrailPackage?: unknown }).auditTrailPackage),
   anchorWriter: str((pinned as { anchorWriter?: unknown }).anchorWriter),
+  reportSigner: str((pinned as { reportSigner?: unknown }).reportSigner),
 });
 
 /** A fresh copy of the pinned config for one verification run. */

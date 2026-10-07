@@ -177,6 +177,15 @@ describe("pinned verifier config", () => {
     expect(recorded.record.result.data.content.fields.value.fields.value.fields.added_by).toBe(pinned.anchorWriter);
   });
 
+  it("pins the DID that signs audit reports: the domain DID, unless REPORT_SIGNER_DID names another", () => {
+    expect(pinned.reportSigner).toBe(identity.domain);
+    const tangle = { network: "n", trustedCoordinatorKeys: coordinator.publicKeys, threshold: 1 };
+    const other = "did:iota:testnet:0x" + "ab".repeat(32);
+    expect(makeVerifierConfig({ tangle, identity, trailId: null, env: { REPORT_SIGNER_DID: other } }).reportSigner).toBe(other);
+    expect(makeVerifierConfig({ tangle, identity: { network: "testnet" }, trailId: null }).reportSigner).toBeNull();
+    expect(() => makeVerifierConfig({ tangle, identity, trailId: null, env: { REPORT_SIGNER_DID: "did:key:z6Mk" } })).toThrow(/report signer/);
+  });
+
   it("takes the Rebased pins from the environment first, and keeps committed Tangle pins without a protocol config", () => {
     const tangle = { network: "n", trustedCoordinatorKeys: coordinator.publicKeys, threshold: 1 };
     const env = {

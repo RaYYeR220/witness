@@ -10,7 +10,7 @@ import JsonText from "@/console/JsonText.vue";
 import LadderPanel from "@/console/LadderPanel.vue";
 import { checkReport, reportTotals, type ReportCheck } from "@/reports/model";
 import { createLadder, resetLadder, runLadder } from "@/verify/ladder";
-import { anchorPinned, pinnedConfig } from "@/verify/pinned";
+import { anchorPinned, PINNED, pinnedConfig } from "@/verify/pinned";
 
 /**
  * Reports: signed audit reports, newest first. The list says what the
@@ -83,6 +83,7 @@ async function open(hash: string) {
       config: cfg,
       bundle: (blockId) => data.bundle(blockId),
       verify: (text) => runLadder(ladder, text, { config: cfg, resolveDid: lookups.resolveDid, fetchAnchorRecord: lookups.fetchAnchorRecord }),
+      reportSigner: PINNED.reportSigner,
     });
     if (g === generation) check.value = result;
   } catch (e) {
@@ -187,7 +188,8 @@ function download() {
 
             <p v-if="state === 'verified'" class="x-note" data-tone="ok">
               <b>The ledger vouches for this report.</b> Its audit.report block passed checks 1 to 4 in your browser (its bytes, its milestone, the
-              pinned coordinators' signatures and its sender's signature) and names the hash your browser computed from the report served.
+              pinned coordinators' signatures and its sender's signature), names the hash your browser computed from the report served, and is
+              signed by <span class="mono">{{ shortDid(check?.signer) }}</span>, the report signer pinned in this console (checked in your browser).
               <template v-if="check?.rebased === true">Its milestone is also in a checkpoint on IOTA Rebased.</template>
               <template v-else>Its milestone is not in a checkpoint on IOTA Rebased yet.</template>
             </p>
