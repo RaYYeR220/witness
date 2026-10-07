@@ -47,6 +47,13 @@ describe("runLadder over the landing sample", () => {
     expect(stepValue(state.steps[3]!)).toBe("signature rejected");
   });
 
+  it("names the signing key in a few characters, a did:key fragment included", () => {
+    const step = (detail: string) => ({ name: "envelope" as const, status: "pass" as const, detail });
+    expect(stepValue(step("PRODUCER_SIGNED by did:iota:testnet:0xab#sig-1"))).toBe("Ed25519, key #sig-1");
+    const key = "z6MkmtWtY63GQVBrpMyRJWEzsnxfsGkemu6CtMDwGTv4RYj2";
+    expect(stepValue(step(`PRODUCER_SIGNED by did:key:${key}#${key}`))).toBe("Ed25519, key #z6MkmtW…RYj2");
+  });
+
   it("turns step 1 red when one byte of the block is flipped", async () => {
     const raw = rawBytes("sample");
     const i = scoreDigitIndex(raw, blockFields(raw));

@@ -17,6 +17,7 @@ export async function mountScreen(view: Component, opts: { path: string; data: W
       { path: "/live", name: "live", component: Stub },
       { path: "/search", name: "search", component: Stub },
       { path: "/m/:blockId", name: "verify", component: Stub },
+      { path: "/verify/forged-milestone", name: "forged", component: Stub },
       { path: "/ie/:id?", name: "lineage", component: Stub },
       { path: "/integrity", name: "integrity", component: Stub },
       { path: "/flows", name: "flows", component: Stub },

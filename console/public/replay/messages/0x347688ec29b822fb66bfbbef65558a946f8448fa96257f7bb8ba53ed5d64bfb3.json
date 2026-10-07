@@ -1,0 +1,63 @@
+{
+ "blockId": "0x347688ec29b822fb66bfbbef65558a946f8448fa96257f7bb8ba53ed5d64bfb3",
+ "tag": "trust.score",
+ "kind": "trust.score",
+ "verdict": "PRODUCER_SIGNED",
+ "status": "SHADOW",
+ "ieId": "ChaosDomain:c464c324c985",
+ "iss": "did:iota:testnet:0x15eb8c4d90fa4fff1d49f3ae8b1676a61e09c883303acd383cbfaacb538db9ba",
+ "kid": "did:iota:testnet:0x15eb8c4d90fa4fff1d49f3ae8b1676a61e09c883303acd383cbfaacb538db9ba#sig-1",
+ "seq": 1791332368176,
+ "prev": null,
+ "corr": null,
+ "nonce": "iKur0-hiI1wZ2pEgBsxPrQ",
+ "encrypted": false,
+ "msIndex": 1693,
+ "wfIndex": 2,
+ "issuedAtMs": 1791332368176,
+ "issuedAt": "2026-10-07T00:19:28.176Z",
+ "milestoneAtMs": 1791332369000,
+ "milestoneAt": "2026-10-07T00:19:29.000Z",
+ "receivedAtMs": null,
+ "receivedAt": null,
+ "confirmedAtMs": 1791332369000,
+ "confirmedAt": "2026-10-07T00:19:29.000Z",
+ "dateMs": 1791332369000,
+ "date": "2026-10-07T00:19:29.000Z",
+ "canonHash": "0xf4e78e21c91f113fcea52b7b274031bb1639c529e8f7ed62c761f1ebc3bb3198",
+ "json": {
+  "id": "ChaosDomain:c464c324c985",
+  "score": 0.5
+ },
+ "links": {
+  "self": "/messages/0x347688ec29b822fb66bfbbef65558a946f8448fa96257f7bb8ba53ed5d64bfb3",
+  "lifecycle": "/messages/0x347688ec29b822fb66bfbbef65558a946f8448fa96257f7bb8ba53ed5d64bfb3/lifecycle",
+  "proof": "/proofs/0x347688ec29b822fb66bfbbef65558a946f8448fa96257f7bb8ba53ed5d64bfb3"
+ },
+ "indexed": true,
+ "dataHex": "0x7b22617474223a7b226d6f6465223a2270726f6475636572227d2c22626f6479223a7b226964223a224368616f73446f6d61696e3a633436346333323463393835222c2273636f7265223a302e357d2c22696174223a313739313333323336383137362c22697373223a226469643a696f74613a746573746e65743a307831356562386334643930666134666666316434396633616538623136373661363165303963383833333033616364333833636266616163623533386462396261222c226b6964223a226469643a696f74613a746573746e65743a307831356562386334643930666134666666316434396633616538623136373661363165303963383833333033616364333833636266616163623533386462396261237369672d31222c226e6f6e6365223a22694b7572302d68694931775a32704567427378507251222c22736571223a313739313333323336383137362c22736967223a22736d65514248354e794b75547864624475793673316a63462d706c4869326c4338614b4b5063684c755770317a5f484258384a6b6c496863596a727361354934386870357636616d50345554624f59786170314c4151222c22746167223a2274727573742e73636f7265222c2277223a317d",
+ "submission": null,
+ "checks": {
+  "solid": {
+   "check": "c",
+   "via": "GET /api/core/v2/blocks/{blockId}/metadata",
+   "ok": null,
+   "isSolid": null,
+   "referencedByMilestoneIndex": null,
+   "ledgerInclusionState": null,
+   "checkedAtMs": null,
+   "checkedAt": null,
+   "detail": "not checked yet"
+  },
+  "content": {
+   "check": "d",
+   "via": "GET /api/core/v2/blocks/{blockId}",
+   "ok": null,
+   "result": null,
+   "diff": null,
+   "checkedAtMs": null,
+   "checkedAt": null,
+   "detail": "not checked yet"
+  }
+ }
+}

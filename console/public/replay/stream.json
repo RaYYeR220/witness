@@ -1,0 +1,6417 @@
+[
+ {
+  "id": 21174,
+  "type": "lifecycle",
+  "atMs": 1791355401704,
+  "at": "2026-10-07T06:43:21.704Z",
+  "payload": {
+   "atMs": 1791355401702,
+   "subId": "67ac4528-6fc4-460c-91fc-502360e2dd94",
+   "detail": {
+    "via": "GET /api/core/v2/blocks/{blockId}/metadata",
+    "whiteFlagIndex": 1,
+    "ledgerInclusionState": "noTransaction",
+    "referencedByMilestoneIndex": 6299
+   },
+   "status": "CONFIRMED",
+   "blockId": "0x0ccaaabe6666c7b4736245978b4219f147e1b5bf5b27665b2f69270ccc964078"
+  }
+ },
+ {
+  "id": 21175,
+  "type": "lifecycle",
+  "atMs": 1791355401715,
+  "at": "2026-10-07T06:43:21.715Z",
+  "payload": {
+   "atMs": 1791355401713,
+   "subId": "67ac4528-6fc4-460c-91fc-502360e2dd94",
+   "detail": {
+    "via": "GET /api/core/v2/blocks/{blockId}",
+    "bytes": 695
+   },
+   "status": "CONTENT_VERIFIED",
+   "blockId": "0x0ccaaabe6666c7b4736245978b4219f147e1b5bf5b27665b2f69270ccc964078"
+  }
+ },
+ {
+  "id": 21176,
+  "type": "lifecycle",
+  "atMs": 1791355401938,
+  "at": "2026-10-07T06:43:21.938Z",
+  "payload": {
+   "atMs": 1791355401936,
+   "subId": "3f9f8b71-266f-48da-b22b-cbbf30d21e58",
+   "detail": {
+    "via": "GET /api/core/v2/blocks/{blockId}/metadata",
+    "whiteFlagIndex": 2,
+    "ledgerInclusionState": "noTransaction",
+    "referencedByMilestoneIndex": 6299
+   },
+   "status": "CONFIRMED",
+   "blockId": "0xd36fd2b041fe6c30669a03b825ca3310e694e34f4a7d0b69881a10aa98e491a8"
+  }
+ },
+ {
+  "id": 21177,
+  "type": "lifecycle",
+  "atMs": 1791355401948,
+  "at": "2026-10-07T06:43:21.948Z",
+  "payload": {
+   "atMs": 1791355401945,
+   "subId": "3f9f8b71-266f-48da-b22b-cbbf30d21e58",
+   "detail": {
+    "via": "GET /api/core/v2/blocks/{blockId}",
+    "bytes": 743
+   },
+   "status": "CONTENT_VERIFIED",
+   "blockId": "0xd36fd2b041fe6c30669a03b825ca3310e694e34f4a7d0b69881a10aa98e491a8"
+  }
+ },
+ {
+  "id": 21178,
+  "type": "milestone",
+  "atMs": 1791355403064,
+  "at": "2026-10-07T06:43:23.064Z",
+  "payload": {
+   "id": "0x4a6ef2e1d2a6b4d299f383057d89f6f9288642287e686bccf9e6ec3c81e0e0b4",
+   "ts": 1791355403,
+   "index": 6300,
+   "blocks": 1,
+   "messages": 0,
+   "newMessages": 0
+  }
+ },
+ {
+  "id": 21179,
+  "type": "milestone",
+  "atMs": 1791355408051,
+  "at": "2026-10-07T06:43:28.051Z",
+  "payload": {
+   "id": "0x857f63a5e1d824e963ab0b3bc7a3bab4e5118ac7d7992e4a4233b88e5abc89e8",
+   "ts": 1791355408,
+   "index": 6301,
+   "blocks": 1,
+   "messages": 0,
+   "newMessages": 0
+  }
+ },
+ {
+  "id": 21180,
+  "type": "milestone",
+  "atMs": 1791355413050,
+  "at": "2026-10-07T06:43:33.050Z",
+  "payload": {
+   "id": "0xb417eac9bbd19e497548db53016e09adb19250e6945f660c6e42d79a47e98609",
+   "ts": 1791355413,
+   "index": 6302,
+   "blocks": 1,
+   "messages": 0,
+   "newMessages": 0
+  }
+ },
+ {
+  "id": 21181,
+  "type": "milestone",
+  "atMs": 1791355418048,
+  "at": "2026-10-07T06:43:38.048Z",
+  "payload": {
+   "id": "0x778cc8d04126728e302bfc278312cf1c8de4229fbe74ee9c8229bd5e0cb34bd0",
+   "ts": 1791355418,
+   "index": 6303,
+   "blocks": 1,
+   "messages": 0,
+   "newMessages": 0
+  }
+ },
+ {
+  "id": 21182,
+  "type": "milestone",
+  "atMs": 1791355423049,
+  "at": "2026-10-07T06:43:43.049Z",
+  "payload": {
+   "id": "0xa04799eb061870554fefe6e99c08dfe5851c9867f147005837216970cad68a3e",
+   "ts": 1791355423,
+   "index": 6304,
+   "blocks": 1,
+   "messages": 0,
+   "newMessages": 0
+  }
+ },
+ {
+  "id": 21183,
+  "type": "milestone",
+  "atMs": 1791355428048,
+  "at": "2026-10-07T06:43:48.048Z",
+  "payload": {
+   "id": "0x76415e173edbf3200ed3bae19beff02bdb437bd62d4381a395cb8c478772a066",
+   "ts": 1791355428,
+   "index": 6305,
+   "blocks": 1,
+   "messages": 0,
+   "newMessages": 0
+  }
+ },
+ {
+  "id": 21184,
+  "type": "milestone",
+  "atMs": 1791355433050,
+  "at": "2026-10-07T06:43:53.050Z",
+  "payload": {
+   "id": "0x595aac54d91106e9d05dfc9e62d17b0bf79a1492632b30774f84cac1f1a4f100",
+   "ts": 1791355433,
+   "index": 6306,
+   "blocks": 1,
+   "messages": 0,
+   "newMessages": 0
+  }
+ },
+ {
+  "id": 21185,
+  "type": "milestone",
+  "atMs": 1791355438044,
+  "at": "2026-10-07T06:43:58.044Z",
+  "payload": {
+   "id": "0xf1e9fda60c76e6c51456d6937c21696ecab4d622d936e4d4ca70374affa4f197",
+   "ts": 1791355438,
+   "index": 6307,
+   "blocks": 1,
+   "messages": 0,
+   "newMessages": 0
+  }
+ },
+ {
+  "id": 21186,
+  "type": "milestone",
+  "atMs": 1791355443046,
+  "at": "2026-10-07T06:44:03.046Z",
+  "payload": {
+   "id": "0xe9ac6746e865b9a55ff1b1942f2d11c41f65b427705b2435e5dc222038e27763",
+   "ts": 1791355443,
+   "index": 6308,
+   "blocks": 1,
+   "messages": 0,
+   "newMessages": 0
+  }
+ },
+ {
+  "id": 21187,
+  "type": "milestone",
+  "atMs": 1791355448057,
+  "at": "2026-10-07T06:44:08.057Z",
+  "payload": {
+   "id": "0xab1b021e9c59ac310d1a667d4b9a19a32a384b4abd39473dd7126a63a28ec5d9",
+   "ts": 1791355448,
+   "index": 6309,
+   "blocks": 1,
+   "messages": 0,
+   "newMessages": 0
+  }
+ },
+ {
+  "id": 21188,
+  "type": "milestone",
+  "atMs": 1791355453046,
+  "at": "2026-10-07T06:44:13.046Z",
+  "payload": {
+   "id": "0x13184c8a5d3ac4b525721fa8f217005b29bdbbd3cbc12c61193242f423c58dd2",
+   "ts": 1791355453,
+   "index": 6310,
+   "blocks": 1,
+   "messages": 0,
+   "newMessages": 0
+  }
+ },
+ {
+  "id": 21190,
+  "type": "lifecycle",
+  "atMs": 1791355455208,
+  "at": "2026-10-07T06:44:15.208Z",
+  "payload": {
+   "atMs": 1791355455205,
+   "subId": "175f051d-2325-46b0-a11c-01819a8decb1",
+   "detail": {
+    "via": "GET /api/core/v2/blocks/{blockId}/metadata",
+    "isSolid": true
+   },
+   "status": "SOLID",
+   "blockId": "0x569bd2bf8b20cfc64f848171d432b05f1f153f7101a59cd69b254e5cab906010"
+  }
+ },
+ {
+  "id": 21192,
+  "type": "lifecycle",
+  "atMs": 1791355455489,
+  "at": "2026-10-07T06:44:15.489Z",
+  "payload": {
+   "atMs": 1791355455486,
+   "subId": "0503cae9-b9a4-4b21-9d5f-d2bf6547dba4",
+   "detail": {
+    "via": "GET /api/core/v2/blocks/{blockId}/metadata",
+    "isSolid": true
+   },
+   "status": "SOLID",
+   "blockId": "0x052b9f0942878b1c29217c5f3ba685c193a67db2656c2a8521a75b489a3402a3"
+  }
+ },
+ {
+  "id": 21194,
+  "type": "lifecycle",
+  "atMs": 1791355455843,
+  "at": "2026-10-07T06:44:15.843Z",
+  "payload": {
+   "atMs": 1791355455841,
+   "subId": "567f8f66-aa0b-4b7a-8308-3bed3ac7bb91",
+   "detail": {
+    "via": "GET /api/core/v2/blocks/{blockId}/metadata",
+    "isSolid": true
+   },
+   "status": "SOLID",
+   "blockId": "0x814c8540ea1e4dc03647f8c584dce8db91392b6cecdb5efc716d081f83372595"
+  }
+ },
+ {
+  "id": 21195,
+  "type": "milestone",
+  "atMs": 1791355458129,
+  "at": "2026-10-07T06:44:18.129Z",
+  "payload": {
+   "id": "0x6cbf69ab4c417ec01b6dc1f402b9d96473155dff22d19deaaeb55f07fb9bd25c",
+   "ts": 1791355458,
+   "index": 6311,
+   "blocks": 4,
+   "messages": 3,
+   "newMessages": 3
+  }
+ },
+ {
+  "id": 21196,
+  "type": "message",
+  "atMs": 1791355458131,
+  "at": "2026-10-07T06:44:18.131Z",
+  "payload": {
+   "ts": 1791355458,
+   "iss": "did:iota:testnet:0x15eb8c4d90fa4fff1d49f3ae8b1676a61e09c883303acd383cbfaacb538db9ba",
+   "seq": 1791332998680,
+   "tag": "trust.score",
+   "ieId": "MyDomain:fa163e32c6ee",
+   "kind": "trust.score",
+   "first": true,
+   "reason": null,
+   "blockId": "0x569bd2bf8b20cfc64f848171d432b05f1f153f7101a59cd69b254e5cab906010",
+   "msIndex": 6311,
+   "verdict": "PRODUCER_SIGNED",
+   "wfIndex": 1,
+   "encrypted": false
+  }
+ },
+ {
+  "id": 21197,
+  "type": "lifecycle",
+  "atMs": 1791355458132,
+  "at": "2026-10-07T06:44:18.132Z",
+  "payload": {
+   "atMs": 1791355458068,
+   "subId": "175f051d-2325-46b0-a11c-01819a8decb1",
+   "detail": {
+    "via": "inx",
+    "source": "indexer",
+    "msIndex": 6311,
+    "msTimestamp": 1791355458
+   },
+   "status": "CONFIRMED",
+   "blockId": "0x569bd2bf8b20cfc64f848171d432b05f1f153f7101a59cd69b254e5cab906010"
+  }
+ },
+ {
+  "id": 21198,
+  "type": "message",
+  "atMs": 1791355458133,
+  "at": "2026-10-07T06:44:18.133Z",
+  "payload": {
+   "ts": 1791355458,
+   "iss": "did:iota:testnet:0x15eb8c4d90fa4fff1d49f3ae8b1676a61e09c883303acd383cbfaacb538db9ba",
+   "seq": 1791332998681,
+   "tag": "trust.score",
+   "ieId": "MyDomain:fa163e5e25ef",
+   "kind": "trust.score",
+   "first": true,
+   "reason": null,
+   "blockId": "0x052b9f0942878b1c29217c5f3ba685c193a67db2656c2a8521a75b489a3402a3",
+   "msIndex": 6311,
+   "verdict": "PRODUCER_SIGNED",
+   "wfIndex": 2,
+   "encrypted": false
+  }
+ },
+ {
+  "id": 21199,
+  "type": "lifecycle",
+  "atMs": 1791355458134,
+  "at": "2026-10-07T06:44:18.134Z",
+  "payload": {
+   "atMs": 1791355458090,
+   "subId": "0503cae9-b9a4-4b21-9d5f-d2bf6547dba4",
+   "detail": {
+    "via": "inx",
+    "source": "indexer",
+    "msIndex": 6311,
+    "msTimestamp": 1791355458
+   },
+   "status": "CONFIRMED",
+   "blockId": "0x052b9f0942878b1c29217c5f3ba685c193a67db2656c2a8521a75b489a3402a3"
+  }
+ },
+ {
+  "id": 21200,
+  "type": "message",
+  "atMs": 1791355458135,
+  "at": "2026-10-07T06:44:18.135Z",
+  "payload": {
+   "ts": 1791355458,
+   "iss": "did:iota:testnet:0x15eb8c4d90fa4fff1d49f3ae8b1676a61e09c883303acd383cbfaacb538db9ba",
+   "seq": 1791332998682,
+   "tag": "trust.score",
+   "ieId": "MyDomain:fa163ed55867",
+   "kind": "trust.score",
+   "first": true,
+   "reason": null,
+   "blockId": "0x814c8540ea1e4dc03647f8c584dce8db91392b6cecdb5efc716d081f83372595",
+   "msIndex": 6311,
+   "verdict": "PRODUCER_SIGNED",
+   "wfIndex": 3,
+   "encrypted": false
+  }
+ },
+ {
+  "id": 21201,
+  "type": "lifecycle",
+  "atMs": 1791355458137,
+  "at": "2026-10-07T06:44:18.137Z",
+  "payload": {
+   "atMs": 1791355458112,
+   "subId": "567f8f66-aa0b-4b7a-8308-3bed3ac7bb91",
+   "detail": {
+    "via": "inx",
+    "source": "indexer",
+    "msIndex": 6311,
+    "msTimestamp": 1791355458
+   },
+   "status": "CONFIRMED",
+   "blockId": "0x814c8540ea1e4dc03647f8c584dce8db91392b6cecdb5efc716d081f83372595"
+  }
+ },
+ {
+  "id": 21202,
+  "type": "lifecycle",
+  "atMs": 1791355458732,
+  "at": "2026-10-07T06:44:18.732Z",
+  "payload": {
+   "atMs": 1791355458730,
+   "subId": "175f051d-2325-46b0-a11c-01819a8decb1",
+   "detail": {
+    "via": "GET /api/core/v2/blocks/{blockId}/metadata",
+    "whiteFlagIndex": 1,
+    "ledgerInclusionState": "noTransaction",
+    "referencedByMilestoneIndex": 6311
+   },
+   "status": "CONFIRMED",
+   "blockId": "0x569bd2bf8b20cfc64f848171d432b05f1f153f7101a59cd69b254e5cab906010"
+  }
+ },
+ {
+  "id": 21203,
+  "type": "lifecycle",
+  "atMs": 1791355458742,
+  "at": "2026-10-07T06:44:18.742Z",
+  "payload": {
+   "atMs": 1791355458739,
+   "subId": "175f051d-2325-46b0-a11c-01819a8decb1",
+   "detail": {
+    "via": "GET /api/core/v2/blocks/{blockId}",
+    "bytes": 695
+   },
+   "status": "CONTENT_VERIFIED",
+   "blockId": "0x569bd2bf8b20cfc64f848171d432b05f1f153f7101a59cd69b254e5cab906010"
+  }
+ },
+ {
+  "id": 21204,
+  "type": "lifecycle",
+  "atMs": 1791355459017,
+  "at": "2026-10-07T06:44:19.017Z",
+  "payload": {
+   "atMs": 1791355459013,
+   "subId": "0503cae9-b9a4-4b21-9d5f-d2bf6547dba4",
+   "detail": {
+    "via": "GET /api/core/v2/blocks/{blockId}/metadata",
+    "whiteFlagIndex": 2,
+    "ledgerInclusionState": "noTransaction",
+    "referencedByMilestoneIndex": 6311
+   },
+   "status": "CONFIRMED",
+   "blockId": "0x052b9f0942878b1c29217c5f3ba685c193a67db2656c2a8521a75b489a3402a3"
+  }
+ },
+ {
+  "id": 21205,
+  "type": "lifecycle",
+  "atMs": 1791355459034,
+  "at": "2026-10-07T06:44:19.034Z",
+  "payload": {
+   "atMs": 1791355459030,
+   "subId": "0503cae9-b9a4-4b21-9d5f-d2bf6547dba4",
+   "detail": {
+    "via": "GET /api/core/v2/blocks/{blockId}",
+    "bytes": 743
+   },
+   "status": "CONTENT_VERIFIED",
+   "blockId": "0x052b9f0942878b1c29217c5f3ba685c193a67db2656c2a8521a75b489a3402a3"
+  }
+ },
+ {
+  "id": 21206,
+  "type": "lifecycle",
+  "atMs": 1791355459371,
+  "at": "2026-10-07T06:44:19.371Z",
+  "payload": {
+   "atMs": 1791355459369,
+   "subId": "567f8f66-aa0b-4b7a-8308-3bed3ac7bb91",
+   "detail": {
+    "via": "GET /api/core/v2/blocks/{blockId}/metadata",
+    "whiteFlagIndex": 3,
+    "ledgerInclusionState": "noTransaction",
+    "referencedByMilestoneIndex": 6311
+   },
+   "status": "CONFIRMED",
+   "blockId": "0x814c8540ea1e4dc03647f8c584dce8db91392b6cecdb5efc716d081f83372595"
+  }
+ },
+ {
+  "id": 21207,
+  "type": "lifecycle",
+  "atMs": 1791355459383,
+  "at": "2026-10-07T06:44:19.383Z",
+  "payload": {
+   "atMs": 1791355459378,
+   "subId": "567f8f66-aa0b-4b7a-8308-3bed3ac7bb91",
+   "detail": {
+    "via": "GET /api/core/v2/blocks/{blockId}",
+    "bytes": 776
+   },
+   "status": "CONTENT_VERIFIED",
+   "blockId": "0x814c8540ea1e4dc03647f8c584dce8db91392b6cecdb5efc716d081f83372595"
+  }
+ },
+ {
+  "id": 21208,
+  "type": "milestone",
+  "atMs": 1791355463050,
+  "at": "2026-10-07T06:44:23.050Z",
+  "payload": {
+   "id": "0x3e139408c59a895fb59e7353508ff47dc0facfa77fb800b398b89c4a3cb46ed7",
+   "ts": 1791355463,
+   "index": 6312,
+   "blocks": 1,
+   "messages": 0,
+   "newMessages": 0
+  }
+ },
+ {
+  "id": 21209,
+  "type": "milestone",
+  "atMs": 1791355468050,
+  "at": "2026-10-07T06:44:28.050Z",
+  "payload": {
+   "id": "0xc00bcca3af2397e37ee8d49de3cc256ff668ab29fc1088de3a88e25f62b6348e",
+   "ts": 1791355468,
+   "index": 6313,
+   "blocks": 1,
+   "messages": 0,
+   "newMessages": 0
+  }
+ },
+ {
+  "id": 21210,
+  "type": "milestone",
+  "atMs": 1791355473051,
+  "at": "2026-10-07T06:44:33.051Z",
+  "payload": {
+   "id": "0xe00a1ce6e14fdf0ccb828c8c741a8fa1741bba6099334f4955aaaddde8e33250",
+   "ts": 1791355473,
+   "index": 6314,
+   "blocks": 1,
+   "messages": 0,
+   "newMessages": 0
+  }
+ },
+ {
+  "id": 21211,
+  "type": "milestone",
+  "atMs": 1791355478055,
+  "at": "2026-10-07T06:44:38.055Z",
+  "payload": {
+   "id": "0xb5e3eb813acd79d6543df467c1424bfd00ee8d1ab96eff307664f6c1a1467346",
+   "ts": 1791355478,
+   "index": 6315,
+   "blocks": 1,
+   "messages": 0,
+   "newMessages": 0
+  }
+ },
+ {
+  "id": 21212,
+  "type": "milestone",
+  "atMs": 1791355483048,
+  "at": "2026-10-07T06:44:43.048Z",
+  "payload": {
+   "id": "0x8b380a7f6668f9c2a307e04eb16663c6b032ef476239466b558a9870fcc11740",
+   "ts": 1791355483,
+   "index": 6316,
+   "blocks": 1,
+   "messages": 0,
+   "newMessages": 0
+  }
+ },
+ {
+  "id": 21213,
+  "type": "milestone",
+  "atMs": 1791355488045,
+  "at": "2026-10-07T06:44:48.045Z",
+  "payload": {
+   "id": "0x2dfb5ad6092f64e2a7843176a194b6f9f066d1aff94a29de23d3fcb4ade7e7ec",
+   "ts": 1791355488,
+   "index": 6317,
+   "blocks": 1,
+   "messages": 0,
+   "newMessages": 0
+  }
+ },
+ {
+  "id": 21214,
+  "type": "milestone",
+  "atMs": 1791355493106,
+  "at": "2026-10-07T06:44:53.106Z",
+  "payload": {
+   "id": "0x05d0f18b36a9647c7dd9dd3403d04e2b811c57884c1a8c7abe60ddbeb8ea37f5",
+   "ts": 1791355493,
+   "index": 6318,
+   "blocks": 1,
+   "messages": 0,
+   "newMessages": 0
+  }
+ },
+ {
+  "id": 21215,
+  "type": "milestone",
+  "atMs": 1791355498050,
+  "at": "2026-10-07T06:44:58.050Z",
+  "payload": {
+   "id": "0x772eed0b39caa2b9f06d7f4672fabaf52fdd034f48aeeec0c252f13e39e9ad90",
+   "ts": 1791355498,
+   "index": 6319,
+   "blocks": 1,
+   "messages": 0,
+   "newMessages": 0
+  }
+ },
+ {
+  "id": 21216,
+  "type": "milestone",
+  "atMs": 1791355503048,
+  "at": "2026-10-07T06:45:03.048Z",
+  "payload": {
+   "id": "0xfe00000a6bd7b8f5256af818a3fd55843f9a666eb59077f6b604674f14f8b054",
+   "ts": 1791355503,
+   "index": 6320,
+   "blocks": 1,
+   "messages": 0,
+   "newMessages": 0
+  }
+ },
+ {
+  "id": 21217,
+  "type": "milestone",
+  "atMs": 1791355508045,
+  "at": "2026-10-07T06:45:08.045Z",
+  "payload": {
+   "id": "0xd64777bbe89483816e7713e4ceee4225b3190f1080150c5b3f2d57576de91197",
+   "ts": 1791355508,
+   "index": 6321,
+   "blocks": 1,
+   "messages": 0,
+   "newMessages": 0
+  }
+ },
+ {
+  "id": 21218,
+  "type": "milestone",
+  "atMs": 1791355513041,
+  "at": "2026-10-07T06:45:13.041Z",
+  "payload": {
+   "id": "0x3e5108ebcb8bf6c75323e538079eae633b1be79c31414e5e6e792c33964b2def",
+   "ts": 1791355513,
+   "index": 6322,
+   "blocks": 1,
+   "messages": 0,
+   "newMessages": 0
+  }
+ },
+ {
+  "id": 21220,
+  "type": "lifecycle",
+  "atMs": 1791355516405,
+  "at": "2026-10-07T06:45:16.405Z",
+  "payload": {
+   "atMs": 1791355516403,
+   "subId": "f5b9cfb8-327f-4475-be31-e3701ce78007",
+   "detail": {
+    "via": "GET /api/core/v2/blocks/{blockId}/metadata",
+    "isSolid": true
+   },
+   "status": "SOLID",
+   "blockId": "0xaf148bf84f3cc86323a8967671849215022e23e318c207e3fdb6d43fab96feca"
+  }
+ },
+ {
+  "id": 21222,
+  "type": "lifecycle",
+  "atMs": 1791355516677,
+  "at": "2026-10-07T06:45:16.677Z",
+  "payload": {
+   "atMs": 1791355516674,
+   "subId": "9ed0e959-39d5-4fa5-bb0c-ff66a3ba8f6b",
+   "detail": {
+    "via": "GET /api/core/v2/blocks/{blockId}/metadata",
+    "isSolid": true
+   },
+   "status": "SOLID",
+   "blockId": "0xaf286f5c7b58f2f6e1746ff2a874571c4f07835ca1b1f968e76dfe993a85bfc3"
+  }
+ },
+ {
+  "id": 21224,
+  "type": "lifecycle",
+  "atMs": 1791355516951,
+  "at": "2026-10-07T06:45:16.951Z",
+  "payload": {
+   "atMs": 1791355516949,
+   "subId": "78dfc3e8-f700-46a1-ba14-9c1620e623a9",
+   "detail": {
+    "via": "GET /api/core/v2/blocks/{blockId}/metadata",
+    "isSolid": true
+   },
+   "status": "SOLID",
+   "blockId": "0xfc6fc67b4cb60f353d0a45c768b0f86caa8e1e78a556d792354b9bfca7cd651f"
+  }
+ },
+ {
+  "id": 21225,
+  "type": "milestone",
+  "atMs": 1791355518122,
+  "at": "2026-10-07T06:45:18.122Z",
+  "payload": {
+   "id": "0x2d56f6c369ca0207848d6d0aa5df4baed95d1088a4624f2642c3ff38854435ae",
+   "ts": 1791355518,
+   "index": 6323,
+   "blocks": 4,
+   "messages": 3,
+   "newMessages": 3
+  }
+ },
+ {
+  "id": 21226,
+  "type": "message",
+  "atMs": 1791355518123,
+  "at": "2026-10-07T06:45:18.123Z",
+  "payload": {
+   "ts": 1791355518,
+   "iss": "did:iota:testnet:0x15eb8c4d90fa4fff1d49f3ae8b1676a61e09c883303acd383cbfaacb538db9ba",
+   "seq": 1791332998683,
+   "tag": "trust.score",
+   "ieId": "MyDomain:fa163e32c6ee",
+   "kind": "trust.score",
+   "first": true,
+   "reason": null,
+   "blockId": "0xaf148bf84f3cc86323a8967671849215022e23e318c207e3fdb6d43fab96feca",
+   "msIndex": 6323,
+   "verdict": "PRODUCER_SIGNED",
+   "wfIndex": 1,
+   "encrypted": false
+  }
+ },
+ {
+  "id": 21227,
+  "type": "lifecycle",
+  "atMs": 1791355518124,
+  "at": "2026-10-07T06:45:18.124Z",
+  "payload": {
+   "atMs": 1791355518061,
+   "subId": "f5b9cfb8-327f-4475-be31-e3701ce78007",
+   "detail": {
+    "via": "inx",
+    "source": "indexer",
+    "msIndex": 6323,
+    "msTimestamp": 1791355518
+   },
+   "status": "CONFIRMED",
+   "blockId": "0xaf148bf84f3cc86323a8967671849215022e23e318c207e3fdb6d43fab96feca"
+  }
+ },
+ {
+  "id": 21228,
+  "type": "message",
+  "atMs": 1791355518125,
+  "at": "2026-10-07T06:45:18.125Z",
+  "payload": {
+   "ts": 1791355518,
+   "iss": "did:iota:testnet:0x15eb8c4d90fa4fff1d49f3ae8b1676a61e09c883303acd383cbfaacb538db9ba",
+   "seq": 1791332998684,
+   "tag": "trust.score",
+   "ieId": "MyDomain:fa163e5e25ef",
+   "kind": "trust.score",
+   "first": true,
+   "reason": null,
+   "blockId": "0xaf286f5c7b58f2f6e1746ff2a874571c4f07835ca1b1f968e76dfe993a85bfc3",
+   "msIndex": 6323,
+   "verdict": "PRODUCER_SIGNED",
+   "wfIndex": 2,
+   "encrypted": false
+  }
+ },
+ {
+  "id": 21229,
+  "type": "lifecycle",
+  "atMs": 1791355518126,
+  "at": "2026-10-07T06:45:18.126Z",
+  "payload": {
+   "atMs": 1791355518085,
+   "subId": "9ed0e959-39d5-4fa5-bb0c-ff66a3ba8f6b",
+   "detail": {
+    "via": "inx",
+    "source": "indexer",
+    "msIndex": 6323,
+    "msTimestamp": 1791355518
+   },
+   "status": "CONFIRMED",
+   "blockId": "0xaf286f5c7b58f2f6e1746ff2a874571c4f07835ca1b1f968e76dfe993a85bfc3"
+  }
+ },
+ {
+  "id": 21230,
+  "type": "message",
+  "atMs": 1791355518127,
+  "at": "2026-10-07T06:45:18.127Z",
+  "payload": {
+   "ts": 1791355518,
+   "iss": "did:iota:testnet:0x15eb8c4d90fa4fff1d49f3ae8b1676a61e09c883303acd383cbfaacb538db9ba",
+   "seq": 1791332998685,
+   "tag": "trust.score",
+   "ieId": "MyDomain:fa163ed55867",
+   "kind": "trust.score",
+   "first": true,
+   "reason": null,
+   "blockId": "0xfc6fc67b4cb60f353d0a45c768b0f86caa8e1e78a556d792354b9bfca7cd651f",
+   "msIndex": 6323,
+   "verdict": "PRODUCER_SIGNED",
+   "wfIndex": 3,
+   "encrypted": false
+  }
+ },
+ {
+  "id": 21231,
+  "type": "lifecycle",
+  "atMs": 1791355518128,
+  "at": "2026-10-07T06:45:18.128Z",
+  "payload": {
+   "atMs": 1791355518106,
+   "subId": "78dfc3e8-f700-46a1-ba14-9c1620e623a9",
+   "detail": {
+    "via": "inx",
+    "source": "indexer",
+    "msIndex": 6323,
+    "msTimestamp": 1791355518
+   },
+   "status": "CONFIRMED",
+   "blockId": "0xfc6fc67b4cb60f353d0a45c768b0f86caa8e1e78a556d792354b9bfca7cd651f"
+  }
+ },
+ {
+  "id": 21232,
+  "type": "lifecycle",
+  "atMs": 1791355518193,
+  "at": "2026-10-07T06:45:18.193Z",
+  "payload": {
+   "atMs": 1791355518191,
+   "subId": "9ed0e959-39d5-4fa5-bb0c-ff66a3ba8f6b",
+   "detail": {
+    "via": "GET /api/core/v2/blocks/{blockId}/metadata",
+    "whiteFlagIndex": 2,
+    "ledgerInclusionState": "noTransaction",
+    "referencedByMilestoneIndex": 6323
+   },
+   "status": "CONFIRMED",
+   "blockId": "0xaf286f5c7b58f2f6e1746ff2a874571c4f07835ca1b1f968e76dfe993a85bfc3"
+  }
+ },
+ {
+  "id": 21233,
+  "type": "lifecycle",
+  "atMs": 1791355518204,
+  "at": "2026-10-07T06:45:18.204Z",
+  "payload": {
+   "atMs": 1791355518201,
+   "subId": "9ed0e959-39d5-4fa5-bb0c-ff66a3ba8f6b",
+   "detail": {
+    "via": "GET /api/core/v2/blocks/{blockId}",
+    "bytes": 711
+   },
+   "status": "CONTENT_VERIFIED",
+   "blockId": "0xaf286f5c7b58f2f6e1746ff2a874571c4f07835ca1b1f968e76dfe993a85bfc3"
+  }
+ },
+ {
+  "id": 21234,
+  "type": "lifecycle",
+  "atMs": 1791355518470,
+  "at": "2026-10-07T06:45:18.470Z",
+  "payload": {
+   "atMs": 1791355518467,
+   "subId": "78dfc3e8-f700-46a1-ba14-9c1620e623a9",
+   "detail": {
+    "via": "GET /api/core/v2/blocks/{blockId}/metadata",
+    "whiteFlagIndex": 3,
+    "ledgerInclusionState": "noTransaction",
+    "referencedByMilestoneIndex": 6323
+   },
+   "status": "CONFIRMED",
+   "blockId": "0xfc6fc67b4cb60f353d0a45c768b0f86caa8e1e78a556d792354b9bfca7cd651f"
+  }
+ },
+ {
+  "id": 21235,
+  "type": "lifecycle",
+  "atMs": 1791355518479,
+  "at": "2026-10-07T06:45:18.479Z",
+  "payload": {
+   "atMs": 1791355518476,
+   "subId": "78dfc3e8-f700-46a1-ba14-9c1620e623a9",
+   "detail": {
+    "via": "GET /api/core/v2/blocks/{blockId}",
+    "bytes": 744
+   },
+   "status": "CONTENT_VERIFIED",
+   "blockId": "0xfc6fc67b4cb60f353d0a45c768b0f86caa8e1e78a556d792354b9bfca7cd651f"
+  }
+ },
+ {
+  "id": 21236,
+  "type": "lifecycle",
+  "atMs": 1791355519930,
+  "at": "2026-10-07T06:45:19.930Z",
+  "payload": {
+   "atMs": 1791355519928,
+   "subId": "f5b9cfb8-327f-4475-be31-e3701ce78007",
+   "detail": {
+    "via": "GET /api/core/v2/blocks/{blockId}/metadata",
+    "whiteFlagIndex": 1,
+    "ledgerInclusionState": "noTransaction",
+    "referencedByMilestoneIndex": 6323
+   },
+   "status": "CONFIRMED",
+   "blockId": "0xaf148bf84f3cc86323a8967671849215022e23e318c207e3fdb6d43fab96feca"
+  }
+ },
+ {
+  "id": 21237,
+  "type": "lifecycle",
+  "atMs": 1791355519940,
+  "at": "2026-10-07T06:45:19.940Z",
+  "payload": {
+   "atMs": 1791355519937,
+   "subId": "f5b9cfb8-327f-4475-be31-e3701ce78007",
+   "detail": {
+    "via": "GET /api/core/v2/blocks/{blockId}",
+    "bytes": 663
+   },
+   "status": "CONTENT_VERIFIED",
+   "blockId": "0xaf148bf84f3cc86323a8967671849215022e23e318c207e3fdb6d43fab96feca"
+  }
+ },
+ {
+  "id": 21238,
+  "type": "milestone",
+  "atMs": 1791355523209,
+  "at": "2026-10-07T06:45:23.209Z",
+  "payload": {
+   "id": "0x58c7114f1456158890a8574fdacbc8356c1029861a1ed53b7ec9159484c59fab",
+   "ts": 1791355523,
+   "index": 6324,
+   "blocks": 1,
+   "messages": 0,
+   "newMessages": 0
+  }
+ },
+ {
+  "id": 21239,
+  "type": "milestone",
+  "atMs": 1791355528044,
+  "at": "2026-10-07T06:45:28.044Z",
+  "payload": {
+   "id": "0x0019e355233c093287405d8a25d812461f221d877e23d4aa76183f45f82af4e0",
+   "ts": 1791355528,
+   "index": 6325,
+   "blocks": 1,
+   "messages": 0,
+   "newMessages": 0
+  }
+ },
+ {
+  "id": 21240,
+  "type": "milestone",
+  "atMs": 1791355533049,
+  "at": "2026-10-07T06:45:33.049Z",
+  "payload": {
+   "id": "0x538455a7c3122db2147398207f2694f877328d964f6c0e12a6b08a90ac33c28e",
+   "ts": 1791355533,
+   "index": 6326,
+   "blocks": 1,
+   "messages": 0,
+   "newMessages": 0
+  }
+ },
+ {
+  "id": 21241,
+  "type": "milestone",
+  "atMs": 1791355538046,
+  "at": "2026-10-07T06:45:38.046Z",
+  "payload": {
+   "id": "0x59a4488d19d2bb223a22fe4e6990d54da3d54973b1f2e7a7f513087dc1beb06a",
+   "ts": 1791355538,
+   "index": 6327,
+   "blocks": 1,
+   "messages": 0,
+   "newMessages": 0
+  }
+ },
+ {
+  "id": 21242,
+  "type": "milestone",
+  "atMs": 1791355543125,
+  "at": "2026-10-07T06:45:43.125Z",
+  "payload": {
+   "id": "0x76b87c656a31d7db26661391380017d9d20b02d77c3c051fd64f4d65995a4868",
+   "ts": 1791355543,
+   "index": 6328,
+   "blocks": 1,
+   "messages": 0,
+   "newMessages": 0
+  }
+ },
+ {
+  "id": 21243,
+  "type": "milestone",
+  "atMs": 1791355548044,
+  "at": "2026-10-07T06:45:48.044Z",
+  "payload": {
+   "id": "0xb4f1c43eae03e69299fcd2256f519de0fd38705fe2a8ef3b5db7b280d64921a5",
+   "ts": 1791355548,
+   "index": 6329,
+   "blocks": 1,
+   "messages": 0,
+   "newMessages": 0
+  }
+ },
+ {
+  "id": 21244,
+  "type": "milestone",
+  "atMs": 1791355553044,
+  "at": "2026-10-07T06:45:53.044Z",
+  "payload": {
+   "id": "0xaa685028c29719dba954014368e6ebe2c27370d11223f2f05a9bd81f4811761d",
+   "ts": 1791355553,
+   "index": 6330,
+   "blocks": 1,
+   "messages": 0,
+   "newMessages": 0
+  }
+ },
+ {
+  "id": 21245,
+  "type": "milestone",
+  "atMs": 1791355558040,
+  "at": "2026-10-07T06:45:58.040Z",
+  "payload": {
+   "id": "0x767a4c1e34b762a2841a449c5f7bbd7b4127099d35337c705f29f22d39a964b4",
+   "ts": 1791355558,
+   "index": 6331,
+   "blocks": 1,
+   "messages": 0,
+   "newMessages": 0
+  }
+ },
+ {
+  "id": 21246,
+  "type": "milestone",
+  "atMs": 1791355563040,
+  "at": "2026-10-07T06:46:03.040Z",
+  "payload": {
+   "id": "0x15834d6e18517b76b552989e42d27faa76aa1f221c2809c2d09e356f50a487fa",
+   "ts": 1791355563,
+   "index": 6332,
+   "blocks": 1,
+   "messages": 0,
+   "newMessages": 0
+  }
+ },
+ {
+  "id": 21247,
+  "type": "milestone",
+  "atMs": 1791355568057,
+  "at": "2026-10-07T06:46:08.057Z",
+  "payload": {
+   "id": "0x195d80950759c103d2f04e7f8c4be62692798d21add16aeb4cb23c9e0e143034",
+   "ts": 1791355568,
+   "index": 6333,
+   "blocks": 1,
+   "messages": 0,
+   "newMessages": 0
+  }
+ },
+ {
+  "id": 21248,
+  "type": "milestone",
+  "atMs": 1791355573055,
+  "at": "2026-10-07T06:46:13.055Z",
+  "payload": {
+   "id": "0xde21ff96f702c77cc23677da246800db279cc363635d38616b5ea64d430521fc",
+   "ts": 1791355573,
+   "index": 6334,
+   "blocks": 1,
+   "messages": 0,
+   "newMessages": 0
+  }
+ },
+ {
+  "id": 21250,
+  "type": "lifecycle",
+  "atMs": 1791355577521,
+  "at": "2026-10-07T06:46:17.521Z",
+  "payload": {
+   "atMs": 1791355577517,
+   "subId": "c79a8ba0-e595-45e6-beec-8244e507802c",
+   "detail": {
+    "via": "GET /api/core/v2/blocks/{blockId}/metadata",
+    "isSolid": true
+   },
+   "status": "SOLID",
+   "blockId": "0x17cfc55b4662173b20e630d92feda60625c6d0a169065257c5f28d6ba3fb82d9"
+  }
+ },
+ {
+  "id": 21252,
+  "type": "lifecycle",
+  "atMs": 1791355577804,
+  "at": "2026-10-07T06:46:17.804Z",
+  "payload": {
+   "atMs": 1791355577802,
+   "subId": "67b4bb3c-23a5-440a-9949-4caf60efc0a8",
+   "detail": {
+    "via": "GET /api/core/v2/blocks/{blockId}/metadata",
+    "isSolid": true
+   },
+   "status": "SOLID",
+   "blockId": "0x75c30e61a0f8701748edc5a57442b4cc2d96458da94f04980446645ce9972f0a"
+  }
+ },
+ {
+  "id": 21254,
+  "type": "lifecycle",
+  "atMs": 1791355578051,
+  "at": "2026-10-07T06:46:18.051Z",
+  "payload": {
+   "atMs": 1791355578043,
+   "subId": "f3d1974d-dc78-494d-84ea-12a5a26b7d4a",
+   "detail": {
+    "via": "GET /api/core/v2/blocks/{blockId}/metadata",
+    "isSolid": true
+   },
+   "status": "SOLID",
+   "blockId": "0x230ffb4033fcfddab6d5694eacbf80c2adb200c106a5af02d4beec1416986972"
+  }
+ },
+ {
+  "id": 21255,
+  "type": "lifecycle",
+  "atMs": 1791355578053,
+  "at": "2026-10-07T06:46:18.053Z",
+  "payload": {
+   "atMs": 1791355578043,
+   "subId": "f3d1974d-dc78-494d-84ea-12a5a26b7d4a",
+   "detail": {
+    "via": "GET /api/core/v2/blocks/{blockId}/metadata",
+    "whiteFlagIndex": 3,
+    "ledgerInclusionState": "noTransaction",
+    "referencedByMilestoneIndex": 6335
+   },
+   "status": "CONFIRMED",
+   "blockId": "0x230ffb4033fcfddab6d5694eacbf80c2adb200c106a5af02d4beec1416986972"
+  }
+ },
+ {
+  "id": 21256,
+  "type": "lifecycle",
+  "atMs": 1791355578065,
+  "at": "2026-10-07T06:46:18.065Z",
+  "payload": {
+   "atMs": 1791355578062,
+   "subId": "f3d1974d-dc78-494d-84ea-12a5a26b7d4a",
+   "detail": {
+    "via": "GET /api/core/v2/blocks/{blockId}",
+    "bytes": 744
+   },
+   "status": "CONTENT_VERIFIED",
+   "blockId": "0x230ffb4033fcfddab6d5694eacbf80c2adb200c106a5af02d4beec1416986972"
+  }
+ },
+ {
+  "id": 21257,
+  "type": "milestone",
+  "atMs": 1791355578105,
+  "at": "2026-10-07T06:46:18.105Z",
+  "payload": {
+   "id": "0x3ccc017f1cb9eac254ea2ec6c45e8e93b36bc42cb290bf13b39048b4319cc311",
+   "ts": 1791355578,
+   "index": 6335,
+   "blocks": 4,
+   "messages": 3,
+   "newMessages": 3
+  }
+ },
+ {
+  "id": 21258,
+  "type": "message",
+  "atMs": 1791355578106,
+  "at": "2026-10-07T06:46:18.106Z",
+  "payload": {
+   "ts": 1791355578,
+   "iss": "did:iota:testnet:0x15eb8c4d90fa4fff1d49f3ae8b1676a61e09c883303acd383cbfaacb538db9ba",
+   "seq": 1791332998686,
+   "tag": "trust.score",
+   "ieId": "MyDomain:fa163e32c6ee",
+   "kind": "trust.score",
+   "first": true,
+   "reason": null,
+   "blockId": "0x17cfc55b4662173b20e630d92feda60625c6d0a169065257c5f28d6ba3fb82d9",
+   "msIndex": 6335,
+   "verdict": "PRODUCER_SIGNED",
+   "wfIndex": 1,
+   "encrypted": false
+  }
+ },
+ {
+  "id": 21259,
+  "type": "lifecycle",
+  "atMs": 1791355578107,
+  "at": "2026-10-07T06:46:18.107Z",
+  "payload": {
+   "atMs": 1791355578061,
+   "subId": "c79a8ba0-e595-45e6-beec-8244e507802c",
+   "detail": {
+    "via": "inx",
+    "source": "indexer",
+    "msIndex": 6335,
+    "msTimestamp": 1791355578
+   },
+   "status": "CONFIRMED",
+   "blockId": "0x17cfc55b4662173b20e630d92feda60625c6d0a169065257c5f28d6ba3fb82d9"
+  }
+ },
+ {
+  "id": 21260,
+  "type": "message",
+  "atMs": 1791355578108,
+  "at": "2026-10-07T06:46:18.108Z",
+  "payload": {
+   "ts": 1791355578,
+   "iss": "did:iota:testnet:0x15eb8c4d90fa4fff1d49f3ae8b1676a61e09c883303acd383cbfaacb538db9ba",
+   "seq": 1791332998687,
+   "tag": "trust.score",
+   "ieId": "MyDomain:fa163e5e25ef",
+   "kind": "trust.score",
+   "first": true,
+   "reason": null,
+   "blockId": "0x75c30e61a0f8701748edc5a57442b4cc2d96458da94f04980446645ce9972f0a",
+   "msIndex": 6335,
+   "verdict": "PRODUCER_SIGNED",
+   "wfIndex": 2,
+   "encrypted": false
+  }
+ },
+ {
+  "id": 21261,
+  "type": "lifecycle",
+  "atMs": 1791355578109,
+  "at": "2026-10-07T06:46:18.109Z",
+  "payload": {
+   "atMs": 1791355578078,
+   "subId": "67b4bb3c-23a5-440a-9949-4caf60efc0a8",
+   "detail": {
+    "via": "inx",
+    "source": "indexer",
+    "msIndex": 6335,
+    "msTimestamp": 1791355578
+   },
+   "status": "CONFIRMED",
+   "blockId": "0x75c30e61a0f8701748edc5a57442b4cc2d96458da94f04980446645ce9972f0a"
+  }
+ },
+ {
+  "id": 21262,
+  "type": "message",
+  "atMs": 1791355578111,
+  "at": "2026-10-07T06:46:18.111Z",
+  "payload": {
+   "ts": 1791355578,
+   "iss": "did:iota:testnet:0x15eb8c4d90fa4fff1d49f3ae8b1676a61e09c883303acd383cbfaacb538db9ba",
+   "seq": 1791332998688,
+   "tag": "trust.score",
+   "ieId": "MyDomain:fa163ed55867",
+   "kind": "trust.score",
+   "first": true,
+   "reason": null,
+   "blockId": "0x230ffb4033fcfddab6d5694eacbf80c2adb200c106a5af02d4beec1416986972",
+   "msIndex": 6335,
+   "verdict": "PRODUCER_SIGNED",
+   "wfIndex": 3,
+   "encrypted": false
+  }
+ },
+ {
+  "id": 21263,
+  "type": "lifecycle",
+  "atMs": 1791355578316,
+  "at": "2026-10-07T06:46:18.316Z",
+  "payload": {
+   "atMs": 1791355578311,
+   "subId": "67b4bb3c-23a5-440a-9949-4caf60efc0a8",
+   "detail": {
+    "via": "GET /api/core/v2/blocks/{blockId}/metadata",
+    "whiteFlagIndex": 2,
+    "ledgerInclusionState": "noTransaction",
+    "referencedByMilestoneIndex": 6335
+   },
+   "status": "CONFIRMED",
+   "blockId": "0x75c30e61a0f8701748edc5a57442b4cc2d96458da94f04980446645ce9972f0a"
+  }
+ },
+ {
+  "id": 21264,
+  "type": "lifecycle",
+  "atMs": 1791355578326,
+  "at": "2026-10-07T06:46:18.326Z",
+  "payload": {
+   "atMs": 1791355578323,
+   "subId": "67b4bb3c-23a5-440a-9949-4caf60efc0a8",
+   "detail": {
+    "via": "GET /api/core/v2/blocks/{blockId}",
+    "bytes": 711
+   },
+   "status": "CONTENT_VERIFIED",
+   "blockId": "0x75c30e61a0f8701748edc5a57442b4cc2d96458da94f04980446645ce9972f0a"
+  }
+ },
+ {
+  "id": 21265,
+  "type": "lifecycle",
+  "atMs": 1791355579041,
+  "at": "2026-10-07T06:46:19.041Z",
+  "payload": {
+   "atMs": 1791355579039,
+   "subId": "c79a8ba0-e595-45e6-beec-8244e507802c",
+   "detail": {
+    "via": "GET /api/core/v2/blocks/{blockId}/metadata",
+    "whiteFlagIndex": 1,
+    "ledgerInclusionState": "noTransaction",
+    "referencedByMilestoneIndex": 6335
+   },
+   "status": "CONFIRMED",
+   "blockId": "0x17cfc55b4662173b20e630d92feda60625c6d0a169065257c5f28d6ba3fb82d9"
+  }
+ },
+ {
+  "id": 21266,
+  "type": "lifecycle",
+  "atMs": 1791355579055,
+  "at": "2026-10-07T06:46:19.055Z",
+  "payload": {
+   "atMs": 1791355579052,
+   "subId": "c79a8ba0-e595-45e6-beec-8244e507802c",
+   "detail": {
+    "via": "GET /api/core/v2/blocks/{blockId}",
+    "bytes": 663
+   },
+   "status": "CONTENT_VERIFIED",
+   "blockId": "0x17cfc55b4662173b20e630d92feda60625c6d0a169065257c5f28d6ba3fb82d9"
+  }
+ },
+ {
+  "id": 21267,
+  "type": "milestone",
+  "atMs": 1791355583041,
+  "at": "2026-10-07T06:46:23.041Z",
+  "payload": {
+   "id": "0xb4e7cb87935c02d6daa336d0907d63b3abacbb0c89f6a9c33cfc06d34bda211f",
+   "ts": 1791355583,
+   "index": 6336,
+   "blocks": 1,
+   "messages": 0,
+   "newMessages": 0
+  }
+ },
+ {
+  "id": 21268,
+  "type": "milestone",
+  "atMs": 1791355588039,
+  "at": "2026-10-07T06:46:28.039Z",
+  "payload": {
+   "id": "0x8c983724a4b38c2af01f5daf3431cc25e3cb815035942f9deb220933494213a5",
+   "ts": 1791355588,
+   "index": 6337,
+   "blocks": 1,
+   "messages": 0,
+   "newMessages": 0
+  }
+ },
+ {
+  "id": 21269,
+  "type": "milestone",
+  "atMs": 1791355593053,
+  "at": "2026-10-07T06:46:33.053Z",
+  "payload": {
+   "id": "0x24ba2aef44e8f1ed2d52c3ccb7ca6039d76a4a21d415b4b552d922884b2ee64e",
+   "ts": 1791355593,
+   "index": 6338,
+   "blocks": 1,
+   "messages": 0,
+   "newMessages": 0
+  }
+ },
+ {
+  "id": 21270,
+  "type": "milestone",
+  "atMs": 1791355598038,
+  "at": "2026-10-07T06:46:38.038Z",
+  "payload": {
+   "id": "0x7af85df1c7f226b0998abdedf93df97573c57fce4c198e6969e8ca97c662c824",
+   "ts": 1791355598,
+   "index": 6339,
+   "blocks": 1,
+   "messages": 0,
+   "newMessages": 0
+  }
+ },
+ {
+  "id": 21271,
+  "type": "milestone",
+  "atMs": 1791355603040,
+  "at": "2026-10-07T06:46:43.040Z",
+  "payload": {
+   "id": "0x96657ed43fdd9756b91033f2952923195c8390044e71ef2cf2802c60dec02a15",
+   "ts": 1791355603,
+   "index": 6340,
+   "blocks": 1,
+   "messages": 0,
+   "newMessages": 0
+  }
+ },
+ {
+  "id": 21272,
+  "type": "milestone",
+  "atMs": 1791355608035,
+  "at": "2026-10-07T06:46:48.035Z",
+  "payload": {
+   "id": "0xdf2b105dc9abfccb7b7eabbac79587f2e00123375e1214a76094c67099695a5f",
+   "ts": 1791355608,
+   "index": 6341,
+   "blocks": 1,
+   "messages": 0,
+   "newMessages": 0
+  }
+ },
+ {
+  "id": 21273,
+  "type": "milestone",
+  "atMs": 1791355613041,
+  "at": "2026-10-07T06:46:53.041Z",
+  "payload": {
+   "id": "0x99051e5552e16e3916643579aa3e25517a710f77f5d7c52b25aaa8136058a1d2",
+   "ts": 1791355613,
+   "index": 6342,
+   "blocks": 1,
+   "messages": 0,
+   "newMessages": 0
+  }
+ },
+ {
+  "id": 21274,
+  "type": "milestone",
+  "atMs": 1791355618038,
+  "at": "2026-10-07T06:46:58.038Z",
+  "payload": {
+   "id": "0x17c960f1dabf559befcabba1c18798d62c0bf355985096d0d2c982c9841eb9e9",
+   "ts": 1791355618,
+   "index": 6343,
+   "blocks": 1,
+   "messages": 0,
+   "newMessages": 0
+  }
+ },
+ {
+  "id": 21275,
+  "type": "milestone",
+  "atMs": 1791355623039,
+  "at": "2026-10-07T06:47:03.039Z",
+  "payload": {
+   "id": "0xc7f8649ab7faa8c1f8809ee31fd2775d1b957c41d4ee0a3d6dcfccd4b9bcf1ad",
+   "ts": 1791355623,
+   "index": 6344,
+   "blocks": 1,
+   "messages": 0,
+   "newMessages": 0
+  }
+ },
+ {
+  "id": 21276,
+  "type": "milestone",
+  "atMs": 1791355628039,
+  "at": "2026-10-07T06:47:08.039Z",
+  "payload": {
+   "id": "0xb6afba3bc8f464da13f77a96a9f1f8482d81352dfd5840addf28ec991e37fe67",
+   "ts": 1791355628,
+   "index": 6345,
+   "blocks": 1,
+   "messages": 0,
+   "newMessages": 0
+  }
+ },
+ {
+  "id": 21277,
+  "type": "milestone",
+  "atMs": 1791355633035,
+  "at": "2026-10-07T06:47:13.035Z",
+  "payload": {
+   "id": "0x61be4ad0d9bc9b09a0d9664c5aa2149a5db59af474765f90dacc5b9b937d9d22",
+   "ts": 1791355633,
+   "index": 6346,
+   "blocks": 1,
+   "messages": 0,
+   "newMessages": 0
+  }
+ },
+ {
+  "id": 21278,
+  "type": "milestone",
+  "atMs": 1791355638039,
+  "at": "2026-10-07T06:47:18.039Z",
+  "payload": {
+   "id": "0xc09db84acefc0423afcaab023ee4641da532b2e30acae57f9715aec38caa5b81",
+   "ts": 1791355638,
+   "index": 6347,
+   "blocks": 1,
+   "messages": 0,
+   "newMessages": 0
+  }
+ },
+ {
+  "id": 21280,
+  "type": "lifecycle",
+  "atMs": 1791355638659,
+  "at": "2026-10-07T06:47:18.659Z",
+  "payload": {
+   "atMs": 1791355638656,
+   "subId": "2b9b3f5f-5b0d-4418-8191-c315503ca59f",
+   "detail": {
+    "via": "GET /api/core/v2/blocks/{blockId}/metadata",
+    "isSolid": true
+   },
+   "status": "SOLID",
+   "blockId": "0x37a85befe34264cfd59e663dae5516907b1a52e2d1f69a22f529ff29526392bf"
+  }
+ },
+ {
+  "id": 21282,
+  "type": "lifecycle",
+  "atMs": 1791355639040,
+  "at": "2026-10-07T06:47:19.040Z",
+  "payload": {
+   "atMs": 1791355639038,
+   "subId": "54f21f65-c356-4fe1-8f54-14d291d225ee",
+   "detail": {
+    "via": "GET /api/core/v2/blocks/{blockId}/metadata",
+    "isSolid": true
+   },
+   "status": "SOLID",
+   "blockId": "0xdb0e37da5e0393a2c3a60d62f66a6b966d2ed00e9cf597817afe6c5019b38004"
+  }
+ },
+ {
+  "id": 21284,
+  "type": "lifecycle",
+  "atMs": 1791355639440,
+  "at": "2026-10-07T06:47:19.440Z",
+  "payload": {
+   "atMs": 1791355639437,
+   "subId": "1a7d8fb2-14f6-4357-a6e5-7d0a2407a006",
+   "detail": {
+    "via": "GET /api/core/v2/blocks/{blockId}/metadata",
+    "isSolid": true
+   },
+   "status": "SOLID",
+   "blockId": "0x73d2213fbf938a4aa2a4f7e44a78a185169cfcc7234194a7e34cc52df23a5cc1"
+  }
+ },
+ {
+  "id": 21285,
+  "type": "milestone",
+  "atMs": 1791355643122,
+  "at": "2026-10-07T06:47:23.122Z",
+  "payload": {
+   "id": "0x0b83d882f12721c7caf5739709c311ff3c1b41471f5d143f28227e6a558687b0",
+   "ts": 1791355643,
+   "index": 6348,
+   "blocks": 4,
+   "messages": 3,
+   "newMessages": 3
+  }
+ },
+ {
+  "id": 21286,
+  "type": "message",
+  "atMs": 1791355643123,
+  "at": "2026-10-07T06:47:23.123Z",
+  "payload": {
+   "ts": 1791355643,
+   "iss": "did:iota:testnet:0x15eb8c4d90fa4fff1d49f3ae8b1676a61e09c883303acd383cbfaacb538db9ba",
+   "seq": 1791332998689,
+   "tag": "trust.score",
+   "ieId": "MyDomain:fa163e32c6ee",
+   "kind": "trust.score",
+   "first": true,
+   "reason": null,
+   "blockId": "0x37a85befe34264cfd59e663dae5516907b1a52e2d1f69a22f529ff29526392bf",
+   "msIndex": 6348,
+   "verdict": "PRODUCER_SIGNED",
+   "wfIndex": 1,
+   "encrypted": false
+  }
+ },
+ {
+  "id": 21287,
+  "type": "lifecycle",
+  "atMs": 1791355643124,
+  "at": "2026-10-07T06:47:23.124Z",
+  "payload": {
+   "atMs": 1791355643065,
+   "subId": "2b9b3f5f-5b0d-4418-8191-c315503ca59f",
+   "detail": {
+    "via": "inx",
+    "source": "indexer",
+    "msIndex": 6348,
+    "msTimestamp": 1791355643
+   },
+   "status": "CONFIRMED",
+   "blockId": "0x37a85befe34264cfd59e663dae5516907b1a52e2d1f69a22f529ff29526392bf"
+  }
+ },
+ {
+  "id": 21288,
+  "type": "message",
+  "atMs": 1791355643125,
+  "at": "2026-10-07T06:47:23.125Z",
+  "payload": {
+   "ts": 1791355643,
+   "iss": "did:iota:testnet:0x15eb8c4d90fa4fff1d49f3ae8b1676a61e09c883303acd383cbfaacb538db9ba",
+   "seq": 1791332998690,
+   "tag": "trust.score",
+   "ieId": "MyDomain:fa163e5e25ef",
+   "kind": "trust.score",
+   "first": true,
+   "reason": null,
+   "blockId": "0xdb0e37da5e0393a2c3a60d62f66a6b966d2ed00e9cf597817afe6c5019b38004",
+   "msIndex": 6348,
+   "verdict": "PRODUCER_SIGNED",
+   "wfIndex": 2,
+   "encrypted": false
+  }
+ },
+ {
+  "id": 21289,
+  "type": "lifecycle",
+  "atMs": 1791355643126,
+  "at": "2026-10-07T06:47:23.126Z",
+  "payload": {
+   "atMs": 1791355643090,
+   "subId": "54f21f65-c356-4fe1-8f54-14d291d225ee",
+   "detail": {
+    "via": "inx",
+    "source": "indexer",
+    "msIndex": 6348,
+    "msTimestamp": 1791355643
+   },
+   "status": "CONFIRMED",
+   "blockId": "0xdb0e37da5e0393a2c3a60d62f66a6b966d2ed00e9cf597817afe6c5019b38004"
+  }
+ },
+ {
+  "id": 21290,
+  "type": "message",
+  "atMs": 1791355643127,
+  "at": "2026-10-07T06:47:23.127Z",
+  "payload": {
+   "ts": 1791355643,
+   "iss": "did:iota:testnet:0x15eb8c4d90fa4fff1d49f3ae8b1676a61e09c883303acd383cbfaacb538db9ba",
+   "seq": 1791332998691,
+   "tag": "trust.score",
+   "ieId": "MyDomain:fa163ed55867",
+   "kind": "trust.score",
+   "first": true,
+   "reason": null,
+   "blockId": "0x73d2213fbf938a4aa2a4f7e44a78a185169cfcc7234194a7e34cc52df23a5cc1",
+   "msIndex": 6348,
+   "verdict": "PRODUCER_SIGNED",
+   "wfIndex": 3,
+   "encrypted": false
+  }
+ },
+ {
+  "id": 21291,
+  "type": "lifecycle",
+  "atMs": 1791355643129,
+  "at": "2026-10-07T06:47:23.129Z",
+  "payload": {
+   "atMs": 1791355643110,
+   "subId": "1a7d8fb2-14f6-4357-a6e5-7d0a2407a006",
+   "detail": {
+    "via": "inx",
+    "source": "indexer",
+    "msIndex": 6348,
+    "msTimestamp": 1791355643
+   },
+   "status": "CONFIRMED",
+   "blockId": "0x73d2213fbf938a4aa2a4f7e44a78a185169cfcc7234194a7e34cc52df23a5cc1"
+  }
+ },
+ {
+  "id": 21292,
+  "type": "lifecycle",
+  "atMs": 1791355646196,
+  "at": "2026-10-07T06:47:26.196Z",
+  "payload": {
+   "atMs": 1791355646194,
+   "subId": "2b9b3f5f-5b0d-4418-8191-c315503ca59f",
+   "detail": {
+    "via": "GET /api/core/v2/blocks/{blockId}/metadata",
+    "whiteFlagIndex": 1,
+    "ledgerInclusionState": "noTransaction",
+    "referencedByMilestoneIndex": 6348
+   },
+   "status": "CONFIRMED",
+   "blockId": "0x37a85befe34264cfd59e663dae5516907b1a52e2d1f69a22f529ff29526392bf"
+  }
+ },
+ {
+  "id": 21293,
+  "type": "lifecycle",
+  "atMs": 1791355646208,
+  "at": "2026-10-07T06:47:26.208Z",
+  "payload": {
+   "atMs": 1791355646205,
+   "subId": "2b9b3f5f-5b0d-4418-8191-c315503ca59f",
+   "detail": {
+    "via": "GET /api/core/v2/blocks/{blockId}",
+    "bytes": 695
+   },
+   "status": "CONTENT_VERIFIED",
+   "blockId": "0x37a85befe34264cfd59e663dae5516907b1a52e2d1f69a22f529ff29526392bf"
+  }
+ },
+ {
+  "id": 21294,
+  "type": "lifecycle",
+  "atMs": 1791355646579,
+  "at": "2026-10-07T06:47:26.579Z",
+  "payload": {
+   "atMs": 1791355646577,
+   "subId": "54f21f65-c356-4fe1-8f54-14d291d225ee",
+   "detail": {
+    "via": "GET /api/core/v2/blocks/{blockId}/metadata",
+    "whiteFlagIndex": 2,
+    "ledgerInclusionState": "noTransaction",
+    "referencedByMilestoneIndex": 6348
+   },
+   "status": "CONFIRMED",
+   "blockId": "0xdb0e37da5e0393a2c3a60d62f66a6b966d2ed00e9cf597817afe6c5019b38004"
+  }
+ },
+ {
+  "id": 21295,
+  "type": "lifecycle",
+  "atMs": 1791355646587,
+  "at": "2026-10-07T06:47:26.587Z",
+  "payload": {
+   "atMs": 1791355646585,
+   "subId": "54f21f65-c356-4fe1-8f54-14d291d225ee",
+   "detail": {
+    "via": "GET /api/core/v2/blocks/{blockId}",
+    "bytes": 743
+   },
+   "status": "CONTENT_VERIFIED",
+   "blockId": "0xdb0e37da5e0393a2c3a60d62f66a6b966d2ed00e9cf597817afe6c5019b38004"
+  }
+ },
+ {
+  "id": 21296,
+  "type": "lifecycle",
+  "atMs": 1791355646975,
+  "at": "2026-10-07T06:47:26.975Z",
+  "payload": {
+   "atMs": 1791355646973,
+   "subId": "1a7d8fb2-14f6-4357-a6e5-7d0a2407a006",
+   "detail": {
+    "via": "GET /api/core/v2/blocks/{blockId}/metadata",
+    "whiteFlagIndex": 3,
+    "ledgerInclusionState": "noTransaction",
+    "referencedByMilestoneIndex": 6348
+   },
+   "status": "CONFIRMED",
+   "blockId": "0x73d2213fbf938a4aa2a4f7e44a78a185169cfcc7234194a7e34cc52df23a5cc1"
+  }
+ },
+ {
+  "id": 21297,
+  "type": "lifecycle",
+  "atMs": 1791355646987,
+  "at": "2026-10-07T06:47:26.987Z",
+  "payload": {
+   "atMs": 1791355646982,
+   "subId": "1a7d8fb2-14f6-4357-a6e5-7d0a2407a006",
+   "detail": {
+    "via": "GET /api/core/v2/blocks/{blockId}",
+    "bytes": 776
+   },
+   "status": "CONTENT_VERIFIED",
+   "blockId": "0x73d2213fbf938a4aa2a4f7e44a78a185169cfcc7234194a7e34cc52df23a5cc1"
+  }
+ },
+ {
+  "id": 21298,
+  "type": "milestone",
+  "atMs": 1791355648039,
+  "at": "2026-10-07T06:47:28.039Z",
+  "payload": {
+   "id": "0x736511668b6c288bbeb13139461dd3905129bbac8e9681e64e7c0a7e27982c7f",
+   "ts": 1791355648,
+   "index": 6349,
+   "blocks": 1,
+   "messages": 0,
+   "newMessages": 0
+  }
+ },
+ {
+  "id": 21299,
+  "type": "milestone",
+  "atMs": 1791355653035,
+  "at": "2026-10-07T06:47:33.035Z",
+  "payload": {
+   "id": "0x5a30e34c9edcd5a334b51f10eb16175df5311b05f463c7fb585f9da1e81653f5",
+   "ts": 1791355653,
+   "index": 6350,
+   "blocks": 1,
+   "messages": 0,
+   "newMessages": 0
+  }
+ },
+ {
+  "id": 21300,
+  "type": "milestone",
+  "atMs": 1791355658039,
+  "at": "2026-10-07T06:47:38.039Z",
+  "payload": {
+   "id": "0x620fca6df70e77eec646f40e55a8927b8cf1d639d31755e3683cdc56b1cbe596",
+   "ts": 1791355658,
+   "index": 6351,
+   "blocks": 1,
+   "messages": 0,
+   "newMessages": 0
+  }
+ },
+ {
+  "id": 21301,
+  "type": "milestone",
+  "atMs": 1791355663051,
+  "at": "2026-10-07T06:47:43.051Z",
+  "payload": {
+   "id": "0x8a84d77b0ded5c285fc35692528e138d9af192a48757df09120d8f43119b60fb",
+   "ts": 1791355663,
+   "index": 6352,
+   "blocks": 1,
+   "messages": 0,
+   "newMessages": 0
+  }
+ },
+ {
+  "id": 21302,
+  "type": "milestone",
+  "atMs": 1791355668037,
+  "at": "2026-10-07T06:47:48.037Z",
+  "payload": {
+   "id": "0xe9987383f0ab8986a2483e0d4a6128c3e444391d1b16ddaaac1dd154d7448291",
+   "ts": 1791355668,
+   "index": 6353,
+   "blocks": 1,
+   "messages": 0,
+   "newMessages": 0
+  }
+ },
+ {
+  "id": 21303,
+  "type": "milestone",
+  "atMs": 1791355673040,
+  "at": "2026-10-07T06:47:53.040Z",
+  "payload": {
+   "id": "0x449f07b5b18112f2b1a246a73d02574aae1e36d46b308431848dd8a6dd2c4fcb",
+   "ts": 1791355673,
+   "index": 6354,
+   "blocks": 1,
+   "messages": 0,
+   "newMessages": 0
+  }
+ },
+ {
+  "id": 21304,
+  "type": "milestone",
+  "atMs": 1791355678036,
+  "at": "2026-10-07T06:47:58.036Z",
+  "payload": {
+   "id": "0xb80a344099fc4a3d97916b4e72e56007ae5a2cffd0b90fb0d7e162dc0e07997e",
+   "ts": 1791355678,
+   "index": 6355,
+   "blocks": 1,
+   "messages": 0,
+   "newMessages": 0
+  }
+ },
+ {
+  "id": 21305,
+  "type": "milestone",
+  "atMs": 1791355683036,
+  "at": "2026-10-07T06:48:03.036Z",
+  "payload": {
+   "id": "0x4d26ce8e27237ae153bb6abb25a72ac53ad12355d224f0643a2020058b9eabda",
+   "ts": 1791355683,
+   "index": 6356,
+   "blocks": 1,
+   "messages": 0,
+   "newMessages": 0
+  }
+ },
+ {
+  "id": 21306,
+  "type": "milestone",
+  "atMs": 1791355688039,
+  "at": "2026-10-07T06:48:08.039Z",
+  "payload": {
+   "id": "0x097732656bdfdec05b45a1d6970d2048ab7b9e2de735f33c08dc08a8b6a6f062",
+   "ts": 1791355688,
+   "index": 6357,
+   "blocks": 1,
+   "messages": 0,
+   "newMessages": 0
+  }
+ },
+ {
+  "id": 21307,
+  "type": "milestone",
+  "atMs": 1791355693037,
+  "at": "2026-10-07T06:48:13.037Z",
+  "payload": {
+   "id": "0x08b409451fd51e4a03c6c2861e9bdb3d640ea705967ccb9b0ebbb95e5a4b0576",
+   "ts": 1791355693,
+   "index": 6358,
+   "blocks": 1,
+   "messages": 0,
+   "newMessages": 0
+  }
+ },
+ {
+  "id": 21308,
+  "type": "milestone",
+  "atMs": 1791355698039,
+  "at": "2026-10-07T06:48:18.039Z",
+  "payload": {
+   "id": "0xf7555f4641946db98c4e3c86eb10caea876c8718fa8dcc9cbe84d432b1c92938",
+   "ts": 1791355698,
+   "index": 6359,
+   "blocks": 1,
+   "messages": 0,
+   "newMessages": 0
+  }
+ },
+ {
+  "id": 21310,
+  "type": "lifecycle",
+  "atMs": 1791355700068,
+  "at": "2026-10-07T06:48:20.068Z",
+  "payload": {
+   "atMs": 1791355700063,
+   "subId": "610684ad-7357-4d98-9534-dfe8529f4a8b",
+   "detail": {
+    "via": "GET /api/core/v2/blocks/{blockId}/metadata",
+    "isSolid": true
+   },
+   "status": "SOLID",
+   "blockId": "0x9dd3e2a92d19d237de92a8ff70c84a491127f864fad3fc8415e133237156e5e5"
+  }
+ },
+ {
+  "id": 21312,
+  "type": "lifecycle",
+  "atMs": 1791355700503,
+  "at": "2026-10-07T06:48:20.503Z",
+  "payload": {
+   "atMs": 1791355700501,
+   "subId": "0fb52f54-cf13-4279-a03f-fa564ba3f79a",
+   "detail": {
+    "via": "GET /api/core/v2/blocks/{blockId}/metadata",
+    "isSolid": true
+   },
+   "status": "SOLID",
+   "blockId": "0x66aec78b63618c2aa115c15d0321cdee25bd4cbc2cf534f31ab1e3ba918746c4"
+  }
+ },
+ {
+  "id": 21314,
+  "type": "lifecycle",
+  "atMs": 1791355700806,
+  "at": "2026-10-07T06:48:20.806Z",
+  "payload": {
+   "atMs": 1791355700804,
+   "subId": "2fa12aa6-90b6-4512-a270-d167ec4e8f33",
+   "detail": {
+    "via": "GET /api/core/v2/blocks/{blockId}/metadata",
+    "isSolid": true
+   },
+   "status": "SOLID",
+   "blockId": "0xd49be110b65840a05897821255ffae6da00926820bb9acaaf993b10a7ab02e28"
+  }
+ },
+ {
+  "id": 21315,
+  "type": "milestone",
+  "atMs": 1791355703100,
+  "at": "2026-10-07T06:48:23.100Z",
+  "payload": {
+   "id": "0xd4226860bb51aa0f6c93e7e47e1d4343a1aaca523abd0e438d0dc13c5cee846e",
+   "ts": 1791355703,
+   "index": 6360,
+   "blocks": 4,
+   "messages": 3,
+   "newMessages": 3
+  }
+ },
+ {
+  "id": 21316,
+  "type": "message",
+  "atMs": 1791355703101,
+  "at": "2026-10-07T06:48:23.101Z",
+  "payload": {
+   "ts": 1791355703,
+   "iss": "did:iota:testnet:0x15eb8c4d90fa4fff1d49f3ae8b1676a61e09c883303acd383cbfaacb538db9ba",
+   "seq": 1791332998692,
+   "tag": "trust.score",
+   "ieId": "MyDomain:fa163e32c6ee",
+   "kind": "trust.score",
+   "first": true,
+   "reason": null,
+   "blockId": "0x9dd3e2a92d19d237de92a8ff70c84a491127f864fad3fc8415e133237156e5e5",
+   "msIndex": 6360,
+   "verdict": "PRODUCER_SIGNED",
+   "wfIndex": 1,
+   "encrypted": false
+  }
+ },
+ {
+  "id": 21317,
+  "type": "lifecycle",
+  "atMs": 1791355703102,
+  "at": "2026-10-07T06:48:23.102Z",
+  "payload": {
+   "atMs": 1791355703052,
+   "subId": "610684ad-7357-4d98-9534-dfe8529f4a8b",
+   "detail": {
+    "via": "inx",
+    "source": "indexer",
+    "msIndex": 6360,
+    "msTimestamp": 1791355703
+   },
+   "status": "CONFIRMED",
+   "blockId": "0x9dd3e2a92d19d237de92a8ff70c84a491127f864fad3fc8415e133237156e5e5"
+  }
+ },
+ {
+  "id": 21318,
+  "type": "message",
+  "atMs": 1791355703103,
+  "at": "2026-10-07T06:48:23.103Z",
+  "payload": {
+   "ts": 1791355703,
+   "iss": "did:iota:testnet:0x15eb8c4d90fa4fff1d49f3ae8b1676a61e09c883303acd383cbfaacb538db9ba",
+   "seq": 1791332998693,
+   "tag": "trust.score",
+   "ieId": "MyDomain:fa163e5e25ef",
+   "kind": "trust.score",
+   "first": true,
+   "reason": null,
+   "blockId": "0x66aec78b63618c2aa115c15d0321cdee25bd4cbc2cf534f31ab1e3ba918746c4",
+   "msIndex": 6360,
+   "verdict": "PRODUCER_SIGNED",
+   "wfIndex": 2,
+   "encrypted": false
+  }
+ },
+ {
+  "id": 21319,
+  "type": "lifecycle",
+  "atMs": 1791355703105,
+  "at": "2026-10-07T06:48:23.105Z",
+  "payload": {
+   "atMs": 1791355703069,
+   "subId": "0fb52f54-cf13-4279-a03f-fa564ba3f79a",
+   "detail": {
+    "via": "inx",
+    "source": "indexer",
+    "msIndex": 6360,
+    "msTimestamp": 1791355703
+   },
+   "status": "CONFIRMED",
+   "blockId": "0x66aec78b63618c2aa115c15d0321cdee25bd4cbc2cf534f31ab1e3ba918746c4"
+  }
+ },
+ {
+  "id": 21320,
+  "type": "message",
+  "atMs": 1791355703106,
+  "at": "2026-10-07T06:48:23.106Z",
+  "payload": {
+   "ts": 1791355703,
+   "iss": "did:iota:testnet:0x15eb8c4d90fa4fff1d49f3ae8b1676a61e09c883303acd383cbfaacb538db9ba",
+   "seq": 1791332998694,
+   "tag": "trust.score",
+   "ieId": "MyDomain:fa163ed55867",
+   "kind": "trust.score",
+   "first": true,
+   "reason": null,
+   "blockId": "0xd49be110b65840a05897821255ffae6da00926820bb9acaaf993b10a7ab02e28",
+   "msIndex": 6360,
+   "verdict": "PRODUCER_SIGNED",
+   "wfIndex": 3,
+   "encrypted": false
+  }
+ },
+ {
+  "id": 21321,
+  "type": "lifecycle",
+  "atMs": 1791355703107,
+  "at": "2026-10-07T06:48:23.107Z",
+  "payload": {
+   "atMs": 1791355703086,
+   "subId": "2fa12aa6-90b6-4512-a270-d167ec4e8f33",
+   "detail": {
+    "via": "inx",
+    "source": "indexer",
+    "msIndex": 6360,
+    "msTimestamp": 1791355703
+   },
+   "status": "CONFIRMED",
+   "blockId": "0xd49be110b65840a05897821255ffae6da00926820bb9acaaf993b10a7ab02e28"
+  }
+ },
+ {
+  "id": 21322,
+  "type": "lifecycle",
+  "atMs": 1791355703596,
+  "at": "2026-10-07T06:48:23.596Z",
+  "payload": {
+   "atMs": 1791355703594,
+   "subId": "610684ad-7357-4d98-9534-dfe8529f4a8b",
+   "detail": {
+    "via": "GET /api/core/v2/blocks/{blockId}/metadata",
+    "whiteFlagIndex": 1,
+    "ledgerInclusionState": "noTransaction",
+    "referencedByMilestoneIndex": 6360
+   },
+   "status": "CONFIRMED",
+   "blockId": "0x9dd3e2a92d19d237de92a8ff70c84a491127f864fad3fc8415e133237156e5e5"
+  }
+ },
+ {
+  "id": 21323,
+  "type": "lifecycle",
+  "atMs": 1791355703606,
+  "at": "2026-10-07T06:48:23.606Z",
+  "payload": {
+   "atMs": 1791355703603,
+   "subId": "610684ad-7357-4d98-9534-dfe8529f4a8b",
+   "detail": {
+    "via": "GET /api/core/v2/blocks/{blockId}",
+    "bytes": 695
+   },
+   "status": "CONTENT_VERIFIED",
+   "blockId": "0x9dd3e2a92d19d237de92a8ff70c84a491127f864fad3fc8415e133237156e5e5"
+  }
+ },
+ {
+  "id": 21324,
+  "type": "lifecycle",
+  "atMs": 1791355704029,
+  "at": "2026-10-07T06:48:24.029Z",
+  "payload": {
+   "atMs": 1791355704026,
+   "subId": "0fb52f54-cf13-4279-a03f-fa564ba3f79a",
+   "detail": {
+    "via": "GET /api/core/v2/blocks/{blockId}/metadata",
+    "whiteFlagIndex": 2,
+    "ledgerInclusionState": "noTransaction",
+    "referencedByMilestoneIndex": 6360
+   },
+   "status": "CONFIRMED",
+   "blockId": "0x66aec78b63618c2aa115c15d0321cdee25bd4cbc2cf534f31ab1e3ba918746c4"
+  }
+ },
+ {
+  "id": 21325,
+  "type": "lifecycle",
+  "atMs": 1791355704039,
+  "at": "2026-10-07T06:48:24.039Z",
+  "payload": {
+   "atMs": 1791355704035,
+   "subId": "0fb52f54-cf13-4279-a03f-fa564ba3f79a",
+   "detail": {
+    "via": "GET /api/core/v2/blocks/{blockId}",
+    "bytes": 743
+   },
+   "status": "CONTENT_VERIFIED",
+   "blockId": "0x66aec78b63618c2aa115c15d0321cdee25bd4cbc2cf534f31ab1e3ba918746c4"
+  }
+ },
+ {
+  "id": 21326,
+  "type": "lifecycle",
+  "atMs": 1791355704348,
+  "at": "2026-10-07T06:48:24.348Z",
+  "payload": {
+   "atMs": 1791355704341,
+   "subId": "2fa12aa6-90b6-4512-a270-d167ec4e8f33",
+   "detail": {
+    "via": "GET /api/core/v2/blocks/{blockId}/metadata",
+    "whiteFlagIndex": 3,
+    "ledgerInclusionState": "noTransaction",
+    "referencedByMilestoneIndex": 6360
+   },
+   "status": "CONFIRMED",
+   "blockId": "0xd49be110b65840a05897821255ffae6da00926820bb9acaaf993b10a7ab02e28"
+  }
+ },
+ {
+  "id": 21327,
+  "type": "lifecycle",
+  "atMs": 1791355704366,
+  "at": "2026-10-07T06:48:24.366Z",
+  "payload": {
+   "atMs": 1791355704361,
+   "subId": "2fa12aa6-90b6-4512-a270-d167ec4e8f33",
+   "detail": {
+    "via": "GET /api/core/v2/blocks/{blockId}",
+    "bytes": 776
+   },
+   "status": "CONTENT_VERIFIED",
+   "blockId": "0xd49be110b65840a05897821255ffae6da00926820bb9acaaf993b10a7ab02e28"
+  }
+ },
+ {
+  "id": 21328,
+  "type": "milestone",
+  "atMs": 1791355708030,
+  "at": "2026-10-07T06:48:28.030Z",
+  "payload": {
+   "id": "0x5db0c26de50938081c2f127e493192a24ff3182ce9495099d36e7682ecded0fe",
+   "ts": 1791355708,
+   "index": 6361,
+   "blocks": 1,
+   "messages": 0,
+   "newMessages": 0
+  }
+ },
+ {
+  "id": 21329,
+  "type": "milestone",
+  "atMs": 1791355713052,
+  "at": "2026-10-07T06:48:33.052Z",
+  "payload": {
+   "id": "0x2dfeb9e78d1004e7c973bce18e50be1271a1911df4df1936702ac08a7aedd7f6",
+   "ts": 1791355713,
+   "index": 6362,
+   "blocks": 1,
+   "messages": 0,
+   "newMessages": 0
+  }
+ },
+ {
+  "id": 21330,
+  "type": "milestone",
+  "atMs": 1791355718035,
+  "at": "2026-10-07T06:48:38.035Z",
+  "payload": {
+   "id": "0x69cd150bf902f531987c0920218a77e32e9d64b073b226fce7627aaa77f09cd8",
+   "ts": 1791355718,
+   "index": 6363,
+   "blocks": 1,
+   "messages": 0,
+   "newMessages": 0
+  }
+ },
+ {
+  "id": 21331,
+  "type": "milestone",
+  "atMs": 1791355723064,
+  "at": "2026-10-07T06:48:43.064Z",
+  "payload": {
+   "id": "0xe44ba4f9d104180e52bc8cbb1cb9db731432d4c808e9424ef8df409cee96d1b2",
+   "ts": 1791355723,
+   "index": 6364,
+   "blocks": 1,
+   "messages": 0,
+   "newMessages": 0
+  }
+ },
+ {
+  "id": 21332,
+  "type": "milestone",
+  "atMs": 1791355728039,
+  "at": "2026-10-07T06:48:48.039Z",
+  "payload": {
+   "id": "0x0203eb3ce5d46392f559049ba4730d16a131b7ae38eb9d69b4c729eb9289754a",
+   "ts": 1791355728,
+   "index": 6365,
+   "blocks": 1,
+   "messages": 0,
+   "newMessages": 0
+  }
+ },
+ {
+  "id": 21333,
+  "type": "milestone",
+  "atMs": 1791355733060,
+  "at": "2026-10-07T06:48:53.060Z",
+  "payload": {
+   "id": "0xfde062e2c9de3875a10973ea87c38d4ac6308748c574305bdebb3e8b8dea396e",
+   "ts": 1791355733,
+   "index": 6366,
+   "blocks": 1,
+   "messages": 0,
+   "newMessages": 0
+  }
+ },
+ {
+  "id": 21334,
+  "type": "milestone",
+  "atMs": 1791355738034,
+  "at": "2026-10-07T06:48:58.034Z",
+  "payload": {
+   "id": "0xe0b55a5811be5e25366e37c88371161bbfbeaa51f2d0171ec7735713a8582abc",
+   "ts": 1791355738,
+   "index": 6367,
+   "blocks": 1,
+   "messages": 0,
+   "newMessages": 0
+  }
+ },
+ {
+  "id": 21335,
+  "type": "milestone",
+  "atMs": 1791355743034,
+  "at": "2026-10-07T06:49:03.034Z",
+  "payload": {
+   "id": "0x50370d06786d54c0e69b49ffa8ec76834e377c9e95de6531f3e0dc3fc0e6fafb",
+   "ts": 1791355743,
+   "index": 6368,
+   "blocks": 1,
+   "messages": 0,
+   "newMessages": 0
+  }
+ },
+ {
+  "id": 21336,
+  "type": "milestone",
+  "atMs": 1791355748061,
+  "at": "2026-10-07T06:49:08.061Z",
+  "payload": {
+   "id": "0xb7169e534942e0193188a39ee57fa9e82c2c448cc4219d33482d194ef84fe5c2",
+   "ts": 1791355748,
+   "index": 6369,
+   "blocks": 1,
+   "messages": 0,
+   "newMessages": 0
+  }
+ },
+ {
+  "id": 21337,
+  "type": "milestone",
+  "atMs": 1791355753034,
+  "at": "2026-10-07T06:49:13.034Z",
+  "payload": {
+   "id": "0x5ccd648be3ff89674ef7bfe5ce72db404e1257713c7b1d03399eacfbc577870f",
+   "ts": 1791355753,
+   "index": 6370,
+   "blocks": 1,
+   "messages": 0,
+   "newMessages": 0
+  }
+ },
+ {
+  "id": 21338,
+  "type": "milestone",
+  "atMs": 1791355758032,
+  "at": "2026-10-07T06:49:18.032Z",
+  "payload": {
+   "id": "0x7dc0a66acb6578eb6be84780071dd43d362bd118dceda5e204fa1024e86e1432",
+   "ts": 1791355758,
+   "index": 6371,
+   "blocks": 1,
+   "messages": 0,
+   "newMessages": 0
+  }
+ },
+ {
+  "id": 21339,
+  "type": "milestone",
+  "atMs": 1791355763031,
+  "at": "2026-10-07T06:49:23.031Z",
+  "payload": {
+   "id": "0x4eb8b9eed483f31b8a79ac40e338fa729397f932c127e8ea9cf436eb16d2c543",
+   "ts": 1791355763,
+   "index": 6372,
+   "blocks": 1,
+   "messages": 0,
+   "newMessages": 0
+  }
+ },
+ {
+  "id": 21341,
+  "type": "milestone",
+  "atMs": 1791355768030,
+  "at": "2026-10-07T06:49:28.030Z",
+  "payload": {
+   "id": "0x8641dd97cdd5cd60e417769f2e6000b89d009b0a3f5788d4308cf8ef56032020",
+   "ts": 1791355768,
+   "index": 6373,
+   "blocks": 1,
+   "messages": 0,
+   "newMessages": 0
+  }
+ },
+ {
+  "id": 21343,
+  "type": "milestone",
+  "atMs": 1791355773031,
+  "at": "2026-10-07T06:49:33.031Z",
+  "payload": {
+   "id": "0xc65b7581e9948c9fdaf5409f6e38a10b3220badabe9c45a75700dcdb2192b607",
+   "ts": 1791355773,
+   "index": 6374,
+   "blocks": 1,
+   "messages": 0,
+   "newMessages": 0
+  }
+ },
+ {
+  "id": 21345,
+  "type": "lifecycle",
+  "atMs": 1791355775985,
+  "at": "2026-10-07T06:49:35.985Z",
+  "payload": {
+   "atMs": 1791355775982,
+   "subId": "7e235417-b34c-4e3e-ae86-b5f19b942dae",
+   "detail": {
+    "via": "GET /api/core/v2/blocks/{blockId}/metadata",
+    "isSolid": true
+   },
+   "status": "SOLID",
+   "blockId": "0x7558627b8f35ce71fcaf94bdea14a27333053e40d934341042c95ef5c4a996c7"
+  }
+ },
+ {
+  "id": 21346,
+  "type": "milestone",
+  "atMs": 1791355778060,
+  "at": "2026-10-07T06:49:38.060Z",
+  "payload": {
+   "id": "0x05c5e19315854f4677adc2582b4b58b71b6d6395c62ed4905b1cb5947230ab86",
+   "ts": 1791355778,
+   "index": 6375,
+   "blocks": 2,
+   "messages": 1,
+   "newMessages": 1
+  }
+ },
+ {
+  "id": 21347,
+  "type": "message",
+  "atMs": 1791355778063,
+  "at": "2026-10-07T06:49:38.063Z",
+  "payload": {
+   "ts": 1791355778,
+   "iss": "did:iota:testnet:0x15eb8c4d90fa4fff1d49f3ae8b1676a61e09c883303acd383cbfaacb538db9ba",
+   "seq": 1791332998697,
+   "tag": "trust.score",
+   "ieId": "MyDomain:fa163ed55867",
+   "kind": "trust.score",
+   "first": true,
+   "reason": null,
+   "blockId": "0x7558627b8f35ce71fcaf94bdea14a27333053e40d934341042c95ef5c4a996c7",
+   "msIndex": 6375,
+   "verdict": "PRODUCER_SIGNED",
+   "wfIndex": 1,
+   "encrypted": false
+  }
+ },
+ {
+  "id": 21348,
+  "type": "lifecycle",
+  "atMs": 1791355778064,
+  "at": "2026-10-07T06:49:38.064Z",
+  "payload": {
+   "atMs": 1791355778044,
+   "subId": "7e235417-b34c-4e3e-ae86-b5f19b942dae",
+   "detail": {
+    "via": "inx",
+    "source": "indexer",
+    "msIndex": 6375,
+    "msTimestamp": 1791355778
+   },
+   "status": "CONFIRMED",
+   "blockId": "0x7558627b8f35ce71fcaf94bdea14a27333053e40d934341042c95ef5c4a996c7"
+  }
+ },
+ {
+  "id": 21349,
+  "type": "lifecycle",
+  "atMs": 1791355779518,
+  "at": "2026-10-07T06:49:39.518Z",
+  "payload": {
+   "atMs": 1791355779515,
+   "subId": "7e235417-b34c-4e3e-ae86-b5f19b942dae",
+   "detail": {
+    "via": "GET /api/core/v2/blocks/{blockId}/metadata",
+    "whiteFlagIndex": 1,
+    "ledgerInclusionState": "noTransaction",
+    "referencedByMilestoneIndex": 6375
+   },
+   "status": "CONFIRMED",
+   "blockId": "0x7558627b8f35ce71fcaf94bdea14a27333053e40d934341042c95ef5c4a996c7"
+  }
+ },
+ {
+  "id": 21350,
+  "type": "lifecycle",
+  "atMs": 1791355779529,
+  "at": "2026-10-07T06:49:39.529Z",
+  "payload": {
+   "atMs": 1791355779526,
+   "subId": "7e235417-b34c-4e3e-ae86-b5f19b942dae",
+   "detail": {
+    "via": "GET /api/core/v2/blocks/{blockId}",
+    "bytes": 712
+   },
+   "status": "CONTENT_VERIFIED",
+   "blockId": "0x7558627b8f35ce71fcaf94bdea14a27333053e40d934341042c95ef5c4a996c7"
+  }
+ },
+ {
+  "id": 21351,
+  "type": "milestone",
+  "atMs": 1791355783035,
+  "at": "2026-10-07T06:49:43.035Z",
+  "payload": {
+   "id": "0x41b60146d87c672f10700120da5018aad55e59352047e766090b00d5f2748caf",
+   "ts": 1791355783,
+   "index": 6376,
+   "blocks": 1,
+   "messages": 0,
+   "newMessages": 0
+  }
+ },
+ {
+  "id": 21352,
+  "type": "milestone",
+  "atMs": 1791355788029,
+  "at": "2026-10-07T06:49:48.029Z",
+  "payload": {
+   "id": "0x78f55158960fbfd7713e2e3584e154bed0443a5691df9f96647091d61723a345",
+   "ts": 1791355788,
+   "index": 6377,
+   "blocks": 1,
+   "messages": 0,
+   "newMessages": 0
+  }
+ },
+ {
+  "id": 21353,
+  "type": "milestone",
+  "atMs": 1791355793034,
+  "at": "2026-10-07T06:49:53.034Z",
+  "payload": {
+   "id": "0xe04addb647d3cc033987801413b8eb51fb922722505b9a10dcf8b5d43db138c9",
+   "ts": 1791355793,
+   "index": 6378,
+   "blocks": 1,
+   "messages": 0,
+   "newMessages": 0
+  }
+ },
+ {
+  "id": 21354,
+  "type": "milestone",
+  "atMs": 1791355798034,
+  "at": "2026-10-07T06:49:58.034Z",
+  "payload": {
+   "id": "0x48b924ae0fc79649eb432276210d491dfe0a6bd02e02b9778e9526d9499f6583",
+   "ts": 1791355798,
+   "index": 6379,
+   "blocks": 1,
+   "messages": 0,
+   "newMessages": 0
+  }
+ },
+ {
+  "id": 21355,
+  "type": "milestone",
+  "atMs": 1791355803030,
+  "at": "2026-10-07T06:50:03.030Z",
+  "payload": {
+   "id": "0xcfc35e79cdad9ca41f4bc56403f8cd627c553eeb5deb245e9470481bb460fa35",
+   "ts": 1791355803,
+   "index": 6380,
+   "blocks": 1,
+   "messages": 0,
+   "newMessages": 0
+  }
+ },
+ {
+  "id": 21356,
+  "type": "milestone",
+  "atMs": 1791355808031,
+  "at": "2026-10-07T06:50:08.031Z",
+  "payload": {
+   "id": "0x03317d2bd32b90eafc8b46a60c67bcdbab159112cc2eb043c3f8f3779765e93b",
+   "ts": 1791355808,
+   "index": 6381,
+   "blocks": 1,
+   "messages": 0,
+   "newMessages": 0
+  }
+ },
+ {
+  "id": 21357,
+  "type": "milestone",
+  "atMs": 1791355813031,
+  "at": "2026-10-07T06:50:13.031Z",
+  "payload": {
+   "id": "0x84f1b0fbceca4218eef15d39ded2599f9ac13d305f1a976d13ff7d04c0c25972",
+   "ts": 1791355813,
+   "index": 6382,
+   "blocks": 1,
+   "messages": 0,
+   "newMessages": 0
+  }
+ },
+ {
+  "id": 21358,
+  "type": "milestone",
+  "atMs": 1791355818037,
+  "at": "2026-10-07T06:50:18.037Z",
+  "payload": {
+   "id": "0x331ba5e46bae3a3a388efa2c14d67cd036520069176ac969067dc8f20926cb1d",
+   "ts": 1791355818,
+   "index": 6383,
+   "blocks": 1,
+   "messages": 0,
+   "newMessages": 0
+  }
+ },
+ {
+  "id": 21359,
+  "type": "milestone",
+  "atMs": 1791355823035,
+  "at": "2026-10-07T06:50:23.035Z",
+  "payload": {
+   "id": "0x00ff0bbe108bb8b697dc397858b850a2307bee94fe9df855ff8b0e261cda45c9",
+   "ts": 1791355823,
+   "index": 6384,
+   "blocks": 1,
+   "messages": 0,
+   "newMessages": 0
+  }
+ },
+ {
+  "id": 21360,
+  "type": "milestone",
+  "atMs": 1791355828034,
+  "at": "2026-10-07T06:50:28.034Z",
+  "payload": {
+   "id": "0xf9fbbb9d73255cecaa6afaf087a9031408247b2a4c49396d497044a241b64415",
+   "ts": 1791355828,
+   "index": 6385,
+   "blocks": 1,
+   "messages": 0,
+   "newMessages": 0
+  }
+ },
+ {
+  "id": 21361,
+  "type": "milestone",
+  "atMs": 1791355833028,
+  "at": "2026-10-07T06:50:33.028Z",
+  "payload": {
+   "id": "0x10ba752c512604746746f31fda5d8236172e0e00ab2e00982426b9b920a7dbe4",
+   "ts": 1791355833,
+   "index": 6386,
+   "blocks": 1,
+   "messages": 0,
+   "newMessages": 0
+  }
+ },
+ {
+  "id": 21363,
+  "type": "lifecycle",
+  "atMs": 1791355836637,
+  "at": "2026-10-07T06:50:36.637Z",
+  "payload": {
+   "atMs": 1791355836634,
+   "subId": "ba246bb2-9213-4f2d-8d4a-808108cb30de",
+   "detail": {
+    "via": "GET /api/core/v2/blocks/{blockId}/metadata",
+    "isSolid": true
+   },
+   "status": "SOLID",
+   "blockId": "0x032fb8904d5cce8da697248a4eb33d942eccd664766753694b31940f734597a5"
+  }
+ },
+ {
+  "id": 21365,
+  "type": "lifecycle",
+  "atMs": 1791355836976,
+  "at": "2026-10-07T06:50:36.976Z",
+  "payload": {
+   "atMs": 1791355836973,
+   "subId": "e63649f5-43f6-46f1-b12e-a222b916cc94",
+   "detail": {
+    "via": "GET /api/core/v2/blocks/{blockId}/metadata",
+    "isSolid": true
+   },
+   "status": "SOLID",
+   "blockId": "0xe2ab1c7928ab372ef0fcfc82ec515455b7d67e6e47f3d8bb09f8713851c7e79e"
+  }
+ },
+ {
+  "id": 21367,
+  "type": "lifecycle",
+  "atMs": 1791355837331,
+  "at": "2026-10-07T06:50:37.331Z",
+  "payload": {
+   "atMs": 1791355837328,
+   "subId": "4f7051ae-8fda-4bbb-9534-7981210d8e21",
+   "detail": {
+    "via": "GET /api/core/v2/blocks/{blockId}/metadata",
+    "isSolid": true
+   },
+   "status": "SOLID",
+   "blockId": "0x6c8ac6b2d349ade79324aaf726ae3bcd0be041b95342242dcb072785a27a67d1"
+  }
+ },
+ {
+  "id": 21368,
+  "type": "milestone",
+  "atMs": 1791355838082,
+  "at": "2026-10-07T06:50:38.082Z",
+  "payload": {
+   "id": "0x513b65c0568451c3ee4dc63701d94e187ffa7a8f82a25995bae8367ad418032d",
+   "ts": 1791355838,
+   "index": 6387,
+   "blocks": 4,
+   "messages": 3,
+   "newMessages": 3
+  }
+ },
+ {
+  "id": 21369,
+  "type": "message",
+  "atMs": 1791355838083,
+  "at": "2026-10-07T06:50:38.083Z",
+  "payload": {
+   "ts": 1791355838,
+   "iss": "did:iota:testnet:0x15eb8c4d90fa4fff1d49f3ae8b1676a61e09c883303acd383cbfaacb538db9ba",
+   "seq": 1791332998698,
+   "tag": "trust.score",
+   "ieId": "MyDomain:fa163e32c6ee",
+   "kind": "trust.score",
+   "first": true,
+   "reason": null,
+   "blockId": "0x032fb8904d5cce8da697248a4eb33d942eccd664766753694b31940f734597a5",
+   "msIndex": 6387,
+   "verdict": "PRODUCER_SIGNED",
+   "wfIndex": 1,
+   "encrypted": false
+  }
+ },
+ {
+  "id": 21370,
+  "type": "lifecycle",
+  "atMs": 1791355838084,
+  "at": "2026-10-07T06:50:38.084Z",
+  "payload": {
+   "atMs": 1791355838037,
+   "subId": "ba246bb2-9213-4f2d-8d4a-808108cb30de",
+   "detail": {
+    "via": "inx",
+    "source": "indexer",
+    "msIndex": 6387,
+    "msTimestamp": 1791355838
+   },
+   "status": "CONFIRMED",
+   "blockId": "0x032fb8904d5cce8da697248a4eb33d942eccd664766753694b31940f734597a5"
+  }
+ },
+ {
+  "id": 21371,
+  "type": "message",
+  "atMs": 1791355838085,
+  "at": "2026-10-07T06:50:38.085Z",
+  "payload": {
+   "ts": 1791355838,
+   "iss": "did:iota:testnet:0x15eb8c4d90fa4fff1d49f3ae8b1676a61e09c883303acd383cbfaacb538db9ba",
+   "seq": 1791332998699,
+   "tag": "trust.score",
+   "ieId": "MyDomain:fa163e5e25ef",
+   "kind": "trust.score",
+   "first": true,
+   "reason": null,
+   "blockId": "0xe2ab1c7928ab372ef0fcfc82ec515455b7d67e6e47f3d8bb09f8713851c7e79e",
+   "msIndex": 6387,
+   "verdict": "PRODUCER_SIGNED",
+   "wfIndex": 2,
+   "encrypted": false
+  }
+ },
+ {
+  "id": 21372,
+  "type": "lifecycle",
+  "atMs": 1791355838086,
+  "at": "2026-10-07T06:50:38.086Z",
+  "payload": {
+   "atMs": 1791355838055,
+   "subId": "e63649f5-43f6-46f1-b12e-a222b916cc94",
+   "detail": {
+    "via": "inx",
+    "source": "indexer",
+    "msIndex": 6387,
+    "msTimestamp": 1791355838
+   },
+   "status": "CONFIRMED",
+   "blockId": "0xe2ab1c7928ab372ef0fcfc82ec515455b7d67e6e47f3d8bb09f8713851c7e79e"
+  }
+ },
+ {
+  "id": 21373,
+  "type": "message",
+  "atMs": 1791355838087,
+  "at": "2026-10-07T06:50:38.087Z",
+  "payload": {
+   "ts": 1791355838,
+   "iss": "did:iota:testnet:0x15eb8c4d90fa4fff1d49f3ae8b1676a61e09c883303acd383cbfaacb538db9ba",
+   "seq": 1791332998700,
+   "tag": "trust.score",
+   "ieId": "MyDomain:fa163ed55867",
+   "kind": "trust.score",
+   "first": true,
+   "reason": null,
+   "blockId": "0x6c8ac6b2d349ade79324aaf726ae3bcd0be041b95342242dcb072785a27a67d1",
+   "msIndex": 6387,
+   "verdict": "PRODUCER_SIGNED",
+   "wfIndex": 3,
+   "encrypted": false
+  }
+ },
+ {
+  "id": 21374,
+  "type": "lifecycle",
+  "atMs": 1791355838088,
+  "at": "2026-10-07T06:50:38.088Z",
+  "payload": {
+   "atMs": 1791355838070,
+   "subId": "4f7051ae-8fda-4bbb-9534-7981210d8e21",
+   "detail": {
+    "via": "inx",
+    "source": "indexer",
+    "msIndex": 6387,
+    "msTimestamp": 1791355838
+   },
+   "status": "CONFIRMED",
+   "blockId": "0x6c8ac6b2d349ade79324aaf726ae3bcd0be041b95342242dcb072785a27a67d1"
+  }
+ },
+ {
+  "id": 21375,
+  "type": "lifecycle",
+  "atMs": 1791355838156,
+  "at": "2026-10-07T06:50:38.156Z",
+  "payload": {
+   "atMs": 1791355838154,
+   "subId": "ba246bb2-9213-4f2d-8d4a-808108cb30de",
+   "detail": {
+    "via": "GET /api/core/v2/blocks/{blockId}/metadata",
+    "whiteFlagIndex": 1,
+    "ledgerInclusionState": "noTransaction",
+    "referencedByMilestoneIndex": 6387
+   },
+   "status": "CONFIRMED",
+   "blockId": "0x032fb8904d5cce8da697248a4eb33d942eccd664766753694b31940f734597a5"
+  }
+ },
+ {
+  "id": 21376,
+  "type": "lifecycle",
+  "atMs": 1791355838165,
+  "at": "2026-10-07T06:50:38.165Z",
+  "payload": {
+   "atMs": 1791355838162,
+   "subId": "ba246bb2-9213-4f2d-8d4a-808108cb30de",
+   "detail": {
+    "via": "GET /api/core/v2/blocks/{blockId}",
+    "bytes": 663
+   },
+   "status": "CONTENT_VERIFIED",
+   "blockId": "0x032fb8904d5cce8da697248a4eb33d942eccd664766753694b31940f734597a5"
+  }
+ },
+ {
+  "id": 21377,
+  "type": "lifecycle",
+  "atMs": 1791355838493,
+  "at": "2026-10-07T06:50:38.493Z",
+  "payload": {
+   "atMs": 1791355838490,
+   "subId": "e63649f5-43f6-46f1-b12e-a222b916cc94",
+   "detail": {
+    "via": "GET /api/core/v2/blocks/{blockId}/metadata",
+    "whiteFlagIndex": 2,
+    "ledgerInclusionState": "noTransaction",
+    "referencedByMilestoneIndex": 6387
+   },
+   "status": "CONFIRMED",
+   "blockId": "0xe2ab1c7928ab372ef0fcfc82ec515455b7d67e6e47f3d8bb09f8713851c7e79e"
+  }
+ },
+ {
+  "id": 21378,
+  "type": "lifecycle",
+  "atMs": 1791355838502,
+  "at": "2026-10-07T06:50:38.502Z",
+  "payload": {
+   "atMs": 1791355838499,
+   "subId": "e63649f5-43f6-46f1-b12e-a222b916cc94",
+   "detail": {
+    "via": "GET /api/core/v2/blocks/{blockId}",
+    "bytes": 711
+   },
+   "status": "CONTENT_VERIFIED",
+   "blockId": "0xe2ab1c7928ab372ef0fcfc82ec515455b7d67e6e47f3d8bb09f8713851c7e79e"
+  }
+ },
+ {
+  "id": 21379,
+  "type": "lifecycle",
+  "atMs": 1791355838854,
+  "at": "2026-10-07T06:50:38.854Z",
+  "payload": {
+   "atMs": 1791355838851,
+   "subId": "4f7051ae-8fda-4bbb-9534-7981210d8e21",
+   "detail": {
+    "via": "GET /api/core/v2/blocks/{blockId}/metadata",
+    "whiteFlagIndex": 3,
+    "ledgerInclusionState": "noTransaction",
+    "referencedByMilestoneIndex": 6387
+   },
+   "status": "CONFIRMED",
+   "blockId": "0x6c8ac6b2d349ade79324aaf726ae3bcd0be041b95342242dcb072785a27a67d1"
+  }
+ },
+ {
+  "id": 21380,
+  "type": "lifecycle",
+  "atMs": 1791355838862,
+  "at": "2026-10-07T06:50:38.862Z",
+  "payload": {
+   "atMs": 1791355838860,
+   "subId": "4f7051ae-8fda-4bbb-9534-7981210d8e21",
+   "detail": {
+    "via": "GET /api/core/v2/blocks/{blockId}",
+    "bytes": 744
+   },
+   "status": "CONTENT_VERIFIED",
+   "blockId": "0x6c8ac6b2d349ade79324aaf726ae3bcd0be041b95342242dcb072785a27a67d1"
+  }
+ },
+ {
+  "id": 21381,
+  "type": "milestone",
+  "atMs": 1791355843030,
+  "at": "2026-10-07T06:50:43.030Z",
+  "payload": {
+   "id": "0x580b76b21820e222c853b14aa70e1545bcfe979ff1db7e5ee1c3c5394d294c61",
+   "ts": 1791355843,
+   "index": 6388,
+   "blocks": 1,
+   "messages": 0,
+   "newMessages": 0
+  }
+ },
+ {
+  "id": 21382,
+  "type": "milestone",
+  "atMs": 1791355848026,
+  "at": "2026-10-07T06:50:48.026Z",
+  "payload": {
+   "id": "0x32d0b86a8e8bc25619679d43ee742a554391a1ab909a8a15e8d93456212f3b1e",
+   "ts": 1791355848,
+   "index": 6389,
+   "blocks": 1,
+   "messages": 0,
+   "newMessages": 0
+  }
+ },
+ {
+  "id": 21383,
+  "type": "milestone",
+  "atMs": 1791355853046,
+  "at": "2026-10-07T06:50:53.046Z",
+  "payload": {
+   "id": "0xf23b3c295b040726cd23fbc0160014308468634f1c9741e475ea0280c83f1f52",
+   "ts": 1791355853,
+   "index": 6390,
+   "blocks": 1,
+   "messages": 0,
+   "newMessages": 0
+  }
+ },
+ {
+  "id": 21384,
+  "type": "milestone",
+  "atMs": 1791355858054,
+  "at": "2026-10-07T06:50:58.054Z",
+  "payload": {
+   "id": "0x9cdde0a8243d63e7aae5c238419cb60ec29f917515c2d6f32f8d23bf0c819cc3",
+   "ts": 1791355858,
+   "index": 6391,
+   "blocks": 1,
+   "messages": 0,
+   "newMessages": 0
+  }
+ },
+ {
+  "id": 21385,
+  "type": "milestone",
+  "atMs": 1791355863170,
+  "at": "2026-10-07T06:51:03.170Z",
+  "payload": {
+   "id": "0xb4075ec6ea7d9b1488c2eebf400cfd675ab2870ca433ee38baba809ba1bb22f8",
+   "ts": 1791355863,
+   "index": 6392,
+   "blocks": 1,
+   "messages": 0,
+   "newMessages": 0
+  }
+ },
+ {
+  "id": 21386,
+  "type": "milestone",
+  "atMs": 1791355868027,
+  "at": "2026-10-07T06:51:08.027Z",
+  "payload": {
+   "id": "0x851f3739b7aef7f09ff553787a4e1a755741b24e382b9109d64fc2f6c8b0b75f",
+   "ts": 1791355868,
+   "index": 6393,
+   "blocks": 1,
+   "messages": 0,
+   "newMessages": 0
+  }
+ },
+ {
+  "id": 21387,
+  "type": "milestone",
+  "atMs": 1791355873026,
+  "at": "2026-10-07T06:51:13.026Z",
+  "payload": {
+   "id": "0x061dd20501942be5bb2c347c82549b7f323f650564375e4902937092cd18a6e2",
+   "ts": 1791355873,
+   "index": 6394,
+   "blocks": 1,
+   "messages": 0,
+   "newMessages": 0
+  }
+ },
+ {
+  "id": 21388,
+  "type": "milestone",
+  "atMs": 1791355878027,
+  "at": "2026-10-07T06:51:18.027Z",
+  "payload": {
+   "id": "0x0e78e787b62b9a7a33d68f605015b19312a9edb20c84c3b7514062856fa34460",
+   "ts": 1791355878,
+   "index": 6395,
+   "blocks": 1,
+   "messages": 0,
+   "newMessages": 0
+  }
+ },
+ {
+  "id": 21389,
+  "type": "milestone",
+  "atMs": 1791355883035,
+  "at": "2026-10-07T06:51:23.035Z",
+  "payload": {
+   "id": "0xdc06b68f16f9eb1b2c1b85e88ce5f982147c6dde696a52a498fb2391dd37a37b",
+   "ts": 1791355883,
+   "index": 6396,
+   "blocks": 1,
+   "messages": 0,
+   "newMessages": 0
+  }
+ },
+ {
+  "id": 21390,
+  "type": "milestone",
+  "atMs": 1791355888028,
+  "at": "2026-10-07T06:51:28.028Z",
+  "payload": {
+   "id": "0xe5d1178cd336facc871c46eede57e115143623e4a31889ad56af5c29b50093cf",
+   "ts": 1791355888,
+   "index": 6397,
+   "blocks": 1,
+   "messages": 0,
+   "newMessages": 0
+  }
+ },
+ {
+  "id": 21391,
+  "type": "milestone",
+  "atMs": 1791355893039,
+  "at": "2026-10-07T06:51:33.039Z",
+  "payload": {
+   "id": "0x1a58a7efa6fd63ac71e2ee7edd5dc618e753111740c512a91b003c5d48b14ec4",
+   "ts": 1791355893,
+   "index": 6398,
+   "blocks": 1,
+   "messages": 0,
+   "newMessages": 0
+  }
+ },
+ {
+  "id": 21393,
+  "type": "lifecycle",
+  "atMs": 1791355897992,
+  "at": "2026-10-07T06:51:37.992Z",
+  "payload": {
+   "atMs": 1791355897990,
+   "subId": "930eb43a-f215-43d4-97f5-84ce55e09480",
+   "detail": {
+    "via": "GET /api/core/v2/blocks/{blockId}/metadata",
+    "isSolid": true
+   },
+   "status": "SOLID",
+   "blockId": "0x1be30b012a238267c61f248dc8104acdac11eef2a5ce9db7a5bec0a6a5ff0794"
+  }
+ },
+ {
+  "id": 21394,
+  "type": "milestone",
+  "atMs": 1791355898059,
+  "at": "2026-10-07T06:51:38.059Z",
+  "payload": {
+   "id": "0x9a4223671be6c0053abf23673b6c0dc4a9d23a2ab8fa3ba47e0dfcfa238db30f",
+   "ts": 1791355898,
+   "index": 6399,
+   "blocks": 2,
+   "messages": 1,
+   "newMessages": 1
+  }
+ },
+ {
+  "id": 21395,
+  "type": "message",
+  "atMs": 1791355898060,
+  "at": "2026-10-07T06:51:38.060Z",
+  "payload": {
+   "ts": 1791355898,
+   "iss": "did:iota:testnet:0x15eb8c4d90fa4fff1d49f3ae8b1676a61e09c883303acd383cbfaacb538db9ba",
+   "seq": 1791332998701,
+   "tag": "trust.score",
+   "ieId": "MyDomain:fa163e32c6ee",
+   "kind": "trust.score",
+   "first": true,
+   "reason": null,
+   "blockId": "0x1be30b012a238267c61f248dc8104acdac11eef2a5ce9db7a5bec0a6a5ff0794",
+   "msIndex": 6399,
+   "verdict": "PRODUCER_SIGNED",
+   "wfIndex": 1,
+   "encrypted": false
+  }
+ },
+ {
+  "id": 21396,
+  "type": "lifecycle",
+  "atMs": 1791355898061,
+  "at": "2026-10-07T06:51:38.061Z",
+  "payload": {
+   "atMs": 1791355898043,
+   "subId": "930eb43a-f215-43d4-97f5-84ce55e09480",
+   "detail": {
+    "via": "inx",
+    "source": "indexer",
+    "msIndex": 6399,
+    "msTimestamp": 1791355898
+   },
+   "status": "CONFIRMED",
+   "blockId": "0x1be30b012a238267c61f248dc8104acdac11eef2a5ce9db7a5bec0a6a5ff0794"
+  }
+ },
+ {
+  "id": 21398,
+  "type": "lifecycle",
+  "atMs": 1791355898317,
+  "at": "2026-10-07T06:51:38.317Z",
+  "payload": {
+   "atMs": 1791355898314,
+   "subId": "4632eb3b-1453-4390-a0e9-c3cbfec63d99",
+   "detail": {
+    "via": "GET /api/core/v2/blocks/{blockId}/metadata",
+    "isSolid": true
+   },
+   "status": "SOLID",
+   "blockId": "0xee9127cffc8c74433c90f47d366e0b50d0d4713dbfde4befc67ee05ad36486cb"
+  }
+ },
+ {
+  "id": 21399,
+  "type": "lifecycle",
+  "atMs": 1791355898503,
+  "at": "2026-10-07T06:51:38.503Z",
+  "payload": {
+   "atMs": 1791355898501,
+   "subId": "930eb43a-f215-43d4-97f5-84ce55e09480",
+   "detail": {
+    "via": "GET /api/core/v2/blocks/{blockId}/metadata",
+    "whiteFlagIndex": 1,
+    "ledgerInclusionState": "noTransaction",
+    "referencedByMilestoneIndex": 6399
+   },
+   "status": "CONFIRMED",
+   "blockId": "0x1be30b012a238267c61f248dc8104acdac11eef2a5ce9db7a5bec0a6a5ff0794"
+  }
+ },
+ {
+  "id": 21400,
+  "type": "lifecycle",
+  "atMs": 1791355898513,
+  "at": "2026-10-07T06:51:38.513Z",
+  "payload": {
+   "atMs": 1791355898510,
+   "subId": "930eb43a-f215-43d4-97f5-84ce55e09480",
+   "detail": {
+    "via": "GET /api/core/v2/blocks/{blockId}",
+    "bytes": 663
+   },
+   "status": "CONTENT_VERIFIED",
+   "blockId": "0x1be30b012a238267c61f248dc8104acdac11eef2a5ce9db7a5bec0a6a5ff0794"
+  }
+ },
+ {
+  "id": 21402,
+  "type": "lifecycle",
+  "atMs": 1791355898630,
+  "at": "2026-10-07T06:51:38.630Z",
+  "payload": {
+   "atMs": 1791355898628,
+   "subId": "e6068966-454c-4e07-92e1-0f150af69a10",
+   "detail": {
+    "via": "GET /api/core/v2/blocks/{blockId}/metadata",
+    "isSolid": true
+   },
+   "status": "SOLID",
+   "blockId": "0x7392217b0160a57c6499c293962fa01c4722084f0767bf2c0e3faf0669d05333"
+  }
+ },
+ {
+  "id": 21403,
+  "type": "milestone",
+  "atMs": 1791355903497,
+  "at": "2026-10-07T06:51:43.497Z",
+  "payload": {
+   "id": "0x3612d021fe02d51f38a21ea76c335286207e93509b6557c12792be4870e24a83",
+   "ts": 1791355903,
+   "index": 6400,
+   "blocks": 3,
+   "messages": 2,
+   "newMessages": 2
+  }
+ },
+ {
+  "id": 21404,
+  "type": "message",
+  "atMs": 1791355903498,
+  "at": "2026-10-07T06:51:43.498Z",
+  "payload": {
+   "ts": 1791355903,
+   "iss": "did:iota:testnet:0x15eb8c4d90fa4fff1d49f3ae8b1676a61e09c883303acd383cbfaacb538db9ba",
+   "seq": 1791332998702,
+   "tag": "trust.score",
+   "ieId": "MyDomain:fa163e5e25ef",
+   "kind": "trust.score",
+   "first": true,
+   "reason": null,
+   "blockId": "0xee9127cffc8c74433c90f47d366e0b50d0d4713dbfde4befc67ee05ad36486cb",
+   "msIndex": 6400,
+   "verdict": "PRODUCER_SIGNED",
+   "wfIndex": 1,
+   "encrypted": false
+  }
+ },
+ {
+  "id": 21405,
+  "type": "lifecycle",
+  "atMs": 1791355903499,
+  "at": "2026-10-07T06:51:43.499Z",
+  "payload": {
+   "atMs": 1791355903464,
+   "subId": "4632eb3b-1453-4390-a0e9-c3cbfec63d99",
+   "detail": {
+    "via": "inx",
+    "source": "indexer",
+    "msIndex": 6400,
+    "msTimestamp": 1791355903
+   },
+   "status": "CONFIRMED",
+   "blockId": "0xee9127cffc8c74433c90f47d366e0b50d0d4713dbfde4befc67ee05ad36486cb"
+  }
+ },
+ {
+  "id": 21406,
+  "type": "message",
+  "atMs": 1791355903501,
+  "at": "2026-10-07T06:51:43.501Z",
+  "payload": {
+   "ts": 1791355903,
+   "iss": "did:iota:testnet:0x15eb8c4d90fa4fff1d49f3ae8b1676a61e09c883303acd383cbfaacb538db9ba",
+   "seq": 1791332998703,
+   "tag": "trust.score",
+   "ieId": "MyDomain:fa163ed55867",
+   "kind": "trust.score",
+   "first": true,
+   "reason": null,
+   "blockId": "0x7392217b0160a57c6499c293962fa01c4722084f0767bf2c0e3faf0669d05333",
+   "msIndex": 6400,
+   "verdict": "PRODUCER_SIGNED",
+   "wfIndex": 2,
+   "encrypted": false
+  }
+ },
+ {
+  "id": 21407,
+  "type": "lifecycle",
+  "atMs": 1791355903502,
+  "at": "2026-10-07T06:51:43.502Z",
+  "payload": {
+   "atMs": 1791355903482,
+   "subId": "e6068966-454c-4e07-92e1-0f150af69a10",
+   "detail": {
+    "via": "inx",
+    "source": "indexer",
+    "msIndex": 6400,
+    "msTimestamp": 1791355903
+   },
+   "status": "CONFIRMED",
+   "blockId": "0x7392217b0160a57c6499c293962fa01c4722084f0767bf2c0e3faf0669d05333"
+  }
+ },
+ {
+  "id": 21408,
+  "type": "lifecycle",
+  "atMs": 1791355905864,
+  "at": "2026-10-07T06:51:45.864Z",
+  "payload": {
+   "atMs": 1791355905862,
+   "subId": "4632eb3b-1453-4390-a0e9-c3cbfec63d99",
+   "detail": {
+    "via": "GET /api/core/v2/blocks/{blockId}/metadata",
+    "whiteFlagIndex": 1,
+    "ledgerInclusionState": "noTransaction",
+    "referencedByMilestoneIndex": 6400
+   },
+   "status": "CONFIRMED",
+   "blockId": "0xee9127cffc8c74433c90f47d366e0b50d0d4713dbfde4befc67ee05ad36486cb"
+  }
+ },
+ {
+  "id": 21409,
+  "type": "lifecycle",
+  "atMs": 1791355905874,
+  "at": "2026-10-07T06:51:45.874Z",
+  "payload": {
+   "atMs": 1791355905871,
+   "subId": "4632eb3b-1453-4390-a0e9-c3cbfec63d99",
+   "detail": {
+    "via": "GET /api/core/v2/blocks/{blockId}",
+    "bytes": 743
+   },
+   "status": "CONTENT_VERIFIED",
+   "blockId": "0xee9127cffc8c74433c90f47d366e0b50d0d4713dbfde4befc67ee05ad36486cb"
+  }
+ },
+ {
+  "id": 21410,
+  "type": "lifecycle",
+  "atMs": 1791355906165,
+  "at": "2026-10-07T06:51:46.165Z",
+  "payload": {
+   "atMs": 1791355906163,
+   "subId": "e6068966-454c-4e07-92e1-0f150af69a10",
+   "detail": {
+    "via": "GET /api/core/v2/blocks/{blockId}/metadata",
+    "whiteFlagIndex": 2,
+    "ledgerInclusionState": "noTransaction",
+    "referencedByMilestoneIndex": 6400
+   },
+   "status": "CONFIRMED",
+   "blockId": "0x7392217b0160a57c6499c293962fa01c4722084f0767bf2c0e3faf0669d05333"
+  }
+ },
+ {
+  "id": 21411,
+  "type": "lifecycle",
+  "atMs": 1791355906174,
+  "at": "2026-10-07T06:51:46.174Z",
+  "payload": {
+   "atMs": 1791355906171,
+   "subId": "e6068966-454c-4e07-92e1-0f150af69a10",
+   "detail": {
+    "via": "GET /api/core/v2/blocks/{blockId}",
+    "bytes": 776
+   },
+   "status": "CONTENT_VERIFIED",
+   "blockId": "0x7392217b0160a57c6499c293962fa01c4722084f0767bf2c0e3faf0669d05333"
+  }
+ },
+ {
+  "id": 21412,
+  "type": "milestone",
+  "atMs": 1791355908029,
+  "at": "2026-10-07T06:51:48.029Z",
+  "payload": {
+   "id": "0x77716ae0b3e8bee6533e1c410edc49713c5e44055522c9ea5bd14b606463103c",
+   "ts": 1791355908,
+   "index": 6401,
+   "blocks": 1,
+   "messages": 0,
+   "newMessages": 0
+  }
+ },
+ {
+  "id": 21413,
+  "type": "milestone",
+  "atMs": 1791355913080,
+  "at": "2026-10-07T06:51:53.080Z",
+  "payload": {
+   "id": "0x36fe9fd5b97715359d528b7043b37cbae0f6a10445e26f795ca325813d339ae2",
+   "ts": 1791355913,
+   "index": 6402,
+   "blocks": 1,
+   "messages": 0,
+   "newMessages": 0
+  }
+ },
+ {
+  "id": 21414,
+  "type": "milestone",
+  "atMs": 1791355918023,
+  "at": "2026-10-07T06:51:58.023Z",
+  "payload": {
+   "id": "0x3be706035fc98424d9ae8a7b3a1ae01e93bd21c809e6b6ce49286321fd7ec8e2",
+   "ts": 1791355918,
+   "index": 6403,
+   "blocks": 1,
+   "messages": 0,
+   "newMessages": 0
+  }
+ },
+ {
+  "id": 21415,
+  "type": "milestone",
+  "atMs": 1791355923023,
+  "at": "2026-10-07T06:52:03.023Z",
+  "payload": {
+   "id": "0xa71e0a8927c5717e25b0b3b198f04e62b10993b221d9b7bffa33f62018955ee5",
+   "ts": 1791355923,
+   "index": 6404,
+   "blocks": 1,
+   "messages": 0,
+   "newMessages": 0
+  }
+ },
+ {
+  "id": 21416,
+  "type": "milestone",
+  "atMs": 1791355928039,
+  "at": "2026-10-07T06:52:08.039Z",
+  "payload": {
+   "id": "0x946cc44e7e099c8682eca3ba87693af96a5b4d8f9122afb71bb6547c875ab151",
+   "ts": 1791355928,
+   "index": 6405,
+   "blocks": 1,
+   "messages": 0,
+   "newMessages": 0
+  }
+ },
+ {
+  "id": 21417,
+  "type": "milestone",
+  "atMs": 1791355933030,
+  "at": "2026-10-07T06:52:13.030Z",
+  "payload": {
+   "id": "0x0fb50040d79a67b4b444bf2bc346f4e2bb103ee4ae10c8ad974cc068e4ca0ee9",
+   "ts": 1791355933,
+   "index": 6406,
+   "blocks": 1,
+   "messages": 0,
+   "newMessages": 0
+  }
+ },
+ {
+  "id": 21418,
+  "type": "milestone",
+  "atMs": 1791355938027,
+  "at": "2026-10-07T06:52:18.027Z",
+  "payload": {
+   "id": "0xce0a7396d89cea4630d9b527644cfc1bd24e541f357fafb09b2bbefc619fc0bc",
+   "ts": 1791355938,
+   "index": 6407,
+   "blocks": 1,
+   "messages": 0,
+   "newMessages": 0
+  }
+ },
+ {
+  "id": 21419,
+  "type": "milestone",
+  "atMs": 1791355943025,
+  "at": "2026-10-07T06:52:23.025Z",
+  "payload": {
+   "id": "0x069afc56fdc41e30c2f58b942ea72424719cf31914b0750dea932657012c6189",
+   "ts": 1791355943,
+   "index": 6408,
+   "blocks": 1,
+   "messages": 0,
+   "newMessages": 0
+  }
+ },
+ {
+  "id": 21420,
+  "type": "milestone",
+  "atMs": 1791355948023,
+  "at": "2026-10-07T06:52:28.023Z",
+  "payload": {
+   "id": "0x550a73a6a75777206a1f5391985e639bbcfbd62aab31d2a1002ed638c7b3cb18",
+   "ts": 1791355948,
+   "index": 6409,
+   "blocks": 1,
+   "messages": 0,
+   "newMessages": 0
+  }
+ },
+ {
+  "id": 21421,
+  "type": "milestone",
+  "atMs": 1791355953023,
+  "at": "2026-10-07T06:52:33.023Z",
+  "payload": {
+   "id": "0x965bd9610e1ed054da14127f04870d8429033c1d6ad3d7d4cec77b1fccca4d5b",
+   "ts": 1791355953,
+   "index": 6410,
+   "blocks": 1,
+   "messages": 0,
+   "newMessages": 0
+  }
+ },
+ {
+  "id": 21422,
+  "type": "milestone",
+  "atMs": 1791355958021,
+  "at": "2026-10-07T06:52:38.021Z",
+  "payload": {
+   "id": "0xb11715b328df0600303ffb2bc09a123684ddbb1ddd52ec4a68b61007d2b382dc",
+   "ts": 1791355958,
+   "index": 6411,
+   "blocks": 1,
+   "messages": 0,
+   "newMessages": 0
+  }
+ },
+ {
+  "id": 21424,
+  "type": "lifecycle",
+  "atMs": 1791355959637,
+  "at": "2026-10-07T06:52:39.637Z",
+  "payload": {
+   "atMs": 1791355959634,
+   "subId": "893212b6-0784-4880-a2b9-cb264d95e68a",
+   "detail": {
+    "via": "GET /api/core/v2/blocks/{blockId}/metadata",
+    "isSolid": true
+   },
+   "status": "SOLID",
+   "blockId": "0x36303c38a6787b00cdaac7dc750bdde0de40065e341e965ef50878d74102be0c"
+  }
+ },
+ {
+  "id": 21427,
+  "type": "lifecycle",
+  "atMs": 1791355960228,
+  "at": "2026-10-07T06:52:40.228Z",
+  "payload": {
+   "atMs": 1791355960224,
+   "subId": "f3d55377-bbb3-40b6-953a-e67f527aaa8f",
+   "detail": {
+    "via": "GET /api/core/v2/blocks/{blockId}/metadata",
+    "isSolid": true
+   },
+   "status": "SOLID",
+   "blockId": "0x342a23bfc609cbe39c1624bdbeea82dae4cde5cd7f1fa8ef4b5dbc936a37777f"
+  }
+ },
+ {
+  "id": 21428,
+  "type": "milestone",
+  "atMs": 1791355963092,
+  "at": "2026-10-07T06:52:43.092Z",
+  "payload": {
+   "id": "0xcf258363c4e342d11f71d985e6532e2b5dcccbfb13704589994f357e65a355a1",
+   "ts": 1791355963,
+   "index": 6412,
+   "blocks": 4,
+   "messages": 3,
+   "newMessages": 3
+  }
+ },
+ {
+  "id": 21429,
+  "type": "message",
+  "atMs": 1791355963093,
+  "at": "2026-10-07T06:52:43.093Z",
+  "payload": {
+   "ts": 1791355963,
+   "iss": "did:iota:testnet:0x15eb8c4d90fa4fff1d49f3ae8b1676a61e09c883303acd383cbfaacb538db9ba",
+   "seq": 1791332998704,
+   "tag": "trust.score",
+   "ieId": "MyDomain:fa163e32c6ee",
+   "kind": "trust.score",
+   "first": true,
+   "reason": null,
+   "blockId": "0x36303c38a6787b00cdaac7dc750bdde0de40065e341e965ef50878d74102be0c",
+   "msIndex": 6412,
+   "verdict": "PRODUCER_SIGNED",
+   "wfIndex": 1,
+   "encrypted": false
+  }
+ },
+ {
+  "id": 21430,
+  "type": "lifecycle",
+  "atMs": 1791355963095,
+  "at": "2026-10-07T06:52:43.095Z",
+  "payload": {
+   "atMs": 1791355963037,
+   "subId": "893212b6-0784-4880-a2b9-cb264d95e68a",
+   "detail": {
+    "via": "inx",
+    "source": "indexer",
+    "msIndex": 6412,
+    "msTimestamp": 1791355963
+   },
+   "status": "CONFIRMED",
+   "blockId": "0x36303c38a6787b00cdaac7dc750bdde0de40065e341e965ef50878d74102be0c"
+  }
+ },
+ {
+  "id": 21431,
+  "type": "message",
+  "atMs": 1791355963097,
+  "at": "2026-10-07T06:52:43.097Z",
+  "payload": {
+   "ts": 1791355963,
+   "iss": "did:iota:testnet:0x15eb8c4d90fa4fff1d49f3ae8b1676a61e09c883303acd383cbfaacb538db9ba",
+   "seq": 1791332998705,
+   "tag": "trust.score",
+   "ieId": "MyDomain:fa163e5e25ef",
+   "kind": "trust.score",
+   "first": true,
+   "reason": null,
+   "blockId": "0x78e0018c38c39df3c0179b72ae8b11a69659a8a64be16d8626d1bde38d6eb809",
+   "msIndex": 6412,
+   "verdict": "PRODUCER_SIGNED",
+   "wfIndex": 2,
+   "encrypted": false
+  }
+ },
+ {
+  "id": 21432,
+  "type": "lifecycle",
+  "atMs": 1791355963098,
+  "at": "2026-10-07T06:52:43.098Z",
+  "payload": {
+   "atMs": 1791355963058,
+   "subId": "fd1813b5-7350-4447-aa0c-94cf81b2c0a3",
+   "detail": {
+    "via": "inx",
+    "source": "indexer",
+    "msIndex": 6412,
+    "msTimestamp": 1791355963
+   },
+   "status": "CONFIRMED",
+   "blockId": "0x78e0018c38c39df3c0179b72ae8b11a69659a8a64be16d8626d1bde38d6eb809"
+  }
+ },
+ {
+  "id": 21433,
+  "type": "message",
+  "atMs": 1791355963099,
+  "at": "2026-10-07T06:52:43.099Z",
+  "payload": {
+   "ts": 1791355963,
+   "iss": "did:iota:testnet:0x15eb8c4d90fa4fff1d49f3ae8b1676a61e09c883303acd383cbfaacb538db9ba",
+   "seq": 1791332998706,
+   "tag": "trust.score",
+   "ieId": "MyDomain:fa163ed55867",
+   "kind": "trust.score",
+   "first": true,
+   "reason": null,
+   "blockId": "0x342a23bfc609cbe39c1624bdbeea82dae4cde5cd7f1fa8ef4b5dbc936a37777f",
+   "msIndex": 6412,
+   "verdict": "PRODUCER_SIGNED",
+   "wfIndex": 3,
+   "encrypted": false
+  }
+ },
+ {
+  "id": 21434,
+  "type": "lifecycle",
+  "atMs": 1791355963100,
+  "at": "2026-10-07T06:52:43.100Z",
+  "payload": {
+   "atMs": 1791355963079,
+   "subId": "f3d55377-bbb3-40b6-953a-e67f527aaa8f",
+   "detail": {
+    "via": "inx",
+    "source": "indexer",
+    "msIndex": 6412,
+    "msTimestamp": 1791355963
+   },
+   "status": "CONFIRMED",
+   "blockId": "0x342a23bfc609cbe39c1624bdbeea82dae4cde5cd7f1fa8ef4b5dbc936a37777f"
+  }
+ },
+ {
+  "id": 21435,
+  "type": "lifecycle",
+  "atMs": 1791355963163,
+  "at": "2026-10-07T06:52:43.163Z",
+  "payload": {
+   "atMs": 1791355963160,
+   "subId": "893212b6-0784-4880-a2b9-cb264d95e68a",
+   "detail": {
+    "via": "GET /api/core/v2/blocks/{blockId}/metadata",
+    "whiteFlagIndex": 1,
+    "ledgerInclusionState": "noTransaction",
+    "referencedByMilestoneIndex": 6412
+   },
+   "status": "CONFIRMED",
+   "blockId": "0x36303c38a6787b00cdaac7dc750bdde0de40065e341e965ef50878d74102be0c"
+  }
+ },
+ {
+  "id": 21436,
+  "type": "lifecycle",
+  "atMs": 1791355963173,
+  "at": "2026-10-07T06:52:43.173Z",
+  "payload": {
+   "atMs": 1791355963170,
+   "subId": "893212b6-0784-4880-a2b9-cb264d95e68a",
+   "detail": {
+    "via": "GET /api/core/v2/blocks/{blockId}",
+    "bytes": 695
+   },
+   "status": "CONTENT_VERIFIED",
+   "blockId": "0x36303c38a6787b00cdaac7dc750bdde0de40065e341e965ef50878d74102be0c"
+  }
+ },
+ {
+  "id": 21437,
+  "type": "lifecycle",
+  "atMs": 1791355963773,
+  "at": "2026-10-07T06:52:43.773Z",
+  "payload": {
+   "atMs": 1791355963771,
+   "subId": "f3d55377-bbb3-40b6-953a-e67f527aaa8f",
+   "detail": {
+    "via": "GET /api/core/v2/blocks/{blockId}/metadata",
+    "whiteFlagIndex": 3,
+    "ledgerInclusionState": "noTransaction",
+    "referencedByMilestoneIndex": 6412
+   },
+   "status": "CONFIRMED",
+   "blockId": "0x342a23bfc609cbe39c1624bdbeea82dae4cde5cd7f1fa8ef4b5dbc936a37777f"
+  }
+ },
+ {
+  "id": 21438,
+  "type": "lifecycle",
+  "atMs": 1791355963785,
+  "at": "2026-10-07T06:52:43.785Z",
+  "payload": {
+   "atMs": 1791355963782,
+   "subId": "f3d55377-bbb3-40b6-953a-e67f527aaa8f",
+   "detail": {
+    "via": "GET /api/core/v2/blocks/{blockId}",
+    "bytes": 776
+   },
+   "status": "CONTENT_VERIFIED",
+   "blockId": "0x342a23bfc609cbe39c1624bdbeea82dae4cde5cd7f1fa8ef4b5dbc936a37777f"
+  }
+ },
+ {
+  "id": 21439,
+  "type": "milestone",
+  "atMs": 1791355968019,
+  "at": "2026-10-07T06:52:48.019Z",
+  "payload": {
+   "id": "0x74b58723236fd4c1a89a62a76b4bffebdc3116d908e718181111535d21c6ac76",
+   "ts": 1791355968,
+   "index": 6413,
+   "blocks": 1,
+   "messages": 0,
+   "newMessages": 0
+  }
+ },
+ {
+  "id": 21440,
+  "type": "milestone",
+  "atMs": 1791355973025,
+  "at": "2026-10-07T06:52:53.025Z",
+  "payload": {
+   "id": "0x0080c465146fa211c045c4d293849d5f3a0ae13dd97230d7502e60250c0a0180",
+   "ts": 1791355973,
+   "index": 6414,
+   "blocks": 1,
+   "messages": 0,
+   "newMessages": 0
+  }
+ },
+ {
+  "id": 21441,
+  "type": "milestone",
+  "atMs": 1791355978022,
+  "at": "2026-10-07T06:52:58.022Z",
+  "payload": {
+   "id": "0x9891977d7c51544d5404814f2582cba50ee68d20a28964da9c050ad64fc26800",
+   "ts": 1791355978,
+   "index": 6415,
+   "blocks": 1,
+   "messages": 0,
+   "newMessages": 0
+  }
+ },
+ {
+  "id": 21442,
+  "type": "milestone",
+  "atMs": 1791355983021,
+  "at": "2026-10-07T06:53:03.021Z",
+  "payload": {
+   "id": "0x92a21412ebe20cda2ecbbfc934ae80a913cf9879e0cab7721eb587d4aa1e5927",
+   "ts": 1791355983,
+   "index": 6416,
+   "blocks": 1,
+   "messages": 0,
+   "newMessages": 0
+  }
+ },
+ {
+  "id": 21443,
+  "type": "milestone",
+  "atMs": 1791355988015,
+  "at": "2026-10-07T06:53:08.015Z",
+  "payload": {
+   "id": "0x6529dd20d4ba197918da8040ba84bebcf930d33128fcba8c43a08977d98d6933",
+   "ts": 1791355988,
+   "index": 6417,
+   "blocks": 1,
+   "messages": 0,
+   "newMessages": 0
+  }
+ },
+ {
+  "id": 21444,
+  "type": "milestone",
+  "atMs": 1791355993022,
+  "at": "2026-10-07T06:53:13.022Z",
+  "payload": {
+   "id": "0xa28c2d2e96f99d2a73f02d4983d2a50ceca221ca8771a3be1329246ac3fc4e0e",
+   "ts": 1791355993,
+   "index": 6418,
+   "blocks": 1,
+   "messages": 0,
+   "newMessages": 0
+  }
+ },
+ {
+  "id": 21445,
+  "type": "milestone",
+  "atMs": 1791355998023,
+  "at": "2026-10-07T06:53:18.023Z",
+  "payload": {
+   "id": "0xe6a24bf3d5263eca875bb5ed3ed2e28bac4e0be023ab31f6ae30d8ca79c3509b",
+   "ts": 1791355998,
+   "index": 6419,
+   "blocks": 1,
+   "messages": 0,
+   "newMessages": 0
+  }
+ },
+ {
+  "id": 21446,
+  "type": "milestone",
+  "atMs": 1791356003026,
+  "at": "2026-10-07T06:53:23.026Z",
+  "payload": {
+   "id": "0x4697d8b18c4b802daf1936945928691e78013453eab6fb0dd5dd308e50dd4369",
+   "ts": 1791356003,
+   "index": 6420,
+   "blocks": 1,
+   "messages": 0,
+   "newMessages": 0
+  }
+ },
+ {
+  "id": 21447,
+  "type": "milestone",
+  "atMs": 1791356008021,
+  "at": "2026-10-07T06:53:28.021Z",
+  "payload": {
+   "id": "0x6efad2ffa665ad040041f0c7875ef6fe65969e4025f4fc84e26959ab8a3b999b",
+   "ts": 1791356008,
+   "index": 6421,
+   "blocks": 1,
+   "messages": 0,
+   "newMessages": 0
+  }
+ },
+ {
+  "id": 21448,
+  "type": "milestone",
+  "atMs": 1791356013021,
+  "at": "2026-10-07T06:53:33.021Z",
+  "payload": {
+   "id": "0x2e2fd61bf086c1585de03d514fb1988cfb2d9c2b3641e7d4c5063cd29a29fc89",
+   "ts": 1791356013,
+   "index": 6422,
+   "blocks": 1,
+   "messages": 0,
+   "newMessages": 0
+  }
+ },
+ {
+  "id": 21449,
+  "type": "lifecycle",
+  "atMs": 1791356013440,
+  "at": "2026-10-07T06:53:33.440Z",
+  "payload": {
+   "atMs": 1791356013438,
+   "subId": "fd1813b5-7350-4447-aa0c-94cf81b2c0a3",
+   "detail": {
+    "via": "GET /api/core/v2/blocks/{blockId}/metadata",
+    "isSolid": true
+   },
+   "status": "SOLID",
+   "blockId": "0x78e0018c38c39df3c0179b72ae8b11a69659a8a64be16d8626d1bde38d6eb809"
+  }
+ },
+ {
+  "id": 21450,
+  "type": "lifecycle",
+  "atMs": 1791356013450,
+  "at": "2026-10-07T06:53:33.450Z",
+  "payload": {
+   "atMs": 1791356013446,
+   "subId": "fd1813b5-7350-4447-aa0c-94cf81b2c0a3",
+   "detail": {
+    "via": "GET /api/core/v2/blocks/{blockId}",
+    "bytes": 743
+   },
+   "status": "CONTENT_VERIFIED",
+   "blockId": "0x78e0018c38c39df3c0179b72ae8b11a69659a8a64be16d8626d1bde38d6eb809"
+  }
+ },
+ {
+  "id": 21451,
+  "type": "milestone",
+  "atMs": 1791356018018,
+  "at": "2026-10-07T06:53:38.018Z",
+  "payload": {
+   "id": "0xb0ca25d709901ef02de318765671050ffd72ed21f5caef097f292367d5234aed",
+   "ts": 1791356018,
+   "index": 6423,
+   "blocks": 1,
+   "messages": 0,
+   "newMessages": 0
+  }
+ },
+ {
+  "id": 21453,
+  "type": "lifecycle",
+  "atMs": 1791356020923,
+  "at": "2026-10-07T06:53:40.923Z",
+  "payload": {
+   "atMs": 1791356020921,
+   "subId": "69e50fc3-adc9-4ee6-b80e-2f5ccf694546",
+   "detail": {
+    "via": "GET /api/core/v2/blocks/{blockId}/metadata",
+    "isSolid": true
+   },
+   "status": "SOLID",
+   "blockId": "0x506de464eea306d3c3d27436487a654dff809553bdc3ae64ca1e178c6d17cb63"
+  }
+ },
+ {
+  "id": 21455,
+  "type": "lifecycle",
+  "atMs": 1791356021190,
+  "at": "2026-10-07T06:53:41.190Z",
+  "payload": {
+   "atMs": 1791356021187,
+   "subId": "74370327-bf19-4973-88aa-f1e003d4634c",
+   "detail": {
+    "via": "GET /api/core/v2/blocks/{blockId}/metadata",
+    "isSolid": true
+   },
+   "status": "SOLID",
+   "blockId": "0x4fadb0996bd4b6d2d50528c4184f1a97c6b326c2e2cc58a41481e1a84f4205df"
+  }
+ },
+ {
+  "id": 21457,
+  "type": "lifecycle",
+  "atMs": 1791356021493,
+  "at": "2026-10-07T06:53:41.493Z",
+  "payload": {
+   "atMs": 1791356021490,
+   "subId": "0f4f1885-b476-4c3c-a6a5-4e6e74bb639d",
+   "detail": {
+    "via": "GET /api/core/v2/blocks/{blockId}/metadata",
+    "isSolid": true
+   },
+   "status": "SOLID",
+   "blockId": "0xc19462a4f0a3bbe06f7f57932b682b751f325fc55a085d75eee566fc72c878bd"
+  }
+ },
+ {
+  "id": 21458,
+  "type": "milestone",
+  "atMs": 1791356023099,
+  "at": "2026-10-07T06:53:43.099Z",
+  "payload": {
+   "id": "0xe2cca907395ed651819fd276b7d78bea011ae66dedefb27c5ad4a1981b62c548",
+   "ts": 1791356023,
+   "index": 6424,
+   "blocks": 4,
+   "messages": 3,
+   "newMessages": 3
+  }
+ },
+ {
+  "id": 21459,
+  "type": "message",
+  "atMs": 1791356023111,
+  "at": "2026-10-07T06:53:43.111Z",
+  "payload": {
+   "ts": 1791356023,
+   "iss": "did:iota:testnet:0x15eb8c4d90fa4fff1d49f3ae8b1676a61e09c883303acd383cbfaacb538db9ba",
+   "seq": 1791332998707,
+   "tag": "trust.score",
+   "ieId": "MyDomain:fa163e32c6ee",
+   "kind": "trust.score",
+   "first": true,
+   "reason": null,
+   "blockId": "0x506de464eea306d3c3d27436487a654dff809553bdc3ae64ca1e178c6d17cb63",
+   "msIndex": 6424,
+   "verdict": "PRODUCER_SIGNED",
+   "wfIndex": 1,
+   "encrypted": false
+  }
+ },
+ {
+  "id": 21460,
+  "type": "lifecycle",
+  "atMs": 1791356023112,
+  "at": "2026-10-07T06:53:43.112Z",
+  "payload": {
+   "atMs": 1791356023036,
+   "subId": "69e50fc3-adc9-4ee6-b80e-2f5ccf694546",
+   "detail": {
+    "via": "inx",
+    "source": "indexer",
+    "msIndex": 6424,
+    "msTimestamp": 1791356023
+   },
+   "status": "CONFIRMED",
+   "blockId": "0x506de464eea306d3c3d27436487a654dff809553bdc3ae64ca1e178c6d17cb63"
+  }
+ },
+ {
+  "id": 21461,
+  "type": "message",
+  "atMs": 1791356023113,
+  "at": "2026-10-07T06:53:43.113Z",
+  "payload": {
+   "ts": 1791356023,
+   "iss": "did:iota:testnet:0x15eb8c4d90fa4fff1d49f3ae8b1676a61e09c883303acd383cbfaacb538db9ba",
+   "seq": 1791332998708,
+   "tag": "trust.score",
+   "ieId": "MyDomain:fa163e5e25ef",
+   "kind": "trust.score",
+   "first": true,
+   "reason": null,
+   "blockId": "0x4fadb0996bd4b6d2d50528c4184f1a97c6b326c2e2cc58a41481e1a84f4205df",
+   "msIndex": 6424,
+   "verdict": "PRODUCER_SIGNED",
+   "wfIndex": 2,
+   "encrypted": false
+  }
+ },
+ {
+  "id": 21462,
+  "type": "lifecycle",
+  "atMs": 1791356023115,
+  "at": "2026-10-07T06:53:43.115Z",
+  "payload": {
+   "atMs": 1791356023059,
+   "subId": "74370327-bf19-4973-88aa-f1e003d4634c",
+   "detail": {
+    "via": "inx",
+    "source": "indexer",
+    "msIndex": 6424,
+    "msTimestamp": 1791356023
+   },
+   "status": "CONFIRMED",
+   "blockId": "0x4fadb0996bd4b6d2d50528c4184f1a97c6b326c2e2cc58a41481e1a84f4205df"
+  }
+ },
+ {
+  "id": 21463,
+  "type": "message",
+  "atMs": 1791356023116,
+  "at": "2026-10-07T06:53:43.116Z",
+  "payload": {
+   "ts": 1791356023,
+   "iss": "did:iota:testnet:0x15eb8c4d90fa4fff1d49f3ae8b1676a61e09c883303acd383cbfaacb538db9ba",
+   "seq": 1791332998709,
+   "tag": "trust.score",
+   "ieId": "MyDomain:fa163ed55867",
+   "kind": "trust.score",
+   "first": true,
+   "reason": null,
+   "blockId": "0xc19462a4f0a3bbe06f7f57932b682b751f325fc55a085d75eee566fc72c878bd",
+   "msIndex": 6424,
+   "verdict": "PRODUCER_SIGNED",
+   "wfIndex": 3,
+   "encrypted": false
+  }
+ },
+ {
+  "id": 21464,
+  "type": "lifecycle",
+  "atMs": 1791356023117,
+  "at": "2026-10-07T06:53:43.117Z",
+  "payload": {
+   "atMs": 1791356023085,
+   "subId": "0f4f1885-b476-4c3c-a6a5-4e6e74bb639d",
+   "detail": {
+    "via": "inx",
+    "source": "indexer",
+    "msIndex": 6424,
+    "msTimestamp": 1791356023
+   },
+   "status": "CONFIRMED",
+   "blockId": "0xc19462a4f0a3bbe06f7f57932b682b751f325fc55a085d75eee566fc72c878bd"
+  }
+ },
+ {
+  "id": 21465,
+  "type": "lifecycle",
+  "atMs": 1791356024453,
+  "at": "2026-10-07T06:53:44.453Z",
+  "payload": {
+   "atMs": 1791356024450,
+   "subId": "69e50fc3-adc9-4ee6-b80e-2f5ccf694546",
+   "detail": {
+    "via": "GET /api/core/v2/blocks/{blockId}/metadata",
+    "whiteFlagIndex": 1,
+    "ledgerInclusionState": "noTransaction",
+    "referencedByMilestoneIndex": 6424
+   },
+   "status": "CONFIRMED",
+   "blockId": "0x506de464eea306d3c3d27436487a654dff809553bdc3ae64ca1e178c6d17cb63"
+  }
+ },
+ {
+  "id": 21466,
+  "type": "lifecycle",
+  "atMs": 1791356024464,
+  "at": "2026-10-07T06:53:44.464Z",
+  "payload": {
+   "atMs": 1791356024462,
+   "subId": "69e50fc3-adc9-4ee6-b80e-2f5ccf694546",
+   "detail": {
+    "via": "GET /api/core/v2/blocks/{blockId}",
+    "bytes": 695
+   },
+   "status": "CONTENT_VERIFIED",
+   "blockId": "0x506de464eea306d3c3d27436487a654dff809553bdc3ae64ca1e178c6d17cb63"
+  }
+ },
+ {
+  "id": 21467,
+  "type": "lifecycle",
+  "atMs": 1791356024716,
+  "at": "2026-10-07T06:53:44.716Z",
+  "payload": {
+   "atMs": 1791356024713,
+   "subId": "74370327-bf19-4973-88aa-f1e003d4634c",
+   "detail": {
+    "via": "GET /api/core/v2/blocks/{blockId}/metadata",
+    "whiteFlagIndex": 2,
+    "ledgerInclusionState": "noTransaction",
+    "referencedByMilestoneIndex": 6424
+   },
+   "status": "CONFIRMED",
+   "blockId": "0x4fadb0996bd4b6d2d50528c4184f1a97c6b326c2e2cc58a41481e1a84f4205df"
+  }
+ },
+ {
+  "id": 21468,
+  "type": "lifecycle",
+  "atMs": 1791356024724,
+  "at": "2026-10-07T06:53:44.724Z",
+  "payload": {
+   "atMs": 1791356024722,
+   "subId": "74370327-bf19-4973-88aa-f1e003d4634c",
+   "detail": {
+    "via": "GET /api/core/v2/blocks/{blockId}",
+    "bytes": 743
+   },
+   "status": "CONTENT_VERIFIED",
+   "blockId": "0x4fadb0996bd4b6d2d50528c4184f1a97c6b326c2e2cc58a41481e1a84f4205df"
+  }
+ },
+ {
+  "id": 21469,
+  "type": "lifecycle",
+  "atMs": 1791356025017,
+  "at": "2026-10-07T06:53:45.017Z",
+  "payload": {
+   "atMs": 1791356025015,
+   "subId": "0f4f1885-b476-4c3c-a6a5-4e6e74bb639d",
+   "detail": {
+    "via": "GET /api/core/v2/blocks/{blockId}/metadata",
+    "whiteFlagIndex": 3,
+    "ledgerInclusionState": "noTransaction",
+    "referencedByMilestoneIndex": 6424
+   },
+   "status": "CONFIRMED",
+   "blockId": "0xc19462a4f0a3bbe06f7f57932b682b751f325fc55a085d75eee566fc72c878bd"
+  }
+ },
+ {
+  "id": 21470,
+  "type": "lifecycle",
+  "atMs": 1791356025030,
+  "at": "2026-10-07T06:53:45.030Z",
+  "payload": {
+   "atMs": 1791356025027,
+   "subId": "0f4f1885-b476-4c3c-a6a5-4e6e74bb639d",
+   "detail": {
+    "via": "GET /api/core/v2/blocks/{blockId}",
+    "bytes": 776
+   },
+   "status": "CONTENT_VERIFIED",
+   "blockId": "0xc19462a4f0a3bbe06f7f57932b682b751f325fc55a085d75eee566fc72c878bd"
+  }
+ },
+ {
+  "id": 21471,
+  "type": "milestone",
+  "atMs": 1791356028019,
+  "at": "2026-10-07T06:53:48.019Z",
+  "payload": {
+   "id": "0xf3e3ca9dd0c4544beb3a548a3202b0463e71d9c13e24daa6b655145da235b894",
+   "ts": 1791356028,
+   "index": 6425,
+   "blocks": 1,
+   "messages": 0,
+   "newMessages": 0
+  }
+ },
+ {
+  "id": 21472,
+  "type": "milestone",
+  "atMs": 1791356033021,
+  "at": "2026-10-07T06:53:53.021Z",
+  "payload": {
+   "id": "0x4814955f508c942cbc007eefa162c5f1003b3cdcca44adbeac15a073182d440a",
+   "ts": 1791356033,
+   "index": 6426,
+   "blocks": 1,
+   "messages": 0,
+   "newMessages": 0
+  }
+ },
+ {
+  "id": 21473,
+  "type": "milestone",
+  "atMs": 1791356038020,
+  "at": "2026-10-07T06:53:58.020Z",
+  "payload": {
+   "id": "0x274366cea616eee39d42b42fa7c400149347c6ddf7c9a098c6df04409ec4becc",
+   "ts": 1791356038,
+   "index": 6427,
+   "blocks": 1,
+   "messages": 0,
+   "newMessages": 0
+  }
+ },
+ {
+  "id": 21474,
+  "type": "milestone",
+  "atMs": 1791356043014,
+  "at": "2026-10-07T06:54:03.014Z",
+  "payload": {
+   "id": "0x167dc9cc975dde65fc304c1f64e6a3c080ebd20e04de80506d27bd4969bb83ce",
+   "ts": 1791356042,
+   "index": 6428,
+   "blocks": 1,
+   "messages": 0,
+   "newMessages": 0
+  }
+ },
+ {
+  "id": 21475,
+  "type": "milestone",
+  "atMs": 1791356048022,
+  "at": "2026-10-07T06:54:08.022Z",
+  "payload": {
+   "id": "0x5f7f5c677cf8d985221089b42805dff2a5cbf781f394ff2559d06c3c86a9ce62",
+   "ts": 1791356048,
+   "index": 6429,
+   "blocks": 1,
+   "messages": 0,
+   "newMessages": 0
+  }
+ },
+ {
+  "id": 21476,
+  "type": "milestone",
+  "atMs": 1791356053017,
+  "at": "2026-10-07T06:54:13.017Z",
+  "payload": {
+   "id": "0x10ef5b55e24b73289effc4bba9bae5c9a41921e6e64462888dd7dbfa6aef539d",
+   "ts": 1791356053,
+   "index": 6430,
+   "blocks": 1,
+   "messages": 0,
+   "newMessages": 0
+  }
+ },
+ {
+  "id": 21477,
+  "type": "milestone",
+  "atMs": 1791356058018,
+  "at": "2026-10-07T06:54:18.018Z",
+  "payload": {
+   "id": "0x8f0e920c57646ee7ee82ccc79e30f51ef9f42298e4d16e95e294687cd271755b",
+   "ts": 1791356058,
+   "index": 6431,
+   "blocks": 1,
+   "messages": 0,
+   "newMessages": 0
+  }
+ },
+ {
+  "id": 21478,
+  "type": "milestone",
+  "atMs": 1791356063021,
+  "at": "2026-10-07T06:54:23.021Z",
+  "payload": {
+   "id": "0xa5ea0bd0dec01ba58c80860f082e9ea7cbf7fbd8ccc581adeb5c96e62544a2e3",
+   "ts": 1791356063,
+   "index": 6432,
+   "blocks": 1,
+   "messages": 0,
+   "newMessages": 0
+  }
+ },
+ {
+  "id": 21479,
+  "type": "milestone",
+  "atMs": 1791356068014,
+  "at": "2026-10-07T06:54:28.014Z",
+  "payload": {
+   "id": "0x0ee26eade97695e33b80a715403006e2a57f253ae928a6a8584ad8bcd917edda",
+   "ts": 1791356067,
+   "index": 6433,
+   "blocks": 1,
+   "messages": 0,
+   "newMessages": 0
+  }
+ },
+ {
+  "id": 21480,
+  "type": "milestone",
+  "atMs": 1791356073016,
+  "at": "2026-10-07T06:54:33.016Z",
+  "payload": {
+   "id": "0xeab1f3ef9635031a07a61a3845caa434cde252a54b846ac11bb731dd72961a14",
+   "ts": 1791356073,
+   "index": 6434,
+   "blocks": 1,
+   "messages": 0,
+   "newMessages": 0
+  }
+ },
+ {
+  "id": 21481,
+  "type": "milestone",
+  "atMs": 1791356078019,
+  "at": "2026-10-07T06:54:38.019Z",
+  "payload": {
+   "id": "0x3ebb11675e17f5aca37cecfe619c757e55080baf3fd4bf58f7bb9d7a5443031b",
+   "ts": 1791356078,
+   "index": 6435,
+   "blocks": 1,
+   "messages": 0,
+   "newMessages": 0
+  }
+ },
+ {
+  "id": 21483,
+  "type": "lifecycle",
+  "atMs": 1791356081973,
+  "at": "2026-10-07T06:54:41.973Z",
+  "payload": {
+   "atMs": 1791356081969,
+   "subId": "b48596d5-a3a9-4866-a0ed-a24592a53475",
+   "detail": {
+    "via": "GET /api/core/v2/blocks/{blockId}/metadata",
+    "isSolid": true
+   },
+   "status": "SOLID",
+   "blockId": "0x20fcb070cfedb5ac28b83ae7d78af31c708d4556b4c9f90a7e6a6b60b06c4b67"
+  }
+ },
+ {
+  "id": 21485,
+  "type": "lifecycle",
+  "atMs": 1791356082275,
+  "at": "2026-10-07T06:54:42.275Z",
+  "payload": {
+   "atMs": 1791356082273,
+   "subId": "ea665083-ddc6-4a23-b16d-4beaf5e61026",
+   "detail": {
+    "via": "GET /api/core/v2/blocks/{blockId}/metadata",
+    "isSolid": true
+   },
+   "status": "SOLID",
+   "blockId": "0x456a900ba095c3ac887e78c89b52dcd5fa551c6e2d144e90d09b431e69ba0fd2"
+  }
+ },
+ {
+  "id": 21487,
+  "type": "lifecycle",
+  "atMs": 1791356082570,
+  "at": "2026-10-07T06:54:42.570Z",
+  "payload": {
+   "atMs": 1791356082568,
+   "subId": "f6e0508c-5952-4588-876f-cf4b9de52555",
+   "detail": {
+    "via": "GET /api/core/v2/blocks/{blockId}/metadata",
+    "isSolid": true
+   },
+   "status": "SOLID",
+   "blockId": "0x3525757af68f15531c8ea0d597f5406fb384e319b31f65b6464b75776a01a5da"
+  }
+ },
+ {
+  "id": 21488,
+  "type": "milestone",
+  "atMs": 1791356083073,
+  "at": "2026-10-07T06:54:43.073Z",
+  "payload": {
+   "id": "0x1179b0683ffa343628d7f0066f00d8246d441d0300eda0278c340afcb7b72caf",
+   "ts": 1791356082,
+   "index": 6436,
+   "blocks": 4,
+   "messages": 3,
+   "newMessages": 3
+  }
+ },
+ {
+  "id": 21489,
+  "type": "message",
+  "atMs": 1791356083074,
+  "at": "2026-10-07T06:54:43.074Z",
+  "payload": {
+   "ts": 1791356082,
+   "iss": "did:iota:testnet:0x15eb8c4d90fa4fff1d49f3ae8b1676a61e09c883303acd383cbfaacb538db9ba",
+   "seq": 1791332998710,
+   "tag": "trust.score",
+   "ieId": "MyDomain:fa163e32c6ee",
+   "kind": "trust.score",
+   "first": true,
+   "reason": null,
+   "blockId": "0x20fcb070cfedb5ac28b83ae7d78af31c708d4556b4c9f90a7e6a6b60b06c4b67",
+   "msIndex": 6436,
+   "verdict": "PRODUCER_SIGNED",
+   "wfIndex": 1,
+   "encrypted": false
+  }
+ },
+ {
+  "id": 21490,
+  "type": "lifecycle",
+  "atMs": 1791356083077,
+  "at": "2026-10-07T06:54:43.077Z",
+  "payload": {
+   "atMs": 1791356083028,
+   "subId": "b48596d5-a3a9-4866-a0ed-a24592a53475",
+   "detail": {
+    "via": "inx",
+    "source": "indexer",
+    "msIndex": 6436,
+    "msTimestamp": 1791356082
+   },
+   "status": "CONFIRMED",
+   "blockId": "0x20fcb070cfedb5ac28b83ae7d78af31c708d4556b4c9f90a7e6a6b60b06c4b67"
+  }
+ },
+ {
+  "id": 21491,
+  "type": "message",
+  "atMs": 1791356083079,
+  "at": "2026-10-07T06:54:43.079Z",
+  "payload": {
+   "ts": 1791356082,
+   "iss": "did:iota:testnet:0x15eb8c4d90fa4fff1d49f3ae8b1676a61e09c883303acd383cbfaacb538db9ba",
+   "seq": 1791332998711,
+   "tag": "trust.score",
+   "ieId": "MyDomain:fa163e5e25ef",
+   "kind": "trust.score",
+   "first": true,
+   "reason": null,
+   "blockId": "0x456a900ba095c3ac887e78c89b52dcd5fa551c6e2d144e90d09b431e69ba0fd2",
+   "msIndex": 6436,
+   "verdict": "PRODUCER_SIGNED",
+   "wfIndex": 2,
+   "encrypted": false
+  }
+ },
+ {
+  "id": 21492,
+  "type": "lifecycle",
+  "atMs": 1791356083081,
+  "at": "2026-10-07T06:54:43.081Z",
+  "payload": {
+   "atMs": 1791356083045,
+   "subId": "ea665083-ddc6-4a23-b16d-4beaf5e61026",
+   "detail": {
+    "via": "inx",
+    "source": "indexer",
+    "msIndex": 6436,
+    "msTimestamp": 1791356082
+   },
+   "status": "CONFIRMED",
+   "blockId": "0x456a900ba095c3ac887e78c89b52dcd5fa551c6e2d144e90d09b431e69ba0fd2"
+  }
+ },
+ {
+  "id": 21493,
+  "type": "message",
+  "atMs": 1791356083082,
+  "at": "2026-10-07T06:54:43.082Z",
+  "payload": {
+   "ts": 1791356082,
+   "iss": "did:iota:testnet:0x15eb8c4d90fa4fff1d49f3ae8b1676a61e09c883303acd383cbfaacb538db9ba",
+   "seq": 1791332998712,
+   "tag": "trust.score",
+   "ieId": "MyDomain:fa163ed55867",
+   "kind": "trust.score",
+   "first": true,
+   "reason": null,
+   "blockId": "0x3525757af68f15531c8ea0d597f5406fb384e319b31f65b6464b75776a01a5da",
+   "msIndex": 6436,
+   "verdict": "PRODUCER_SIGNED",
+   "wfIndex": 3,
+   "encrypted": false
+  }
+ },
+ {
+  "id": 21494,
+  "type": "lifecycle",
+  "atMs": 1791356083084,
+  "at": "2026-10-07T06:54:43.084Z",
+  "payload": {
+   "atMs": 1791356083059,
+   "subId": "f6e0508c-5952-4588-876f-cf4b9de52555",
+   "detail": {
+    "via": "inx",
+    "source": "indexer",
+    "msIndex": 6436,
+    "msTimestamp": 1791356082
+   },
+   "status": "CONFIRMED",
+   "blockId": "0x3525757af68f15531c8ea0d597f5406fb384e319b31f65b6464b75776a01a5da"
+  }
+ },
+ {
+  "id": 21495,
+  "type": "lifecycle",
+  "atMs": 1791356083088,
+  "at": "2026-10-07T06:54:43.088Z",
+  "payload": {
+   "atMs": 1791356083078,
+   "subId": "f6e0508c-5952-4588-876f-cf4b9de52555",
+   "detail": {
+    "via": "GET /api/core/v2/blocks/{blockId}/metadata",
+    "whiteFlagIndex": 3,
+    "ledgerInclusionState": "noTransaction",
+    "referencedByMilestoneIndex": 6436
+   },
+   "status": "CONFIRMED",
+   "blockId": "0x3525757af68f15531c8ea0d597f5406fb384e319b31f65b6464b75776a01a5da"
+  }
+ },
+ {
+  "id": 21496,
+  "type": "lifecycle",
+  "atMs": 1791356083098,
+  "at": "2026-10-07T06:54:43.098Z",
+  "payload": {
+   "atMs": 1791356083095,
+   "subId": "f6e0508c-5952-4588-876f-cf4b9de52555",
+   "detail": {
+    "via": "GET /api/core/v2/blocks/{blockId}",
+    "bytes": 744
+   },
+   "status": "CONTENT_VERIFIED",
+   "blockId": "0x3525757af68f15531c8ea0d597f5406fb384e319b31f65b6464b75776a01a5da"
+  }
+ },
+ {
+  "id": 21497,
+  "type": "lifecycle",
+  "atMs": 1791356083491,
+  "at": "2026-10-07T06:54:43.491Z",
+  "payload": {
+   "atMs": 1791356083489,
+   "subId": "b48596d5-a3a9-4866-a0ed-a24592a53475",
+   "detail": {
+    "via": "GET /api/core/v2/blocks/{blockId}/metadata",
+    "whiteFlagIndex": 1,
+    "ledgerInclusionState": "noTransaction",
+    "referencedByMilestoneIndex": 6436
+   },
+   "status": "CONFIRMED",
+   "blockId": "0x20fcb070cfedb5ac28b83ae7d78af31c708d4556b4c9f90a7e6a6b60b06c4b67"
+  }
+ },
+ {
+  "id": 21498,
+  "type": "lifecycle",
+  "atMs": 1791356083499,
+  "at": "2026-10-07T06:54:43.499Z",
+  "payload": {
+   "atMs": 1791356083496,
+   "subId": "b48596d5-a3a9-4866-a0ed-a24592a53475",
+   "detail": {
+    "via": "GET /api/core/v2/blocks/{blockId}",
+    "bytes": 663
+   },
+   "status": "CONTENT_VERIFIED",
+   "blockId": "0x20fcb070cfedb5ac28b83ae7d78af31c708d4556b4c9f90a7e6a6b60b06c4b67"
+  }
+ },
+ {
+  "id": 21499,
+  "type": "lifecycle",
+  "atMs": 1791356083795,
+  "at": "2026-10-07T06:54:43.795Z",
+  "payload": {
+   "atMs": 1791356083791,
+   "subId": "ea665083-ddc6-4a23-b16d-4beaf5e61026",
+   "detail": {
+    "via": "GET /api/core/v2/blocks/{blockId}/metadata",
+    "whiteFlagIndex": 2,
+    "ledgerInclusionState": "noTransaction",
+    "referencedByMilestoneIndex": 6436
+   },
+   "status": "CONFIRMED",
+   "blockId": "0x456a900ba095c3ac887e78c89b52dcd5fa551c6e2d144e90d09b431e69ba0fd2"
+  }
+ },
+ {
+  "id": 21500,
+  "type": "lifecycle",
+  "atMs": 1791356083808,
+  "at": "2026-10-07T06:54:43.808Z",
+  "payload": {
+   "atMs": 1791356083806,
+   "subId": "ea665083-ddc6-4a23-b16d-4beaf5e61026",
+   "detail": {
+    "via": "GET /api/core/v2/blocks/{blockId}",
+    "bytes": 711
+   },
+   "status": "CONTENT_VERIFIED",
+   "blockId": "0x456a900ba095c3ac887e78c89b52dcd5fa551c6e2d144e90d09b431e69ba0fd2"
+  }
+ },
+ {
+  "id": 21501,
+  "type": "milestone",
+  "atMs": 1791356088016,
+  "at": "2026-10-07T06:54:48.016Z",
+  "payload": {
+   "id": "0xf1040f57c4f2c49681f59910ded097d0a7ed05528428501160580cf445babbd5",
+   "ts": 1791356088,
+   "index": 6437,
+   "blocks": 1,
+   "messages": 0,
+   "newMessages": 0
+  }
+ },
+ {
+  "id": 21502,
+  "type": "milestone",
+  "atMs": 1791356093015,
+  "at": "2026-10-07T06:54:53.015Z",
+  "payload": {
+   "id": "0xa81fe06749856e777537fe2ee03cc414f3af8eb3d4cece4b48a6114736f61a37",
+   "ts": 1791356092,
+   "index": 6438,
+   "blocks": 1,
+   "messages": 0,
+   "newMessages": 0
+  }
+ },
+ {
+  "id": 21503,
+  "type": "milestone",
+  "atMs": 1791356098012,
+  "at": "2026-10-07T06:54:58.012Z",
+  "payload": {
+   "id": "0x91397b4dc4d3a03134605254655c463e807c70379464c41905cff7c5fd60a6b9",
+   "ts": 1791356097,
+   "index": 6439,
+   "blocks": 1,
+   "messages": 0,
+   "newMessages": 0
+  }
+ },
+ {
+  "id": 21504,
+  "type": "milestone",
+  "atMs": 1791356103017,
+  "at": "2026-10-07T06:55:03.017Z",
+  "payload": {
+   "id": "0xc8514dd9ac69ac6b4b175172d79ce2971fc6abc0abe36c229f7dd7e443898519",
+   "ts": 1791356102,
+   "index": 6440,
+   "blocks": 1,
+   "messages": 0,
+   "newMessages": 0
+  }
+ },
+ {
+  "id": 21505,
+  "type": "milestone",
+  "atMs": 1791356108087,
+  "at": "2026-10-07T06:55:08.087Z",
+  "payload": {
+   "id": "0x0c3b7b83b57ee77a58e76395ddfd462bd9fd3144520a86b85583ea8b21a12f66",
+   "ts": 1791356108,
+   "index": 6441,
+   "blocks": 1,
+   "messages": 0,
+   "newMessages": 0
+  }
+ },
+ {
+  "id": 21506,
+  "type": "milestone",
+  "atMs": 1791356113015,
+  "at": "2026-10-07T06:55:13.015Z",
+  "payload": {
+   "id": "0xda432c200c1596b71b424bfb3bd876f961010ea6f975e666112c6aef2449e5ad",
+   "ts": 1791356112,
+   "index": 6442,
+   "blocks": 1,
+   "messages": 0,
+   "newMessages": 0
+  }
+ },
+ {
+  "id": 21507,
+  "type": "milestone",
+  "atMs": 1791356118014,
+  "at": "2026-10-07T06:55:18.014Z",
+  "payload": {
+   "id": "0x59611e7c2a86ada7f11d3afa15f5c83dff3d7c9508dcd6ca33529e1711d0e810",
+   "ts": 1791356117,
+   "index": 6443,
+   "blocks": 1,
+   "messages": 0,
+   "newMessages": 0
+  }
+ },
+ {
+  "id": 21508,
+  "type": "milestone",
+  "atMs": 1791356123020,
+  "at": "2026-10-07T06:55:23.020Z",
+  "payload": {
+   "id": "0xc507361d24360bae048391740efdcfc46540d8bcac6c42a1e4240b1b6fde1d7f",
+   "ts": 1791356122,
+   "index": 6444,
+   "blocks": 1,
+   "messages": 0,
+   "newMessages": 0
+  }
+ },
+ {
+  "id": 21509,
+  "type": "milestone",
+  "atMs": 1791356128011,
+  "at": "2026-10-07T06:55:28.011Z",
+  "payload": {
+   "id": "0x9591c81786dbefffb28c15ba68ecb20d019bca2f0bc8fbe9a7289544bb55a951",
+   "ts": 1791356127,
+   "index": 6445,
+   "blocks": 1,
+   "messages": 0,
+   "newMessages": 0
+  }
+ },
+ {
+  "id": 21510,
+  "type": "milestone",
+  "atMs": 1791356133014,
+  "at": "2026-10-07T06:55:33.014Z",
+  "payload": {
+   "id": "0x637b4fd37ef6d3cc11a15567c61c1c35dd0369e5b484b56d0e94ab0113dd3926",
+   "ts": 1791356132,
+   "index": 6446,
+   "blocks": 1,
+   "messages": 0,
+   "newMessages": 0
+  }
+ },
+ {
+  "id": 21511,
+  "type": "milestone",
+  "atMs": 1791356138013,
+  "at": "2026-10-07T06:55:38.013Z",
+  "payload": {
+   "id": "0xda74127ee3d5f6a23463cd85775e75013972c18d52a34e183eb86d1d8b3d4e13",
+   "ts": 1791356137,
+   "index": 6447,
+   "blocks": 1,
+   "messages": 0,
+   "newMessages": 0
+  }
+ },
+ {
+  "id": 21512,
+  "type": "milestone",
+  "atMs": 1791356143015,
+  "at": "2026-10-07T06:55:43.015Z",
+  "payload": {
+   "id": "0xbd6eaaf56a0d7b30621f221046241079b74d0edf4af910408e3a54f627ad7925",
+   "ts": 1791356142,
+   "index": 6448,
+   "blocks": 1,
+   "messages": 0,
+   "newMessages": 0
+  }
+ },
+ {
+  "id": 21514,
+  "type": "lifecycle",
+  "atMs": 1791356143089,
+  "at": "2026-10-07T06:55:43.089Z",
+  "payload": {
+   "atMs": 1791356143087,
+   "subId": "9d425753-d39c-48cf-a669-42cbc710c401",
+   "detail": {
+    "via": "GET /api/core/v2/blocks/{blockId}/metadata",
+    "isSolid": true
+   },
+   "status": "SOLID",
+   "blockId": "0xbaf4c73ef434c51e27b0a2c812248c4bdc9d14740762bc5a545d2f008590ef7e"
+  }
+ },
+ {
+  "id": 21516,
+  "type": "lifecycle",
+  "atMs": 1791356143378,
+  "at": "2026-10-07T06:55:43.378Z",
+  "payload": {
+   "atMs": 1791356143376,
+   "subId": "363302b9-4e36-4846-9a06-f746c012af13",
+   "detail": {
+    "via": "GET /api/core/v2/blocks/{blockId}/metadata",
+    "isSolid": true
+   },
+   "status": "SOLID",
+   "blockId": "0x1ef9d491d6baa9826f50525eb03cd69ac075406fc53b3204cd5bc7d83cf6971d"
+  }
+ },
+ {
+  "id": 21518,
+  "type": "lifecycle",
+  "atMs": 1791356143678,
+  "at": "2026-10-07T06:55:43.678Z",
+  "payload": {
+   "atMs": 1791356143676,
+   "subId": "65aa2191-0289-4825-9430-bf06eedde855",
+   "detail": {
+    "via": "GET /api/core/v2/blocks/{blockId}/metadata",
+    "isSolid": true
+   },
+   "status": "SOLID",
+   "blockId": "0x4fc448b691ea749c5e74b24970bf6f2c2462cc83a9bf83f9ce7108ae4a451646"
+  }
+ },
+ {
+  "id": 21519,
+  "type": "milestone",
+  "atMs": 1791356148085,
+  "at": "2026-10-07T06:55:48.085Z",
+  "payload": {
+   "id": "0xb42a55f792cadd7f829a25cc853d4cd3cb1f8fd0373c77381df9a33f8b19be03",
+   "ts": 1791356147,
+   "index": 6449,
+   "blocks": 4,
+   "messages": 3,
+   "newMessages": 3
+  }
+ },
+ {
+  "id": 21520,
+  "type": "message",
+  "atMs": 1791356148087,
+  "at": "2026-10-07T06:55:48.087Z",
+  "payload": {
+   "ts": 1791356147,
+   "iss": "did:iota:testnet:0x15eb8c4d90fa4fff1d49f3ae8b1676a61e09c883303acd383cbfaacb538db9ba",
+   "seq": 1791332998713,
+   "tag": "trust.score",
+   "ieId": "MyDomain:fa163e32c6ee",
+   "kind": "trust.score",
+   "first": true,
+   "reason": null,
+   "blockId": "0xbaf4c73ef434c51e27b0a2c812248c4bdc9d14740762bc5a545d2f008590ef7e",
+   "msIndex": 6449,
+   "verdict": "PRODUCER_SIGNED",
+   "wfIndex": 1,
+   "encrypted": false
+  }
+ },
+ {
+  "id": 21521,
+  "type": "lifecycle",
+  "atMs": 1791356148088,
+  "at": "2026-10-07T06:55:48.088Z",
+  "payload": {
+   "atMs": 1791356148033,
+   "subId": "9d425753-d39c-48cf-a669-42cbc710c401",
+   "detail": {
+    "via": "inx",
+    "source": "indexer",
+    "msIndex": 6449,
+    "msTimestamp": 1791356147
+   },
+   "status": "CONFIRMED",
+   "blockId": "0xbaf4c73ef434c51e27b0a2c812248c4bdc9d14740762bc5a545d2f008590ef7e"
+  }
+ },
+ {
+  "id": 21522,
+  "type": "message",
+  "atMs": 1791356148089,
+  "at": "2026-10-07T06:55:48.089Z",
+  "payload": {
+   "ts": 1791356147,
+   "iss": "did:iota:testnet:0x15eb8c4d90fa4fff1d49f3ae8b1676a61e09c883303acd383cbfaacb538db9ba",
+   "seq": 1791332998714,
+   "tag": "trust.score",
+   "ieId": "MyDomain:fa163e5e25ef",
+   "kind": "trust.score",
+   "first": true,
+   "reason": null,
+   "blockId": "0x1ef9d491d6baa9826f50525eb03cd69ac075406fc53b3204cd5bc7d83cf6971d",
+   "msIndex": 6449,
+   "verdict": "PRODUCER_SIGNED",
+   "wfIndex": 2,
+   "encrypted": false
+  }
+ },
+ {
+  "id": 21523,
+  "type": "lifecycle",
+  "atMs": 1791356148090,
+  "at": "2026-10-07T06:55:48.090Z",
+  "payload": {
+   "atMs": 1791356148054,
+   "subId": "363302b9-4e36-4846-9a06-f746c012af13",
+   "detail": {
+    "via": "inx",
+    "source": "indexer",
+    "msIndex": 6449,
+    "msTimestamp": 1791356147
+   },
+   "status": "CONFIRMED",
+   "blockId": "0x1ef9d491d6baa9826f50525eb03cd69ac075406fc53b3204cd5bc7d83cf6971d"
+  }
+ },
+ {
+  "id": 21524,
+  "type": "message",
+  "atMs": 1791356148092,
+  "at": "2026-10-07T06:55:48.092Z",
+  "payload": {
+   "ts": 1791356147,
+   "iss": "did:iota:testnet:0x15eb8c4d90fa4fff1d49f3ae8b1676a61e09c883303acd383cbfaacb538db9ba",
+   "seq": 1791332998715,
+   "tag": "trust.score",
+   "ieId": "MyDomain:fa163ed55867",
+   "kind": "trust.score",
+   "first": true,
+   "reason": null,
+   "blockId": "0x4fc448b691ea749c5e74b24970bf6f2c2462cc83a9bf83f9ce7108ae4a451646",
+   "msIndex": 6449,
+   "verdict": "PRODUCER_SIGNED",
+   "wfIndex": 3,
+   "encrypted": false
+  }
+ },
+ {
+  "id": 21525,
+  "type": "lifecycle",
+  "atMs": 1791356148093,
+  "at": "2026-10-07T06:55:48.093Z",
+  "payload": {
+   "atMs": 1791356148072,
+   "subId": "65aa2191-0289-4825-9430-bf06eedde855",
+   "detail": {
+    "via": "inx",
+    "source": "indexer",
+    "msIndex": 6449,
+    "msTimestamp": 1791356147
+   },
+   "status": "CONFIRMED",
+   "blockId": "0x4fc448b691ea749c5e74b24970bf6f2c2462cc83a9bf83f9ce7108ae4a451646"
+  }
+ },
+ {
+  "id": 21526,
+  "type": "lifecycle",
+  "atMs": 1791356150625,
+  "at": "2026-10-07T06:55:50.625Z",
+  "payload": {
+   "atMs": 1791356150623,
+   "subId": "9d425753-d39c-48cf-a669-42cbc710c401",
+   "detail": {
+    "via": "GET /api/core/v2/blocks/{blockId}/metadata",
+    "whiteFlagIndex": 1,
+    "ledgerInclusionState": "noTransaction",
+    "referencedByMilestoneIndex": 6449
+   },
+   "status": "CONFIRMED",
+   "blockId": "0xbaf4c73ef434c51e27b0a2c812248c4bdc9d14740762bc5a545d2f008590ef7e"
+  }
+ },
+ {
+  "id": 21527,
+  "type": "lifecycle",
+  "atMs": 1791356150635,
+  "at": "2026-10-07T06:55:50.635Z",
+  "payload": {
+   "atMs": 1791356150631,
+   "subId": "9d425753-d39c-48cf-a669-42cbc710c401",
+   "detail": {
+    "via": "GET /api/core/v2/blocks/{blockId}",
+    "bytes": 695
+   },
+   "status": "CONTENT_VERIFIED",
+   "blockId": "0xbaf4c73ef434c51e27b0a2c812248c4bdc9d14740762bc5a545d2f008590ef7e"
+  }
+ },
+ {
+  "id": 21528,
+  "type": "lifecycle",
+  "atMs": 1791356150911,
+  "at": "2026-10-07T06:55:50.911Z",
+  "payload": {
+   "atMs": 1791356150909,
+   "subId": "363302b9-4e36-4846-9a06-f746c012af13",
+   "detail": {
+    "via": "GET /api/core/v2/blocks/{blockId}/metadata",
+    "whiteFlagIndex": 2,
+    "ledgerInclusionState": "noTransaction",
+    "referencedByMilestoneIndex": 6449
+   },
+   "status": "CONFIRMED",
+   "blockId": "0x1ef9d491d6baa9826f50525eb03cd69ac075406fc53b3204cd5bc7d83cf6971d"
+  }
+ },
+ {
+  "id": 21529,
+  "type": "lifecycle",
+  "atMs": 1791356150921,
+  "at": "2026-10-07T06:55:50.921Z",
+  "payload": {
+   "atMs": 1791356150919,
+   "subId": "363302b9-4e36-4846-9a06-f746c012af13",
+   "detail": {
+    "via": "GET /api/core/v2/blocks/{blockId}",
+    "bytes": 743
+   },
+   "status": "CONTENT_VERIFIED",
+   "blockId": "0x1ef9d491d6baa9826f50525eb03cd69ac075406fc53b3204cd5bc7d83cf6971d"
+  }
+ },
+ {
+  "id": 21530,
+  "type": "lifecycle",
+  "atMs": 1791356151216,
+  "at": "2026-10-07T06:55:51.216Z",
+  "payload": {
+   "atMs": 1791356151214,
+   "subId": "65aa2191-0289-4825-9430-bf06eedde855",
+   "detail": {
+    "via": "GET /api/core/v2/blocks/{blockId}/metadata",
+    "whiteFlagIndex": 3,
+    "ledgerInclusionState": "noTransaction",
+    "referencedByMilestoneIndex": 6449
+   },
+   "status": "CONFIRMED",
+   "blockId": "0x4fc448b691ea749c5e74b24970bf6f2c2462cc83a9bf83f9ce7108ae4a451646"
+  }
+ },
+ {
+  "id": 21531,
+  "type": "lifecycle",
+  "atMs": 1791356151226,
+  "at": "2026-10-07T06:55:51.226Z",
+  "payload": {
+   "atMs": 1791356151223,
+   "subId": "65aa2191-0289-4825-9430-bf06eedde855",
+   "detail": {
+    "via": "GET /api/core/v2/blocks/{blockId}",
+    "bytes": 776
+   },
+   "status": "CONTENT_VERIFIED",
+   "blockId": "0x4fc448b691ea749c5e74b24970bf6f2c2462cc83a9bf83f9ce7108ae4a451646"
+  }
+ },
+ {
+  "id": 21532,
+  "type": "milestone",
+  "atMs": 1791356153020,
+  "at": "2026-10-07T06:55:53.020Z",
+  "payload": {
+   "id": "0x27855a2393f8891fe127c274d7387e8e1b0ab097860f1688bcf70e83989e7af8",
+   "ts": 1791356152,
+   "index": 6450,
+   "blocks": 1,
+   "messages": 0,
+   "newMessages": 0
+  }
+ },
+ {
+  "id": 21533,
+  "type": "milestone",
+  "atMs": 1791356158011,
+  "at": "2026-10-07T06:55:58.011Z",
+  "payload": {
+   "id": "0x03b7b5774b8d116f7629380bc6e9468e3138d1279c4b861fd5cffd6a1bc9a465",
+   "ts": 1791356157,
+   "index": 6451,
+   "blocks": 1,
+   "messages": 0,
+   "newMessages": 0
+  }
+ },
+ {
+  "id": 21534,
+  "type": "milestone",
+  "atMs": 1791356163005,
+  "at": "2026-10-07T06:56:03.005Z",
+  "payload": {
+   "id": "0x35f9009ada0bb001133c41455d9645869ad3396f8c50bf8bf11c66352d1df214",
+   "ts": 1791356162,
+   "index": 6452,
+   "blocks": 1,
+   "messages": 0,
+   "newMessages": 0
+  }
+ },
+ {
+  "id": 21535,
+  "type": "milestone",
+  "atMs": 1791356168012,
+  "at": "2026-10-07T06:56:08.012Z",
+  "payload": {
+   "id": "0x8af5126d02bd5c6430b269899b11299943ad0b3c9858f5564ea7324e178ea606",
+   "ts": 1791356167,
+   "index": 6453,
+   "blocks": 1,
+   "messages": 0,
+   "newMessages": 0
+  }
+ },
+ {
+  "id": 21536,
+  "type": "milestone",
+  "atMs": 1791356173016,
+  "at": "2026-10-07T06:56:13.016Z",
+  "payload": {
+   "id": "0x204c628beb7c034ebe64a063467ab46bc94066583d0f0b818cde4f34bcfc36df",
+   "ts": 1791356172,
+   "index": 6454,
+   "blocks": 1,
+   "messages": 0,
+   "newMessages": 0
+  }
+ },
+ {
+  "id": 21537,
+  "type": "milestone",
+  "atMs": 1791356178009,
+  "at": "2026-10-07T06:56:18.009Z",
+  "payload": {
+   "id": "0x3502cfab8343dcdaa3dfe785affbe78866d105e34b05a648d611d7bef8769bdb",
+   "ts": 1791356177,
+   "index": 6455,
+   "blocks": 1,
+   "messages": 0,
+   "newMessages": 0
+  }
+ },
+ {
+  "id": 21538,
+  "type": "milestone",
+  "atMs": 1791356183016,
+  "at": "2026-10-07T06:56:23.016Z",
+  "payload": {
+   "id": "0x687b89fdfa748bb9693c263f70bc4942c4e84038032e7ceeb8b05f5e3f55731e",
+   "ts": 1791356182,
+   "index": 6456,
+   "blocks": 1,
+   "messages": 0,
+   "newMessages": 0
+  }
+ },
+ {
+  "id": 21539,
+  "type": "milestone",
+  "atMs": 1791356188013,
+  "at": "2026-10-07T06:56:28.013Z",
+  "payload": {
+   "id": "0x26a8a903d91db5ebdfce5cb9ae03c1942b0e104220a677bab09d4d03cb912461",
+   "ts": 1791356187,
+   "index": 6457,
+   "blocks": 1,
+   "messages": 0,
+   "newMessages": 0
+  }
+ },
+ {
+  "id": 21540,
+  "type": "milestone",
+  "atMs": 1791356193012,
+  "at": "2026-10-07T06:56:33.012Z",
+  "payload": {
+   "id": "0x44ccaf45c0384f3292e4a195e54fc4252ac8d47cf8920d940e0bdb02fc8e9163",
+   "ts": 1791356192,
+   "index": 6458,
+   "blocks": 1,
+   "messages": 0,
+   "newMessages": 0
+  }
+ },
+ {
+  "id": 21541,
+  "type": "milestone",
+  "atMs": 1791356198011,
+  "at": "2026-10-07T06:56:38.011Z",
+  "payload": {
+   "id": "0xcf11b7c7837d31764e4caf459d064def81a0c10030e136134def04e513c48ad4",
+   "ts": 1791356197,
+   "index": 6459,
+   "blocks": 1,
+   "messages": 0,
+   "newMessages": 0
+  }
+ },
+ {
+  "id": 21542,
+  "type": "milestone",
+  "atMs": 1791356203010,
+  "at": "2026-10-07T06:56:43.010Z",
+  "payload": {
+   "id": "0xe92e2af820ce72c04b78a66ca94c2afaffa64d4d98eeed07fe7ce0c096e36e9f",
+   "ts": 1791356202,
+   "index": 6460,
+   "blocks": 1,
+   "messages": 0,
+   "newMessages": 0
+  }
+ },
+ {
+  "id": 21544,
+  "type": "lifecycle",
+  "atMs": 1791356204135,
+  "at": "2026-10-07T06:56:44.135Z",
+  "payload": {
+   "atMs": 1791356204133,
+   "subId": "e3d15795-ddde-48e0-8dec-b28e4db00d21",
+   "detail": {
+    "via": "GET /api/core/v2/blocks/{blockId}/metadata",
+    "isSolid": true
+   },
+   "status": "SOLID",
+   "blockId": "0x231f44f4dc47a4434fe2e73c77b1553e45eb91b3f649086e96c5d5aacdc89393"
+  }
+ },
+ {
+  "id": 21546,
+  "type": "lifecycle",
+  "atMs": 1791356204388,
+  "at": "2026-10-07T06:56:44.388Z",
+  "payload": {
+   "atMs": 1791356204386,
+   "subId": "f0e3a9bd-6ac5-4405-a8e3-de02f4b81970",
+   "detail": {
+    "via": "GET /api/core/v2/blocks/{blockId}/metadata",
+    "isSolid": true
+   },
+   "status": "SOLID",
+   "blockId": "0x0bc9dbcb2ec8b2dcb1d3a01913a910ab641fb617dad62d2d970c9dff6689d951"
+  }
+ },
+ {
+  "id": 21548,
+  "type": "lifecycle",
+  "atMs": 1791356204635,
+  "at": "2026-10-07T06:56:44.635Z",
+  "payload": {
+   "atMs": 1791356204634,
+   "subId": "3f8fed24-da02-4e56-adb9-892817785d6e",
+   "detail": {
+    "via": "GET /api/core/v2/blocks/{blockId}/metadata",
+    "isSolid": true
+   },
+   "status": "SOLID",
+   "blockId": "0xc14af732b50b08b969257d58395820de1044d6c003c32e9c7bdbbc68d28bf522"
+  }
+ },
+ {
+  "id": 21549,
+  "type": "milestone",
+  "atMs": 1791356208065,
+  "at": "2026-10-07T06:56:48.065Z",
+  "payload": {
+   "id": "0x1d4b45970e881dbf9fbf3371c3d4afd2a86b58848b6d006815dc950773871ca3",
+   "ts": 1791356207,
+   "index": 6461,
+   "blocks": 4,
+   "messages": 3,
+   "newMessages": 3
+  }
+ },
+ {
+  "id": 21550,
+  "type": "message",
+  "atMs": 1791356208066,
+  "at": "2026-10-07T06:56:48.066Z",
+  "payload": {
+   "ts": 1791356207,
+   "iss": "did:iota:testnet:0x15eb8c4d90fa4fff1d49f3ae8b1676a61e09c883303acd383cbfaacb538db9ba",
+   "seq": 1791332998716,
+   "tag": "trust.score",
+   "ieId": "MyDomain:fa163e32c6ee",
+   "kind": "trust.score",
+   "first": true,
+   "reason": null,
+   "blockId": "0x231f44f4dc47a4434fe2e73c77b1553e45eb91b3f649086e96c5d5aacdc89393",
+   "msIndex": 6461,
+   "verdict": "PRODUCER_SIGNED",
+   "wfIndex": 1,
+   "encrypted": false
+  }
+ },
+ {
+  "id": 21551,
+  "type": "lifecycle",
+  "atMs": 1791356208067,
+  "at": "2026-10-07T06:56:48.067Z",
+  "payload": {
+   "atMs": 1791356208021,
+   "subId": "e3d15795-ddde-48e0-8dec-b28e4db00d21",
+   "detail": {
+    "via": "inx",
+    "source": "indexer",
+    "msIndex": 6461,
+    "msTimestamp": 1791356207
+   },
+   "status": "CONFIRMED",
+   "blockId": "0x231f44f4dc47a4434fe2e73c77b1553e45eb91b3f649086e96c5d5aacdc89393"
+  }
+ },
+ {
+  "id": 21552,
+  "type": "message",
+  "atMs": 1791356208068,
+  "at": "2026-10-07T06:56:48.068Z",
+  "payload": {
+   "ts": 1791356207,
+   "iss": "did:iota:testnet:0x15eb8c4d90fa4fff1d49f3ae8b1676a61e09c883303acd383cbfaacb538db9ba",
+   "seq": 1791332998717,
+   "tag": "trust.score",
+   "ieId": "MyDomain:fa163e5e25ef",
+   "kind": "trust.score",
+   "first": true,
+   "reason": null,
+   "blockId": "0x0bc9dbcb2ec8b2dcb1d3a01913a910ab641fb617dad62d2d970c9dff6689d951",
+   "msIndex": 6461,
+   "verdict": "PRODUCER_SIGNED",
+   "wfIndex": 2,
+   "encrypted": false
+  }
+ },
+ {
+  "id": 21553,
+  "type": "lifecycle",
+  "atMs": 1791356208069,
+  "at": "2026-10-07T06:56:48.069Z",
+  "payload": {
+   "atMs": 1791356208038,
+   "subId": "f0e3a9bd-6ac5-4405-a8e3-de02f4b81970",
+   "detail": {
+    "via": "inx",
+    "source": "indexer",
+    "msIndex": 6461,
+    "msTimestamp": 1791356207
+   },
+   "status": "CONFIRMED",
+   "blockId": "0x0bc9dbcb2ec8b2dcb1d3a01913a910ab641fb617dad62d2d970c9dff6689d951"
+  }
+ },
+ {
+  "id": 21554,
+  "type": "message",
+  "atMs": 1791356208070,
+  "at": "2026-10-07T06:56:48.070Z",
+  "payload": {
+   "ts": 1791356207,
+   "iss": "did:iota:testnet:0x15eb8c4d90fa4fff1d49f3ae8b1676a61e09c883303acd383cbfaacb538db9ba",
+   "seq": 1791332998718,
+   "tag": "trust.score",
+   "ieId": "MyDomain:fa163ed55867",
+   "kind": "trust.score",
+   "first": true,
+   "reason": null,
+   "blockId": "0xc14af732b50b08b969257d58395820de1044d6c003c32e9c7bdbbc68d28bf522",
+   "msIndex": 6461,
+   "verdict": "PRODUCER_SIGNED",
+   "wfIndex": 3,
+   "encrypted": false
+  }
+ },
+ {
+  "id": 21555,
+  "type": "lifecycle",
+  "atMs": 1791356208071,
+  "at": "2026-10-07T06:56:48.071Z",
+  "payload": {
+   "atMs": 1791356208054,
+   "subId": "3f8fed24-da02-4e56-adb9-892817785d6e",
+   "detail": {
+    "via": "inx",
+    "source": "indexer",
+    "msIndex": 6461,
+    "msTimestamp": 1791356207
+   },
+   "status": "CONFIRMED",
+   "blockId": "0xc14af732b50b08b969257d58395820de1044d6c003c32e9c7bdbbc68d28bf522"
+  }
+ },
+ {
+  "id": 21556,
+  "type": "lifecycle",
+  "atMs": 1791356208160,
+  "at": "2026-10-07T06:56:48.160Z",
+  "payload": {
+   "atMs": 1791356208158,
+   "subId": "3f8fed24-da02-4e56-adb9-892817785d6e",
+   "detail": {
+    "via": "GET /api/core/v2/blocks/{blockId}/metadata",
+    "whiteFlagIndex": 3,
+    "ledgerInclusionState": "noTransaction",
+    "referencedByMilestoneIndex": 6461
+   },
+   "status": "CONFIRMED",
+   "blockId": "0xc14af732b50b08b969257d58395820de1044d6c003c32e9c7bdbbc68d28bf522"
+  }
+ },
+ {
+  "id": 21557,
+  "type": "lifecycle",
+  "atMs": 1791356208168,
+  "at": "2026-10-07T06:56:48.168Z",
+  "payload": {
+   "atMs": 1791356208165,
+   "subId": "3f8fed24-da02-4e56-adb9-892817785d6e",
+   "detail": {
+    "via": "GET /api/core/v2/blocks/{blockId}",
+    "bytes": 776
+   },
+   "status": "CONTENT_VERIFIED",
+   "blockId": "0xc14af732b50b08b969257d58395820de1044d6c003c32e9c7bdbbc68d28bf522"
+  }
+ },
+ {
+  "id": 21558,
+  "type": "lifecycle",
+  "atMs": 1791356211668,
+  "at": "2026-10-07T06:56:51.668Z",
+  "payload": {
+   "atMs": 1791356211666,
+   "subId": "e3d15795-ddde-48e0-8dec-b28e4db00d21",
+   "detail": {
+    "via": "GET /api/core/v2/blocks/{blockId}/metadata",
+    "whiteFlagIndex": 1,
+    "ledgerInclusionState": "noTransaction",
+    "referencedByMilestoneIndex": 6461
+   },
+   "status": "CONFIRMED",
+   "blockId": "0x231f44f4dc47a4434fe2e73c77b1553e45eb91b3f649086e96c5d5aacdc89393"
+  }
+ },
+ {
+  "id": 21559,
+  "type": "lifecycle",
+  "atMs": 1791356211694,
+  "at": "2026-10-07T06:56:51.694Z",
+  "payload": {
+   "atMs": 1791356211691,
+   "subId": "e3d15795-ddde-48e0-8dec-b28e4db00d21",
+   "detail": {
+    "via": "GET /api/core/v2/blocks/{blockId}",
+    "bytes": 695
+   },
+   "status": "CONTENT_VERIFIED",
+   "blockId": "0x231f44f4dc47a4434fe2e73c77b1553e45eb91b3f649086e96c5d5aacdc89393"
+  }
+ },
+ {
+  "id": 21560,
+  "type": "lifecycle",
+  "atMs": 1791356211918,
+  "at": "2026-10-07T06:56:51.918Z",
+  "payload": {
+   "atMs": 1791356211916,
+   "subId": "f0e3a9bd-6ac5-4405-a8e3-de02f4b81970",
+   "detail": {
+    "via": "GET /api/core/v2/blocks/{blockId}/metadata",
+    "whiteFlagIndex": 2,
+    "ledgerInclusionState": "noTransaction",
+    "referencedByMilestoneIndex": 6461
+   },
+   "status": "CONFIRMED",
+   "blockId": "0x0bc9dbcb2ec8b2dcb1d3a01913a910ab641fb617dad62d2d970c9dff6689d951"
+  }
+ },
+ {
+  "id": 21561,
+  "type": "lifecycle",
+  "atMs": 1791356211933,
+  "at": "2026-10-07T06:56:51.933Z",
+  "payload": {
+   "atMs": 1791356211928,
+   "subId": "f0e3a9bd-6ac5-4405-a8e3-de02f4b81970",
+   "detail": {
+    "via": "GET /api/core/v2/blocks/{blockId}",
+    "bytes": 743
+   },
+   "status": "CONTENT_VERIFIED",
+   "blockId": "0x0bc9dbcb2ec8b2dcb1d3a01913a910ab641fb617dad62d2d970c9dff6689d951"
+  }
+ },
+ {
+  "id": 21562,
+  "type": "milestone",
+  "atMs": 1791356213012,
+  "at": "2026-10-07T06:56:53.012Z",
+  "payload": {
+   "id": "0xa5d86f24e4707c4ba33c6b91c4f96ac9fe6910514edc5a8f2f77d895ee878c13",
+   "ts": 1791356212,
+   "index": 6462,
+   "blocks": 1,
+   "messages": 0,
+   "newMessages": 0
+  }
+ },
+ {
+  "id": 21563,
+  "type": "milestone",
+  "atMs": 1791356218010,
+  "at": "2026-10-07T06:56:58.010Z",
+  "payload": {
+   "id": "0x2dcd644459ff0d9bfd31363b6ac2e36cff1f9e11876437f7797e4285bba899d4",
+   "ts": 1791356217,
+   "index": 6463,
+   "blocks": 1,
+   "messages": 0,
+   "newMessages": 0
+  }
+ },
+ {
+  "id": 21564,
+  "type": "milestone",
+  "atMs": 1791356223009,
+  "at": "2026-10-07T06:57:03.009Z",
+  "payload": {
+   "id": "0x218387246718d055d64c75797a056e2e35c78a7950d9daf0837d0ef8d6991842",
+   "ts": 1791356222,
+   "index": 6464,
+   "blocks": 1,
+   "messages": 0,
+   "newMessages": 0
+  }
+ },
+ {
+  "id": 21565,
+  "type": "milestone",
+  "atMs": 1791356228005,
+  "at": "2026-10-07T06:57:08.005Z",
+  "payload": {
+   "id": "0xe721576b5724a2a0ebbf25bd730fb2ecb36edb21301cea4af304b3e0a36ed566",
+   "ts": 1791356227,
+   "index": 6465,
+   "blocks": 1,
+   "messages": 0,
+   "newMessages": 0
+  }
+ },
+ {
+  "id": 21566,
+  "type": "milestone",
+  "atMs": 1791356233011,
+  "at": "2026-10-07T06:57:13.011Z",
+  "payload": {
+   "id": "0xacb58fa5ace70c998a557dd8a46aa0ad6e2e93a92f730bdd0f3ca00275bad997",
+   "ts": 1791356232,
+   "index": 6466,
+   "blocks": 1,
+   "messages": 0,
+   "newMessages": 0
+  }
+ },
+ {
+  "id": 21567,
+  "type": "milestone",
+  "atMs": 1791356238004,
+  "at": "2026-10-07T06:57:18.004Z",
+  "payload": {
+   "id": "0xa38c3f934ed618790246acc04e27619b855c51c53ab1e53602297861573fa62d",
+   "ts": 1791356237,
+   "index": 6467,
+   "blocks": 1,
+   "messages": 0,
+   "newMessages": 0
+  }
+ },
+ {
+  "id": 21568,
+  "type": "milestone",
+  "atMs": 1791356243011,
+  "at": "2026-10-07T06:57:23.011Z",
+  "payload": {
+   "id": "0xf9024f2cd9bdbfb25068c538be249e710f1723e1a2e9a474175580f6bdd18ecd",
+   "ts": 1791356242,
+   "index": 6468,
+   "blocks": 1,
+   "messages": 0,
+   "newMessages": 0
+  }
+ },
+ {
+  "id": 21569,
+  "type": "milestone",
+  "atMs": 1791356248009,
+  "at": "2026-10-07T06:57:28.009Z",
+  "payload": {
+   "id": "0xdbc623386ccfadaffa06667606544642945c14dba069ed3d38e3848ced2354e5",
+   "ts": 1791356247,
+   "index": 6469,
+   "blocks": 1,
+   "messages": 0,
+   "newMessages": 0
+  }
+ },
+ {
+  "id": 21570,
+  "type": "milestone",
+  "atMs": 1791356253009,
+  "at": "2026-10-07T06:57:33.009Z",
+  "payload": {
+   "id": "0x5dd7dce2d1907ffb78f2f5f46ed8c43569d8fe8f5ad9c5ff3dce2592b8ccb8f3",
+   "ts": 1791356252,
+   "index": 6470,
+   "blocks": 1,
+   "messages": 0,
+   "newMessages": 0
+  }
+ },
+ {
+  "id": 21571,
+  "type": "milestone",
+  "atMs": 1791356258008,
+  "at": "2026-10-07T06:57:38.008Z",
+  "payload": {
+   "id": "0x59758a0a4c7ab5444f0256a5ea69d08083573190cf42c6206bbd43969bda7b76",
+   "ts": 1791356257,
+   "index": 6471,
+   "blocks": 1,
+   "messages": 0,
+   "newMessages": 0
+  }
+ },
+ {
+  "id": 21572,
+  "type": "milestone",
+  "atMs": 1791356263008,
+  "at": "2026-10-07T06:57:43.008Z",
+  "payload": {
+   "id": "0xc341bbd7d7fbe71bd862e397c5d494500799797323ef24f157f72e97f5e1c351",
+   "ts": 1791356262,
+   "index": 6472,
+   "blocks": 1,
+   "messages": 0,
+   "newMessages": 0
+  }
+ },
+ {
+  "id": 21574,
+  "type": "lifecycle",
+  "atMs": 1791356265305,
+  "at": "2026-10-07T06:57:45.305Z",
+  "payload": {
+   "atMs": 1791356265302,
+   "subId": "7b447f7d-2173-4806-be24-fca479de38bd",
+   "detail": {
+    "via": "GET /api/core/v2/blocks/{blockId}/metadata",
+    "isSolid": true
+   },
+   "status": "SOLID",
+   "blockId": "0x33309e6202c0d8baf10f42dcd3dfe214ce84891217fa2f15e14ac144750b21cb"
+  }
+ },
+ {
+  "id": 21576,
+  "type": "lifecycle",
+  "atMs": 1791356265592,
+  "at": "2026-10-07T06:57:45.592Z",
+  "payload": {
+   "atMs": 1791356265589,
+   "subId": "055f3fe5-8b47-42ea-a185-4f8073d8e567",
+   "detail": {
+    "via": "GET /api/core/v2/blocks/{blockId}/metadata",
+    "isSolid": true
+   },
+   "status": "SOLID",
+   "blockId": "0x0344860db38284f71b555e65ac62c5dc40a9649721fcddec19b079f6438561a4"
+  }
+ },
+ {
+  "id": 21578,
+  "type": "lifecycle",
+  "atMs": 1791356265854,
+  "at": "2026-10-07T06:57:45.854Z",
+  "payload": {
+   "atMs": 1791356265851,
+   "subId": "ffde855c-39ce-440b-9afd-527f622116d5",
+   "detail": {
+    "via": "GET /api/core/v2/blocks/{blockId}/metadata",
+    "isSolid": true
+   },
+   "status": "SOLID",
+   "blockId": "0x69acec6efffab083fef79c1a541d0dd9c2efa812c69bc165eeecb31a074ad972"
+  }
+ },
+ {
+  "id": 21579,
+  "type": "milestone",
+  "atMs": 1791356268059,
+  "at": "2026-10-07T06:57:48.059Z",
+  "payload": {
+   "id": "0x77102d4e3bc9a9d6f72545330a4eabe7d835c81a1b45606a9c9e7d4660e68798",
+   "ts": 1791356267,
+   "index": 6473,
+   "blocks": 4,
+   "messages": 3,
+   "newMessages": 3
+  }
+ },
+ {
+  "id": 21580,
+  "type": "message",
+  "atMs": 1791356268060,
+  "at": "2026-10-07T06:57:48.060Z",
+  "payload": {
+   "ts": 1791356267,
+   "iss": "did:iota:testnet:0x15eb8c4d90fa4fff1d49f3ae8b1676a61e09c883303acd383cbfaacb538db9ba",
+   "seq": 1791332998719,
+   "tag": "trust.score",
+   "ieId": "MyDomain:fa163e32c6ee",
+   "kind": "trust.score",
+   "first": true,
+   "reason": null,
+   "blockId": "0x33309e6202c0d8baf10f42dcd3dfe214ce84891217fa2f15e14ac144750b21cb",
+   "msIndex": 6473,
+   "verdict": "PRODUCER_SIGNED",
+   "wfIndex": 1,
+   "encrypted": false
+  }
+ },
+ {
+  "id": 21581,
+  "type": "lifecycle",
+  "atMs": 1791356268062,
+  "at": "2026-10-07T06:57:48.062Z",
+  "payload": {
+   "atMs": 1791356268017,
+   "subId": "7b447f7d-2173-4806-be24-fca479de38bd",
+   "detail": {
+    "via": "inx",
+    "source": "indexer",
+    "msIndex": 6473,
+    "msTimestamp": 1791356267
+   },
+   "status": "CONFIRMED",
+   "blockId": "0x33309e6202c0d8baf10f42dcd3dfe214ce84891217fa2f15e14ac144750b21cb"
+  }
+ },
+ {
+  "id": 21582,
+  "type": "message",
+  "atMs": 1791356268063,
+  "at": "2026-10-07T06:57:48.063Z",
+  "payload": {
+   "ts": 1791356267,
+   "iss": "did:iota:testnet:0x15eb8c4d90fa4fff1d49f3ae8b1676a61e09c883303acd383cbfaacb538db9ba",
+   "seq": 1791332998720,
+   "tag": "trust.score",
+   "ieId": "MyDomain:fa163e5e25ef",
+   "kind": "trust.score",
+   "first": true,
+   "reason": null,
+   "blockId": "0x0344860db38284f71b555e65ac62c5dc40a9649721fcddec19b079f6438561a4",
+   "msIndex": 6473,
+   "verdict": "PRODUCER_SIGNED",
+   "wfIndex": 2,
+   "encrypted": false
+  }
+ },
+ {
+  "id": 21583,
+  "type": "lifecycle",
+  "atMs": 1791356268064,
+  "at": "2026-10-07T06:57:48.064Z",
+  "payload": {
+   "atMs": 1791356268033,
+   "subId": "055f3fe5-8b47-42ea-a185-4f8073d8e567",
+   "detail": {
+    "via": "inx",
+    "source": "indexer",
+    "msIndex": 6473,
+    "msTimestamp": 1791356267
+   },
+   "status": "CONFIRMED",
+   "blockId": "0x0344860db38284f71b555e65ac62c5dc40a9649721fcddec19b079f6438561a4"
+  }
+ },
+ {
+  "id": 21584,
+  "type": "message",
+  "atMs": 1791356268065,
+  "at": "2026-10-07T06:57:48.065Z",
+  "payload": {
+   "ts": 1791356267,
+   "iss": "did:iota:testnet:0x15eb8c4d90fa4fff1d49f3ae8b1676a61e09c883303acd383cbfaacb538db9ba",
+   "seq": 1791332998721,
+   "tag": "trust.score",
+   "ieId": "MyDomain:fa163ed55867",
+   "kind": "trust.score",
+   "first": true,
+   "reason": null,
+   "blockId": "0x69acec6efffab083fef79c1a541d0dd9c2efa812c69bc165eeecb31a074ad972",
+   "msIndex": 6473,
+   "verdict": "PRODUCER_SIGNED",
+   "wfIndex": 3,
+   "encrypted": false
+  }
+ },
+ {
+  "id": 21585,
+  "type": "lifecycle",
+  "atMs": 1791356268066,
+  "at": "2026-10-07T06:57:48.066Z",
+  "payload": {
+   "atMs": 1791356268048,
+   "subId": "ffde855c-39ce-440b-9afd-527f622116d5",
+   "detail": {
+    "via": "inx",
+    "source": "indexer",
+    "msIndex": 6473,
+    "msTimestamp": 1791356267
+   },
+   "status": "CONFIRMED",
+   "blockId": "0x69acec6efffab083fef79c1a541d0dd9c2efa812c69bc165eeecb31a074ad972"
+  }
+ },
+ {
+  "id": 21586,
+  "type": "lifecycle",
+  "atMs": 1791356268829,
+  "at": "2026-10-07T06:57:48.829Z",
+  "payload": {
+   "atMs": 1791356268827,
+   "subId": "7b447f7d-2173-4806-be24-fca479de38bd",
+   "detail": {
+    "via": "GET /api/core/v2/blocks/{blockId}/metadata",
+    "whiteFlagIndex": 1,
+    "ledgerInclusionState": "noTransaction",
+    "referencedByMilestoneIndex": 6473
+   },
+   "status": "CONFIRMED",
+   "blockId": "0x33309e6202c0d8baf10f42dcd3dfe214ce84891217fa2f15e14ac144750b21cb"
+  }
+ },
+ {
+  "id": 21587,
+  "type": "lifecycle",
+  "atMs": 1791356268838,
+  "at": "2026-10-07T06:57:48.838Z",
+  "payload": {
+   "atMs": 1791356268836,
+   "subId": "7b447f7d-2173-4806-be24-fca479de38bd",
+   "detail": {
+    "via": "GET /api/core/v2/blocks/{blockId}",
+    "bytes": 695
+   },
+   "status": "CONTENT_VERIFIED",
+   "blockId": "0x33309e6202c0d8baf10f42dcd3dfe214ce84891217fa2f15e14ac144750b21cb"
+  }
+ },
+ {
+  "id": 21588,
+  "type": "lifecycle",
+  "atMs": 1791356269113,
+  "at": "2026-10-07T06:57:49.113Z",
+  "payload": {
+   "atMs": 1791356269111,
+   "subId": "055f3fe5-8b47-42ea-a185-4f8073d8e567",
+   "detail": {
+    "via": "GET /api/core/v2/blocks/{blockId}/metadata",
+    "whiteFlagIndex": 2,
+    "ledgerInclusionState": "noTransaction",
+    "referencedByMilestoneIndex": 6473
+   },
+   "status": "CONFIRMED",
+   "blockId": "0x0344860db38284f71b555e65ac62c5dc40a9649721fcddec19b079f6438561a4"
+  }
+ },
+ {
+  "id": 21589,
+  "type": "lifecycle",
+  "atMs": 1791356269122,
+  "at": "2026-10-07T06:57:49.122Z",
+  "payload": {
+   "atMs": 1791356269119,
+   "subId": "055f3fe5-8b47-42ea-a185-4f8073d8e567",
+   "detail": {
+    "via": "GET /api/core/v2/blocks/{blockId}",
+    "bytes": 743
+   },
+   "status": "CONTENT_VERIFIED",
+   "blockId": "0x0344860db38284f71b555e65ac62c5dc40a9649721fcddec19b079f6438561a4"
+  }
+ },
+ {
+  "id": 21590,
+  "type": "lifecycle",
+  "atMs": 1791356269377,
+  "at": "2026-10-07T06:57:49.377Z",
+  "payload": {
+   "atMs": 1791356269374,
+   "subId": "ffde855c-39ce-440b-9afd-527f622116d5",
+   "detail": {
+    "via": "GET /api/core/v2/blocks/{blockId}/metadata",
+    "whiteFlagIndex": 3,
+    "ledgerInclusionState": "noTransaction",
+    "referencedByMilestoneIndex": 6473
+   },
+   "status": "CONFIRMED",
+   "blockId": "0x69acec6efffab083fef79c1a541d0dd9c2efa812c69bc165eeecb31a074ad972"
+  }
+ },
+ {
+  "id": 21591,
+  "type": "lifecycle",
+  "atMs": 1791356269384,
+  "at": "2026-10-07T06:57:49.384Z",
+  "payload": {
+   "atMs": 1791356269382,
+   "subId": "ffde855c-39ce-440b-9afd-527f622116d5",
+   "detail": {
+    "via": "GET /api/core/v2/blocks/{blockId}",
+    "bytes": 776
+   },
+   "status": "CONTENT_VERIFIED",
+   "blockId": "0x69acec6efffab083fef79c1a541d0dd9c2efa812c69bc165eeecb31a074ad972"
+  }
+ },
+ {
+  "id": 21592,
+  "type": "milestone",
+  "atMs": 1791356273018,
+  "at": "2026-10-07T06:57:53.018Z",
+  "payload": {
+   "id": "0x515990b74d1f5517f37ba1969e72764d6858764e5f698d8f772d1749c9e33cf7",
+   "ts": 1791356272,
+   "index": 6474,
+   "blocks": 1,
+   "messages": 0,
+   "newMessages": 0
+  }
+ },
+ {
+  "id": 21593,
+  "type": "milestone",
+  "atMs": 1791356278005,
+  "at": "2026-10-07T06:57:58.005Z",
+  "payload": {
+   "id": "0x879db473ff04ecac06bd7dc12705945676e2833861d7373db173fa6c38c3390f",
+   "ts": 1791356277,
+   "index": 6475,
+   "blocks": 1,
+   "messages": 0,
+   "newMessages": 0
+  }
+ },
+ {
+  "id": 21594,
+  "type": "milestone",
+  "atMs": 1791356283004,
+  "at": "2026-10-07T06:58:03.004Z",
+  "payload": {
+   "id": "0x989df94c580dc628bef19efdaef8cea7a4427eaab30b93a9361cb04c94784fb6",
+   "ts": 1791356282,
+   "index": 6476,
+   "blocks": 1,
+   "messages": 0,
+   "newMessages": 0
+  }
+ },
+ {
+  "id": 21595,
+  "type": "milestone",
+  "atMs": 1791356288007,
+  "at": "2026-10-07T06:58:08.007Z",
+  "payload": {
+   "id": "0xc4b83bc7befca2759d8b18a390c9e26b027108c0a16736844d2785b0c487a6c1",
+   "ts": 1791356287,
+   "index": 6477,
+   "blocks": 1,
+   "messages": 0,
+   "newMessages": 0
+  }
+ },
+ {
+  "id": 21596,
+  "type": "milestone",
+  "atMs": 1791356293007,
+  "at": "2026-10-07T06:58:13.007Z",
+  "payload": {
+   "id": "0xe5e220cfe691b3904593cc45fa9292962ef4a1e381d88502924a8f65186f0cc8",
+   "ts": 1791356292,
+   "index": 6478,
+   "blocks": 1,
+   "messages": 0,
+   "newMessages": 0
+  }
+ },
+ {
+  "id": 21597,
+  "type": "milestone",
+  "atMs": 1791356298012,
+  "at": "2026-10-07T06:58:18.012Z",
+  "payload": {
+   "id": "0xefd95ce6135a7c6a6b54400b274163ea4fdbf085c8a3e164aba5426d460e3378",
+   "ts": 1791356297,
+   "index": 6479,
+   "blocks": 1,
+   "messages": 0,
+   "newMessages": 0
+  }
+ },
+ {
+  "id": 21598,
+  "type": "milestone",
+  "atMs": 1791356303013,
+  "at": "2026-10-07T06:58:23.013Z",
+  "payload": {
+   "id": "0xf95b91b9d417163b51fed242151dc9e4fb7eb27118016074978b7d3d2056ce17",
+   "ts": 1791356302,
+   "index": 6480,
+   "blocks": 1,
+   "messages": 0,
+   "newMessages": 0
+  }
+ },
+ {
+  "id": 21601,
+  "type": "lifecycle",
+  "atMs": 1791356312745,
+  "at": "2026-10-07T06:58:32.745Z",
+  "payload": {
+   "atMs": 1791356312742,
+   "subId": "33186e93-7849-4dcc-9fc1-7906f54e44d8",
+   "detail": {
+    "via": "GET /api/core/v2/blocks/{blockId}/metadata",
+    "isSolid": true
+   },
+   "status": "SOLID",
+   "blockId": "0x4112775fb53be229567982cac52fc38145ffb4354a6119aca7be82341f1d0d7c"
+  }
+ },
+ {
+  "id": 21604,
+  "type": "lifecycle",
+  "atMs": 1791356313024,
+  "at": "2026-10-07T06:58:33.024Z",
+  "payload": {
+   "atMs": 1791356313016,
+   "subId": "33186e93-7849-4dcc-9fc1-7906f54e44d8",
+   "detail": {
+    "via": "inx",
+    "source": "indexer",
+    "msIndex": 6482,
+    "msTimestamp": 1791356312
+   },
+   "status": "CONFIRMED",
+   "blockId": "0x4112775fb53be229567982cac52fc38145ffb4354a6119aca7be82341f1d0d7c"
+  }
+ },
+ {
+  "id": 21605,
+  "type": "anchor",
+  "atMs": 1791356313025,
+  "at": "2026-10-07T06:58:33.025Z",
+  "payload": {
+   "to": 6480,
+   "tx": "94Y5ayon3xiuX9e3fxyvCittDbcyz9RGXJmBYG9L4bWH",
+   "seq": 9,
+   "from": 5761,
+   "trail": "0x0715cfc56779f78cea48a3afb75dd44d7b9694008286acdb27a16f2c6e3ab313",
+   "record": 9,
+   "blockId": "0x4112775fb53be229567982cac52fc38145ffb4354a6119aca7be82341f1d0d7c",
+   "network": "testnet",
+   "checkpointHash": "0xd4416d2ce7d8201801ed3900ede091b4c2c5eec6f7bf8cd9b3688d69b75cab7e"
+  }
+ },
+ {
+  "id": 21606,
+  "type": "lifecycle",
+  "atMs": 1791356313255,
+  "at": "2026-10-07T06:58:33.255Z",
+  "payload": {
+   "atMs": 1791356313253,
+   "subId": "33186e93-7849-4dcc-9fc1-7906f54e44d8",
+   "detail": {
+    "via": "GET /api/core/v2/blocks/{blockId}/metadata",
+    "whiteFlagIndex": 1,
+    "ledgerInclusionState": "noTransaction",
+    "referencedByMilestoneIndex": 6482
+   },
+   "status": "CONFIRMED",
+   "blockId": "0x4112775fb53be229567982cac52fc38145ffb4354a6119aca7be82341f1d0d7c"
+  }
+ },
+ {
+  "id": 21607,
+  "type": "lifecycle",
+  "atMs": 1791356313264,
+  "at": "2026-10-07T06:58:33.264Z",
+  "payload": {
+   "atMs": 1791356313261,
+   "subId": "33186e93-7849-4dcc-9fc1-7906f54e44d8",
+   "detail": {
+    "via": "GET /api/core/v2/blocks/{blockId}",
+    "bytes": 1435
+   },
+   "status": "CONTENT_VERIFIED",
+   "blockId": "0x4112775fb53be229567982cac52fc38145ffb4354a6119aca7be82341f1d0d7c"
+  }
+ },
+ {
+  "id": 21611,
+  "type": "lifecycle",
+  "atMs": 1791356326404,
+  "at": "2026-10-07T06:58:46.404Z",
+  "payload": {
+   "atMs": 1791356326401,
+   "subId": "ddf310e0-ac92-445b-b945-953e7467d768",
+   "detail": {
+    "via": "GET /api/core/v2/blocks/{blockId}/metadata",
+    "isSolid": true
+   },
+   "status": "SOLID",
+   "blockId": "0xfb15c1f904116737d070e276438e9ea373585cd2218b80834356bc7af5357c34"
+  }
+ },
+ {
+  "id": 21613,
+  "type": "lifecycle",
+  "atMs": 1791356326746,
+  "at": "2026-10-07T06:58:46.746Z",
+  "payload": {
+   "atMs": 1791356326744,
+   "subId": "d51a944d-17d8-4d0c-8223-681b6b988b1a",
+   "detail": {
+    "via": "GET /api/core/v2/blocks/{blockId}/metadata",
+    "isSolid": true
+   },
+   "status": "SOLID",
+   "blockId": "0x24fb68383818481e36c0e5a3eed2eacee225c32350000ea24f1ec71d4081a7da"
+  }
+ },
+ {
+  "id": 21615,
+  "type": "lifecycle",
+  "atMs": 1791356327082,
+  "at": "2026-10-07T06:58:47.082Z",
+  "payload": {
+   "atMs": 1791356327080,
+   "subId": "dc7681d6-0d4f-48a8-8034-bc26d4910e8f",
+   "detail": {
+    "via": "GET /api/core/v2/blocks/{blockId}/metadata",
+    "isSolid": true
+   },
+   "status": "SOLID",
+   "blockId": "0xe565c8144b24773c36587ce0a63c7ff963ea66f9fe02125b7926ae370aed51a4"
+  }
+ },
+ {
+  "id": 21618,
+  "type": "lifecycle",
+  "atMs": 1791356328158,
+  "at": "2026-10-07T06:58:48.158Z",
+  "payload": {
+   "atMs": 1791356328080,
+   "subId": "ddf310e0-ac92-445b-b945-953e7467d768",
+   "detail": {
+    "via": "inx",
+    "source": "indexer",
+    "msIndex": 6485,
+    "msTimestamp": 1791356327
+   },
+   "status": "CONFIRMED",
+   "blockId": "0xfb15c1f904116737d070e276438e9ea373585cd2218b80834356bc7af5357c34"
+  }
+ },
+ {
+  "id": 21620,
+  "type": "lifecycle",
+  "atMs": 1791356328160,
+  "at": "2026-10-07T06:58:48.160Z",
+  "payload": {
+   "atMs": 1791356328106,
+   "subId": "d51a944d-17d8-4d0c-8223-681b6b988b1a",
+   "detail": {
+    "via": "inx",
+    "source": "indexer",
+    "msIndex": 6485,
+    "msTimestamp": 1791356327
+   },
+   "status": "CONFIRMED",
+   "blockId": "0x24fb68383818481e36c0e5a3eed2eacee225c32350000ea24f1ec71d4081a7da"
+  }
+ },
+ {
+  "id": 21622,
+  "type": "lifecycle",
+  "atMs": 1791356328162,
+  "at": "2026-10-07T06:58:48.162Z",
+  "payload": {
+   "atMs": 1791356328133,
+   "subId": "dc7681d6-0d4f-48a8-8034-bc26d4910e8f",
+   "detail": {
+    "via": "inx",
+    "source": "indexer",
+    "msIndex": 6485,
+    "msTimestamp": 1791356327
+   },
+   "status": "CONFIRMED",
+   "blockId": "0xe565c8144b24773c36587ce0a63c7ff963ea66f9fe02125b7926ae370aed51a4"
+  }
+ },
+ {
+  "id": 21623,
+  "type": "lifecycle",
+  "atMs": 1791356328265,
+  "at": "2026-10-07T06:58:48.265Z",
+  "payload": {
+   "atMs": 1791356328262,
+   "subId": "d51a944d-17d8-4d0c-8223-681b6b988b1a",
+   "detail": {
+    "via": "GET /api/core/v2/blocks/{blockId}/metadata",
+    "whiteFlagIndex": 2,
+    "ledgerInclusionState": "noTransaction",
+    "referencedByMilestoneIndex": 6485
+   },
+   "status": "CONFIRMED",
+   "blockId": "0x24fb68383818481e36c0e5a3eed2eacee225c32350000ea24f1ec71d4081a7da"
+  }
+ },
+ {
+  "id": 21624,
+  "type": "lifecycle",
+  "atMs": 1791356328278,
+  "at": "2026-10-07T06:58:48.278Z",
+  "payload": {
+   "atMs": 1791356328271,
+   "subId": "d51a944d-17d8-4d0c-8223-681b6b988b1a",
+   "detail": {
+    "via": "GET /api/core/v2/blocks/{blockId}",
+    "bytes": 711
+   },
+   "status": "CONTENT_VERIFIED",
+   "blockId": "0x24fb68383818481e36c0e5a3eed2eacee225c32350000ea24f1ec71d4081a7da"
+  }
+ },
+ {
+  "id": 21625,
+  "type": "lifecycle",
+  "atMs": 1791356328602,
+  "at": "2026-10-07T06:58:48.602Z",
+  "payload": {
+   "atMs": 1791356328599,
+   "subId": "dc7681d6-0d4f-48a8-8034-bc26d4910e8f",
+   "detail": {
+    "via": "GET /api/core/v2/blocks/{blockId}/metadata",
+    "whiteFlagIndex": 3,
+    "ledgerInclusionState": "noTransaction",
+    "referencedByMilestoneIndex": 6485
+   },
+   "status": "CONFIRMED",
+   "blockId": "0xe565c8144b24773c36587ce0a63c7ff963ea66f9fe02125b7926ae370aed51a4"
+  }
+ },
+ {
+  "id": 21626,
+  "type": "lifecycle",
+  "atMs": 1791356328618,
+  "at": "2026-10-07T06:58:48.618Z",
+  "payload": {
+   "atMs": 1791356328616,
+   "subId": "dc7681d6-0d4f-48a8-8034-bc26d4910e8f",
+   "detail": {
+    "via": "GET /api/core/v2/blocks/{blockId}",
+    "bytes": 744
+   },
+   "status": "CONTENT_VERIFIED",
+   "blockId": "0xe565c8144b24773c36587ce0a63c7ff963ea66f9fe02125b7926ae370aed51a4"
+  }
+ },
+ {
+  "id": 21627,
+  "type": "lifecycle",
+  "atMs": 1791356329950,
+  "at": "2026-10-07T06:58:49.950Z",
+  "payload": {
+   "atMs": 1791356329926,
+   "subId": "ddf310e0-ac92-445b-b945-953e7467d768",
+   "detail": {
+    "via": "GET /api/core/v2/blocks/{blockId}/metadata",
+    "whiteFlagIndex": 1,
+    "ledgerInclusionState": "noTransaction",
+    "referencedByMilestoneIndex": 6485
+   },
+   "status": "CONFIRMED",
+   "blockId": "0xfb15c1f904116737d070e276438e9ea373585cd2218b80834356bc7af5357c34"
+  }
+ },
+ {
+  "id": 21628,
+  "type": "lifecycle",
+  "atMs": 1791356330002,
+  "at": "2026-10-07T06:58:50.002Z",
+  "payload": {
+   "atMs": 1791356329999,
+   "subId": "ddf310e0-ac92-445b-b945-953e7467d768",
+   "detail": {
+    "via": "GET /api/core/v2/blocks/{blockId}",
+    "bytes": 695
+   },
+   "status": "CONTENT_VERIFIED",
+   "blockId": "0xfb15c1f904116737d070e276438e9ea373585cd2218b80834356bc7af5357c34"
+  }
+ }
+]

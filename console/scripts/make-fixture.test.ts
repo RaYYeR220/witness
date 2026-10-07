@@ -10,13 +10,17 @@ import {
   parseMilestoneEssence,
   toHex,
   verifyBundleText,
+  withDidKey,
   type VerifierConfig,
 } from "@witness/verify";
 import { describe, expect, it } from "vitest";
 
 import {
+  DEMO_FILE,
+  DEMO_RECORD,
   IDENTITY_FILE,
   makeFixture,
+  makeForgedDemo,
   domainController,
   makeVerifierConfig,
   OUT_FILE,
@@ -201,5 +205,41 @@ describe("pinned verifier config", () => {
     // an unknown Rebased network pins nothing to read: step 5 stays "not checked"
     const none = makeVerifierConfig({ tangle, identity: { network: "devnet" }, trailId: null });
     expect([none.rebasedRpc, none.auditTrailPackage, none.anchorWriter]).toEqual([null, null, null]);
+  });
+});
+
+describe("forged-milestone demo", () => {
+  const pins = JSON.parse(readFileSync(VERIFIER_FILE, "utf8"));
+  const demo = makeForgedDemo(pins);
+  const cfg: VerifierConfig = {
+    network: pins.network,
+    trustedCoordinatorKeys: pins.trustedCoordinatorKeys,
+    threshold: pins.threshold,
+    rebasedNetwork: pins.rebasedNetwork,
+    trailId: pins.trailId,
+    anchorWriter: pins.anchorWriter,
+  };
+
+  it("matches the committed forged-milestone.json (run `pnpm --filter console fixture` after changing the vectors or the pins)", () => {
+    expect(JSON.parse(readFileSync(DEMO_FILE, "utf8"))).toEqual(demo);
+  });
+
+  it("is the vectors' did_key_signer bundle with only its anchor pointed at the pinned trail", () => {
+    const c = vectors.cases.find((x: { name: string }) => x.name === "did_key_signer");
+    const b = JSON.parse(demo.bundle);
+    expect(b.anchor.rebased).toEqual({ network: pins.rebasedNetwork, trail: pins.trailId, record: DEMO_RECORD });
+    expect({ ...b, anchor: { ...b.anchor, rebased: c.bundle.anchor.rebased } }).toEqual(c.bundle);
+  });
+
+  it("passes checks 1 to 4 against the console's pins and fails check 5 on the trail's real record", async () => {
+    const real = { checkpointHash: "0x" + "11".repeat(32), addedBy: pins.anchorWriter };
+    const ladder = await verifyBundleText(demo.bundle, cfg, { resolveDid: withDidKey(() => null), fetchAnchorRecord: () => real });
+    expect(ladder.steps.map((s) => s.ok)).toEqual([true, true, true, true, false]);
+    expect(ladder.steps[4]!.detail).toBe("checkpoint does not match on-chain record");
+  });
+
+  it("is refused for pins without the sample keys or without a trail", () => {
+    expect(() => makeForgedDemo({ ...pins, trustedCoordinatorKeys: ["0x" + "ab".repeat(32)], threshold: 1 })).toThrow(/sample coordinator keys/);
+    expect(() => makeForgedDemo({ ...pins, trailId: null })).toThrow(/trail/);
   });
 });

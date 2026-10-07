@@ -1,0 +1,10 @@
+{
+ "about": "A recorded snapshot of a running Witness stack. Proofs are verified in your browser against the console's pinned config. Messages up to milestone 6480, the last one an anchored checkpoint covers.",
+ "recordedAtMs": 1791356370483,
+ "source": "witness-api and the anchor service's DID resolver",
+ "untilMilestone": 6480,
+ "scorecards": [
+  "scorecard.json",
+  "scorecard-a19.json"
+ ]
+}

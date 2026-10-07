@@ -1,12 +1,22 @@
 <script setup lang="ts">
-import type { Scorecard } from "@/api/client";
+import type { Scorecard, ScorecardClass } from "@/api/client";
 
 /**
  * The evaluation scorecard: witness-chaos runs every attack class against the
  * stack and scores what the explorer caught. Shown exactly as the published
  * scorecard.json states it; without one, the card says it is not there yet.
  */
-defineProps<{ card: Scorecard | null; error: string | null; loading: boolean; source: string | null }>();
+const props = defineProps<{ card: Scorecard | null; error: string | null; loading: boolean; source: string | null }>();
+
+/** A class this run did not include, as a separate run published with it scored it (shown as that run's, never added to this one). */
+function separately(c: ScorecardClass): ScorecardClass | null {
+  if (c.trials > 0) return null;
+  for (const run of props.card?.separateRuns ?? []) {
+    const x = run.classes.find((k) => k.id === c.id && k.trials > 0);
+    if (x) return x;
+  }
+  return null;
+}
 
 const pct = (r: number) => `${Math.round(r * 1000) / 10}%`;
 const secs = (ms: number | null) => (ms === null ? "–" : `${(ms / 1000).toFixed(1)} s`);
@@ -19,6 +29,7 @@ const secs = (ms: number | null) => (ms === null ? "–" : `${(ms / 1000).toFixe
     <template v-else-if="card">
       <p class="headline">{{ card.headline }}</p>
       <p class="src x-sec-note">{{ source ? source[0]!.toUpperCase() + source.slice(1) : "Published by the operator" }}; shown as written, not checked in your browser.</p>
+      <p v-for="(run, i) in card.separateRuns ?? []" :key="i" class="sep x-sec-note">Published with it, a separate run: {{ run.headline }}.</p>
       <dl class="nums">
         <div>
           <dt>Detected</dt>
@@ -62,8 +73,14 @@ const secs = (ms: number | null) => (ms === null ? "–" : `${(ms / 1000).toFixe
                 <span class="mono">{{ c.id }}</span> {{ c.name }}
               </td>
               <td class="mono">{{ c.expected }}</td>
-              <td class="num">{{ c.detected }}/{{ c.trials }}</td>
-              <td class="num">{{ secs(c.latency_p50_ms) }}</td>
+              <template v-if="separately(c)">
+                <td class="num">{{ separately(c)!.detected }}/{{ separately(c)!.trials }} <span class="x-muted">(separate run)</span></td>
+                <td class="num">{{ secs(separately(c)!.latency_p50_ms) }}</td>
+              </template>
+              <template v-else>
+                <td class="num">{{ c.detected }}/{{ c.trials }}</td>
+                <td class="num">{{ secs(c.latency_p50_ms) }}</td>
+              </template>
             </tr>
           </tbody>
         </table>
@@ -100,7 +117,8 @@ const secs = (ms: number | null) => (ms === null ? "–" : `${(ms / 1000).toFixe
   font: 400 30px/1.1 var(--serif);
   color: var(--fog-50);
 }
-.src {
+.src,
+.sep {
   margin-top: 6px;
 }
 .placeholder {

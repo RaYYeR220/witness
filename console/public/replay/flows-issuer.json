@@ -1,0 +1,69 @@
+{
+ "by": "issuer",
+ "items": [
+  {
+   "key": "did:iota:testnet:0x15eb8c4d90fa4fff1d49f3ae8b1676a61e09c883303acd383cbfaacb538db9ba",
+   "count": 1286,
+   "firstAtMs": 1791330939000,
+   "firstAt": "2026-10-06T23:55:39.000Z",
+   "lastAtMs": 1791356327000,
+   "lastAt": "2026-10-07T06:58:47.000Z"
+  },
+  {
+   "key": "did:iota:testnet:0x6b5cef6e575705bd1e3486fee9929d695fbc0a06650b8a2ef4d252f69ce12d59",
+   "count": 9,
+   "firstAtMs": 1791330879000,
+   "firstAt": "2026-10-06T23:54:39.000Z",
+   "lastAtMs": 1791356312000,
+   "lastAt": "2026-10-07T06:58:32.000Z"
+  },
+  {
+   "key": "did:key:z6MkiHHMbugzsbVKBkTyBmyov5ZDok4bGEErk6yQYVtSWzVf",
+   "count": 770,
+   "firstAtMs": 1791338539000,
+   "firstAt": "2026-10-07T02:02:19.000Z",
+   "lastAtMs": 1791352303000,
+   "lastAt": "2026-10-07T05:51:43.000Z"
+  },
+  {
+   "key": "did:iota:testnet:0xe6cf1bf1e06f82d7956585085306fc23daee082cc75120459f7d39bb152f0459",
+   "count": 323,
+   "firstAtMs": 1791331894000,
+   "firstAt": "2026-10-07T00:11:34.000Z",
+   "lastAtMs": 1791349893000,
+   "lastAt": "2026-10-07T05:11:33.000Z"
+  },
+  {
+   "key": "did:iota:testnet:0xe9b8e9c6afd436bffb296ed21f1588c6fc6c23210b3610c89107d5453a0c92f9",
+   "count": 21,
+   "firstAtMs": 1791338529000,
+   "firstAt": "2026-10-07T02:02:09.000Z",
+   "lastAtMs": 1791349273000,
+   "lastAt": "2026-10-07T05:01:13.000Z"
+  },
+  {
+   "key": "did:key:z6Mkhq9L8rdoy3eNVBD5RPaWPEwwc4Dx9PUaMbTDthnwSGqH",
+   "count": 22,
+   "firstAtMs": 1791332164000,
+   "firstAt": "2026-10-07T00:16:04.000Z",
+   "lastAtMs": 1791349173000,
+   "lastAt": "2026-10-07T04:59:33.000Z"
+  },
+  {
+   "key": "did:iota:testnet:0x6b9a693ebf2ac6fb771a75d25b1284ba75aeb0ae16618eaf5d41d24828a6f7a2",
+   "count": 2,
+   "firstAtMs": 1791324665000,
+   "firstAt": "2026-10-06T22:11:05.000Z",
+   "lastAtMs": 1791338684000,
+   "lastAt": "2026-10-07T02:04:44.000Z"
+  },
+  {
+   "key": "did:key:z6MkjGfXWtbHb9FwmCfJuwUKAZu24yPun2pqXiRe9426q9vj",
+   "count": 1,
+   "firstAtMs": 1791334699000,
+   "firstAt": "2026-10-07T00:58:19.000Z",
+   "lastAtMs": 1791334699000,
+   "lastAt": "2026-10-07T00:58:19.000Z"
+  }
+ ]
+}

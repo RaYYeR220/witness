@@ -510,6 +510,8 @@ export interface Scorecard {
   classes: ScorecardClass[];
   traps: { messages: number; duration_s: number; false_positives: number; meets_profile: boolean } | null;
   controls: { trials: number; passed: number } | null;
+  /** Scorecards of separate runs published with this one (a class this run could not include), shown next to it, never merged into it. */
+  separateRuns?: Scorecard[];
 }
 
 export const SCORECARD_SCHEMA = "witness-chaos/scorecard/v1";
@@ -888,6 +890,8 @@ export interface ReplayManifest {
   about: string;
   recordedAtMs: number | null;
   source: string;
+  /** The snapshot's scorecard files: scorecard.json first, then the scorecards of separate runs. */
+  scorecards?: string[];
 }
 
 const lower = (s: unknown) => (typeof s === "string" ? s.toLowerCase() : "");
@@ -1152,7 +1156,15 @@ export class ReplayAdapter implements WitnessData {
     if (doc === null) return null;
     const card = asScorecard(doc);
     if (!card) throw new DataError(`the snapshot's scorecard.json is not a ${SCORECARD_SCHEMA} scorecard`, null);
-    return card;
+    const others = await this.manifest()
+      .then((m) => (Array.isArray(m.scorecards) ? m.scorecards.filter((f) => /^scorecard-[A-Za-z0-9._-]+\.json$/.test(f)) : []))
+      .catch(() => []);
+    const separate: Scorecard[] = [];
+    for (const f of others) {
+      const run = asScorecard(await this.optional(f));
+      if (run) separate.push(run);
+    }
+    return separate.length ? { ...card, separateRuns: separate } : card;
   }
   /** Plays the recorded events back, keeping their spacing (at most 4 s apart). */
   stream(onEvent: (event: StreamEvent) => void, options: StreamOptions = {}) {

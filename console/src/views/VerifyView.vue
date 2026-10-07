@@ -396,6 +396,7 @@ const cfg = pinnedConfig();
             <div class="actions">
               <button class="btn" type="button" :disabled="!bundleText || foreign || ladder.running" @click="verify">Run the checks again</button>
               <button class="btn btn--ghost" type="button" :disabled="!bundleText" @click="download">Download bundle</button>
+              <RouterLink class="btn btn--ghost" :to="{ name: 'forged' }">Try a forged proof</RouterLink>
             </div>
           </div>
           <p v-if="bundleError" class="warn">{{ bundleError }}</p>

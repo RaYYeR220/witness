@@ -392,6 +392,27 @@ describe("ReplayAdapter", () => {
     expect(new LiveAdapter("/api").scorecardSource).toBeNull();
     expect(asScorecard({ ...card, detected: "9" })).toBeNull();
   });
+
+  it("attaches the scorecards of separate runs the manifest lists, without merging them", async () => {
+    const base = {
+      schema: "witness-chaos/scorecard/v1",
+      latency_p50_ms: null,
+      latency_p95_ms: null,
+      unexpected_alerts: 0,
+      traps: null,
+      controls: null,
+    };
+    const full = { ...base, headline: "detected 9/10", detected: 9, attacks: 10, detection_rate: 0.9, classes: [{ id: "A19", name: "DB_TAMPER", trials: 0, detected: 0, rate: 0 }] };
+    const a19 = { ...base, headline: "detected 2/2", detected: 2, attacks: 2, detection_rate: 1, classes: [{ id: "A19", name: "DB_TAMPER", trials: 2, detected: 2, rate: 1 }] };
+    snapshot({
+      "/replay/manifest.json": () => json({ about: "x", recordedAtMs: 1, source: "y", scorecards: ["scorecard.json", "scorecard-a19.json", "../elsewhere.json"] }),
+      "/replay/scorecard.json": () => json(full),
+      "/replay/scorecard-a19.json": () => json(a19),
+    });
+    const card = await new ReplayAdapter("/replay/").scorecard();
+    expect(card!.detected).toBe(9);
+    expect(card!.separateRuns!.map((r) => r.headline)).toEqual(["detected 2/2"]);
+  });
 });
 
 describe("pageIncident", () => {

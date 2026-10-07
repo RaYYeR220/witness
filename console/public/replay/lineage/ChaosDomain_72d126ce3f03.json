@@ -1,0 +1,48 @@
+{
+ "ieId": "ChaosDomain:72d126ce3f03",
+ "entries": [
+  {
+   "blockId": "0xa4b1bdee10bdc4d321485f5a0c5087bbbff3edf2f21aadaa1a6ba2817bbbb04c",
+   "prev": null,
+   "seq": 1791349999050,
+   "kind": "trust.score",
+   "verdict": "PRODUCER_SIGNED",
+   "msIndex": 5220,
+   "wfIndex": 2,
+   "atMs": 1791350003000,
+   "at": "2026-10-07T05:13:23.000Z",
+   "score": 0.9,
+   "links": {
+    "self": "/messages/0xa4b1bdee10bdc4d321485f5a0c5087bbbff3edf2f21aadaa1a6ba2817bbbb04c",
+    "lifecycle": "/messages/0xa4b1bdee10bdc4d321485f5a0c5087bbbff3edf2f21aadaa1a6ba2817bbbb04c/lifecycle",
+    "proof": "/proofs/0xa4b1bdee10bdc4d321485f5a0c5087bbbff3edf2f21aadaa1a6ba2817bbbb04c"
+   }
+  },
+  {
+   "blockId": "0xccff1e8a4921bfe7826b146bd13be0b56b41a050c7baecb6583cef166d622774",
+   "prev": null,
+   "seq": 1791349999051,
+   "kind": "trust.score",
+   "verdict": "PRODUCER_SIGNED",
+   "msIndex": 5221,
+   "wfIndex": 1,
+   "atMs": 1791350008000,
+   "at": "2026-10-07T05:13:28.000Z",
+   "score": 0.1,
+   "links": {
+    "self": "/messages/0xccff1e8a4921bfe7826b146bd13be0b56b41a050c7baecb6583cef166d622774",
+    "lifecycle": "/messages/0xccff1e8a4921bfe7826b146bd13be0b56b41a050c7baecb6583cef166d622774/lifecycle",
+    "proof": "/proofs/0xccff1e8a4921bfe7826b146bd13be0b56b41a050c7baecb6583cef166d622774"
+   }
+  }
+ ],
+ "total": 2,
+ "ledger": null,
+ "orion": {
+  "status": "unknown_entity",
+  "value": null,
+  "entityId": "urn:ngsi-ld:InfrastructureElement:ChaosDomain:72d126ce3f03"
+ },
+ "drift": null,
+ "epsilon": 0.01
+}

@@ -1,0 +1,437 @@
+{
+ "schema": "witness-chaos/scorecard/v1",
+ "classes": [
+  {
+   "id": "A01",
+   "name": "FORGED_SIGNATURE",
+   "expected": "FORGED",
+   "trials": 20,
+   "planned": 20,
+   "detected": 20,
+   "rate": 1,
+   "observed": {
+    "FORGED": 20
+   },
+   "side_alerts": {
+    "FORGED": 20
+   },
+   "unexpected_alerts": {},
+   "latency_p50_ms": 5174,
+   "latency_p95_ms": 5193
+  },
+  {
+   "id": "A02",
+   "name": "CROSS_TAG_REPLAY",
+   "expected": "FORGED",
+   "trials": 20,
+   "planned": 20,
+   "detected": 20,
+   "rate": 1,
+   "observed": {
+    "FORGED": 20
+   },
+   "side_alerts": {
+    "FORGED": 20
+   },
+   "unexpected_alerts": {},
+   "latency_p50_ms": 5182,
+   "latency_p95_ms": 5208
+  },
+  {
+   "id": "A03",
+   "name": "SEQ_REPLAY",
+   "expected": "REPLAY",
+   "trials": 20,
+   "planned": 20,
+   "detected": 20,
+   "rate": 1,
+   "observed": {
+    "REPLAY": 20
+   },
+   "side_alerts": {
+    "REPLAY": 20
+   },
+   "unexpected_alerts": {},
+   "latency_p50_ms": 5185,
+   "latency_p95_ms": 5217
+  },
+  {
+   "id": "A04",
+   "name": "UNAUTHORIZED_WRITER",
+   "expected": "UNAUTHORIZED_WRITER",
+   "trials": 20,
+   "planned": 20,
+   "detected": 20,
+   "rate": 1,
+   "observed": {
+    "UNAUTHORIZED_WRITER": 20
+   },
+   "side_alerts": {
+    "UNAUTHORIZED_WRITER": 20
+   },
+   "unexpected_alerts": {},
+   "latency_p50_ms": 5195,
+   "latency_p95_ms": 5537
+  },
+  {
+   "id": "A05",
+   "name": "REVOKED_KEY",
+   "expected": "REVOKED_KEY",
+   "trials": 20,
+   "planned": 20,
+   "detected": 20,
+   "rate": 1,
+   "observed": {
+    "REVOKED_KEY": 20
+   },
+   "side_alerts": {
+    "REVOKED_KEY": 20
+   },
+   "unexpected_alerts": {},
+   "latency_p50_ms": 5186,
+   "latency_p95_ms": 5228
+  },
+  {
+   "id": "A06",
+   "name": "ORION_DRIFT",
+   "expected": "DRIFT",
+   "trials": 20,
+   "planned": 20,
+   "detected": 14,
+   "rate": 0.7,
+   "observed": {
+    "DRIFT": 14,
+    "ANOMALY": 2,
+    "NONE": 4
+   },
+   "side_alerts": {},
+   "unexpected_alerts": {
+    "ANOMALY": 2
+   },
+   "latency_p50_ms": 161808,
+   "latency_p95_ms": 162405
+  },
+  {
+   "id": "A07",
+   "name": "BLOCK_BYTE_FLIP",
+   "expected": "ladder:block_hash",
+   "trials": 20,
+   "planned": 20,
+   "detected": 20,
+   "rate": 1,
+   "observed": {
+    "ladder:block_hash": 20
+   },
+   "side_alerts": {},
+   "unexpected_alerts": {},
+   "latency_p50_ms": null,
+   "latency_p95_ms": null
+  },
+  {
+   "id": "A08",
+   "name": "BAD_MERKLE_PATH",
+   "expected": "ladder:inclusion",
+   "trials": 20,
+   "planned": 20,
+   "detected": 20,
+   "rate": 1,
+   "observed": {
+    "ladder:inclusion": 20
+   },
+   "side_alerts": {},
+   "unexpected_alerts": {},
+   "latency_p50_ms": null,
+   "latency_p95_ms": null
+  },
+  {
+   "id": "A09",
+   "name": "SAMPLE_KEY_FORGED_MILESTONE",
+   "expected": "ladder:anchor",
+   "trials": 20,
+   "planned": 20,
+   "detected": 20,
+   "rate": 1,
+   "observed": {
+    "ladder:anchor": 20
+   },
+   "side_alerts": {},
+   "unexpected_alerts": {},
+   "latency_p50_ms": null,
+   "latency_p95_ms": null
+  },
+  {
+   "id": "A10",
+   "name": "ANCHOR_MISMATCH",
+   "expected": "ladder:anchor",
+   "trials": 20,
+   "planned": 20,
+   "detected": 20,
+   "rate": 1,
+   "observed": {
+    "ladder:anchor": 20
+   },
+   "side_alerts": {},
+   "unexpected_alerts": {},
+   "latency_p50_ms": null,
+   "latency_p95_ms": null
+  },
+  {
+   "id": "A11",
+   "name": "SEALED_WITHOUT_KEY",
+   "expected": "RELAY_ATTESTED",
+   "trials": 20,
+   "planned": 20,
+   "detected": 20,
+   "rate": 1,
+   "observed": {
+    "RELAY_ATTESTED": 20
+   },
+   "side_alerts": {},
+   "unexpected_alerts": {},
+   "latency_p50_ms": 5247,
+   "latency_p95_ms": 5373
+  },
+  {
+   "id": "A12",
+   "name": "UNKNOWN_IE",
+   "expected": "UNKNOWN_IE",
+   "trials": 20,
+   "planned": 20,
+   "detected": 20,
+   "rate": 1,
+   "observed": {
+    "UNKNOWN_IE": 20
+   },
+   "side_alerts": {},
+   "unexpected_alerts": {},
+   "latency_p50_ms": 3696,
+   "latency_p95_ms": 4933
+  },
+  {
+   "id": "A13",
+   "name": "SCORE_JUMP",
+   "expected": "ANOMALY",
+   "trials": 20,
+   "planned": 20,
+   "detected": 20,
+   "rate": 1,
+   "observed": {
+    "ANOMALY": 20
+   },
+   "side_alerts": {
+    "SHADOW": 5
+   },
+   "unexpected_alerts": {},
+   "latency_p50_ms": 4342,
+   "latency_p95_ms": 4905
+  },
+  {
+   "id": "A14",
+   "name": "STALE_IE",
+   "expected": "STALE",
+   "trials": 20,
+   "planned": 20,
+   "detected": 20,
+   "rate": 1,
+   "observed": {
+    "STALE": 20
+   },
+   "side_alerts": {
+    "SHADOW": 20
+   },
+   "unexpected_alerts": {},
+   "latency_p50_ms": 141885,
+   "latency_p95_ms": 150115
+  },
+  {
+   "id": "A15",
+   "name": "MALFORMED_PAYLOAD",
+   "expected": "MALFORMED",
+   "trials": 20,
+   "planned": 20,
+   "detected": 20,
+   "rate": 1,
+   "observed": {
+    "MALFORMED": 20
+   },
+   "side_alerts": {
+    "MALFORMED": 20
+   },
+   "unexpected_alerts": {},
+   "latency_p50_ms": 5185,
+   "latency_p95_ms": 5202
+  },
+  {
+   "id": "A16",
+   "name": "CONTENT_MISMATCH",
+   "expected": "CONTENT_MISMATCH",
+   "trials": 20,
+   "planned": 20,
+   "detected": 20,
+   "rate": 1,
+   "observed": {
+    "CONTENT_MISMATCH": 20
+   },
+   "side_alerts": {},
+   "unexpected_alerts": {},
+   "latency_p50_ms": 3582,
+   "latency_p95_ms": 3684
+  },
+  {
+   "id": "A17",
+   "name": "SHADOW",
+   "expected": "SHADOW",
+   "trials": 20,
+   "planned": 20,
+   "detected": 20,
+   "rate": 1,
+   "observed": {
+    "SHADOW": 20
+   },
+   "side_alerts": {},
+   "unexpected_alerts": {},
+   "latency_p50_ms": 59488,
+   "latency_p95_ms": 59680
+  },
+  {
+   "id": "A18",
+   "name": "ORPHANED",
+   "expected": "ORPHANED",
+   "trials": 20,
+   "planned": 20,
+   "detected": 20,
+   "rate": 1,
+   "observed": {
+    "ORPHANED": 20
+   },
+   "side_alerts": {},
+   "unexpected_alerts": {},
+   "latency_p50_ms": 60025,
+   "latency_p95_ms": 60047
+  },
+  {
+   "id": "A19",
+   "name": "DB_TAMPER",
+   "expected": "DB_TAMPER",
+   "trials": 0,
+   "planned": 20,
+   "detected": 0,
+   "rate": 0,
+   "observed": {},
+   "side_alerts": {},
+   "unexpected_alerts": {},
+   "latency_p50_ms": null,
+   "latency_p95_ms": null
+  },
+  {
+   "id": "A20",
+   "name": "CHAIN_GAP",
+   "expected": "CHAIN_GAP",
+   "trials": 20,
+   "planned": 20,
+   "detected": 20,
+   "rate": 1,
+   "observed": {
+    "CHAIN_GAP": 20
+   },
+   "side_alerts": {},
+   "unexpected_alerts": {},
+   "latency_p50_ms": 4359,
+   "latency_p95_ms": 4773
+  }
+ ],
+ "detected": 374,
+ "attacks": 380,
+ "planned_attacks": 400,
+ "detection_rate": 0.9842105263157894,
+ "latency_p50_ms": 5185,
+ "latency_p95_ms": 150165,
+ "unexpected_alerts": 2,
+ "traps": {
+  "messages": 599,
+  "duration_s": 1802.2,
+  "min_messages": 500,
+  "min_duration_s": 1800,
+  "false_positives": 0,
+  "verdicts": {
+   "PRODUCER_SIGNED": 341,
+   "RELAY_ATTESTED": 258
+  },
+  "not_indexed": 0,
+  "meets_profile": true
+ },
+ "controls": {
+  "trials": 20,
+  "passed": 20,
+  "failures": []
+ },
+ "not_run": [
+  {
+   "class": "A19",
+   "trials": 20,
+   "reason": "no database DSN (--db-dsn / WITNESS_CHAOS_DB)"
+  }
+ ],
+ "valid": true,
+ "headline": "detected 374/380 attacks (374/400 planned), 2 unexpected alerts, 0/599 false positives (20 planned trials not run: A19)",
+ "parity": {
+  "bundleTrials": 80,
+  "agreed": 80,
+  "bundleSource": "api"
+ },
+ "late_alerts": {
+  "A01": {
+   "SHADOW": 20
+  },
+  "A02": {
+   "SHADOW": 20
+  },
+  "A03": {
+   "SHADOW": 20
+  },
+  "A04": {
+   "SHADOW": 20
+  },
+  "A05": {
+   "SHADOW": 20
+  },
+  "A06": {
+   "STALE": 20
+  },
+  "A12": {
+   "STALE": 20,
+   "SHADOW": 20
+  },
+  "A13": {
+   "STALE": 20,
+   "SHADOW": 35
+  },
+  "A15": {
+   "SHADOW": 20
+  },
+  "A16": {
+   "STALE": 20
+  },
+  "A17": {
+   "STALE": 20
+  },
+  "A20": {
+   "STALE": 20
+  },
+  "C01": {
+   "STALE": 10
+  }
+ },
+ "run": {
+  "git": {
+   "commit": "cd985fe2f24e8425f93911d3c8743a6a0a9815d9",
+   "branch": "main",
+   "dirty": false
+  },
+  "configHash": "33da8531c039e1ba3d4963cd984d782c8f4785faf60be60b1376be0010a53316",
+  "answerKeySha256": "63fa160cdf480c2594d1ae78f5210a02a921844be522ebb9090f144ff8e7a484",
+  "startedAtMs": 1791346778995,
+  "finishedAtMs": 1791350991099,
+  "trialsPerClass": 20
+ }
+}

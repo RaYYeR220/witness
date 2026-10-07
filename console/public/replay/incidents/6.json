@@ -1,0 +1,82 @@
+{
+ "id": 6,
+ "title": "Submitted block never confirmed in block 0xb6464387f9... (ORPHANED)",
+ "severity": "high",
+ "status": "closed:quiet",
+ "ieId": null,
+ "keys": [
+  "ledger"
+ ],
+ "openedAtMs": 1791342683948,
+ "openedAt": "2026-10-07T03:11:23.948Z",
+ "lastEventMs": 1791342683948,
+ "lastEventAt": "2026-10-07T03:11:23.948Z",
+ "closedAtMs": 1791344503760,
+ "closedAt": "2026-10-07T03:41:43.760Z",
+ "closedBy": null,
+ "baselineScore": null,
+ "lowScore": null,
+ "events": [
+  {
+   "blockId": "0xb6464387f99bc07fc94cae109a0a0370638f824b5d43820a5137868c5024ce61",
+   "role": "trigger",
+   "atMs": 1791342683948,
+   "at": "2026-10-07T03:11:23.948Z",
+   "tag": null,
+   "kind": null,
+   "verdict": null,
+   "status": "ORPHANED",
+   "msIndex": null,
+   "dateMs": null,
+   "date": null,
+   "indexed": false,
+   "detail": {
+    "as": "alert",
+    "rule": "ORPHANED",
+    "trust": "untrusted",
+    "reason": null,
+    "alertId": 7897
+   },
+   "links": {
+    "self": "/messages/0xb6464387f99bc07fc94cae109a0a0370638f824b5d43820a5137868c5024ce61",
+    "lifecycle": "/messages/0xb6464387f99bc07fc94cae109a0a0370638f824b5d43820a5137868c5024ce61/lifecycle",
+    "proof": "/proofs/0xb6464387f99bc07fc94cae109a0a0370638f824b5d43820a5137868c5024ce61"
+   }
+  }
+ ],
+ "eventsTotal": 1,
+ "nextEventsCursor": null,
+ "alerts": [
+  {
+   "id": 7897,
+   "rule": "ORPHANED",
+   "severity": "high",
+   "blockId": "0xb6464387f99bc07fc94cae109a0a0370638f824b5d43820a5137868c5024ce61",
+   "ieId": null,
+   "evidence": {
+    "via": "GET /api/core/v2/blocks/{blockId}/metadata",
+    "polls": 12,
+    "subId": "a8d6cda5-c865-401c-adb7-e03700997cd2",
+    "timeoutS": 60,
+    "lastError": null,
+    "lastMetadata": {
+     "blockId": "0xb6464387f99bc07fc94cae109a0a0370638f824b5d43820a5137868c5024ce61",
+     "isSolid": true,
+     "parents": [
+      "0x1a2552ad2d8d8283b7dece4d830df09fd4eec1ebbe5c20c26d5cd0def3ff547d",
+      "0xa68822289eefe07def4c7af5464899a79fe16995092ca7d36e5607e472b49f4c",
+      "0xb13523ea38e971c781ccec42b6f0b085f880368b90976e4aadef94a60f1a90db"
+     ],
+     "shouldPromote": true,
+     "shouldReattach": false
+    },
+    "answeredPolls": 12
+   },
+   "atMs": 1791342683948,
+   "at": "2026-10-07T03:11:23.948Z",
+   "dedupeKey": null
+  }
+ ],
+ "alertsTotal": 1,
+ "nextAlertsAfter": null
+}

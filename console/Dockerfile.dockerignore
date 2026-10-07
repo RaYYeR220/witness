@@ -13,3 +13,5 @@
 **/dist
 console/.env
 console/.env.*
+# the replay snapshot: only the static replay build (GitHub Pages) uses it
+console/public/replay

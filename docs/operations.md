@@ -335,15 +335,30 @@ proxy **only** `/anchor/resolve/` to the anchor service, never `/anchor/*`.
 The anchor service's admin endpoints (`POST /checkpoints/run`) must not be
 reachable from the browser.
 
-A replay build (`pnpm --filter console build:replay`) serves a snapshot
-recorded by `node console/scripts/record-replay.mjs --out <dist>/replay` from a
-running stack. It needs no API; step 4 uses the DID documents recorded with the
-snapshot (the screen says so) and step 5 still reads IOTA Rebased live. The
-recorder also takes the explorer screens (IEs and lineages, flows, alerts,
-incidents, identities, posture, stats, reports; report pages get the API's CSP
-as a meta tag) and the blocks they link to, plus a few trust scores from
-anchored windows;
-`--scorecard results/scorecard.json` adds an evaluation scorecard.
+A replay build (`pnpm --filter console build:replay`) serves the snapshot in
+`console/public/replay/` (other builds leave it out), recorded by
+`node console/scripts/record-replay.mjs` from a running stack. It needs no API;
+step 4 uses the DID documents recorded with the snapshot (the screen says so)
+and step 5 still reads IOTA Rebased live. The recorder also takes the explorer
+screens (IEs and lineages, flows, alerts, incidents, identities, posture,
+stats, reports; report pages get the API's CSP as a meta tag) and the blocks
+they link to, plus a few trust scores from anchored windows;
+`--scorecard a/scorecard.json,b/scorecard.json` adds evaluation scorecards (the
+first one, then separate runs shown next to it). The committed snapshot was
+recorded with
+
+```bash
+node console/scripts/record-replay.mjs --out console/public/replay --until anchored --limit 500 \
+  --sample 6 --blocks 150 --include results/eval-final/full/trials.jsonl,results/eval-final/a19/trials.jsonl \
+  --exclude <ids> --scorecard results/eval-final/full/scorecard.json,results/eval-final/a19/scorecard.json
+```
+
+`--until anchored` keeps only messages whose milestone an anchored checkpoint
+covers, so every listed proof can pass all five checks; `--include` adds every
+block an evaluation file names; `--exclude` leaves out blocks that must not be
+published (two early test messages whose plaintext went out unsealed).
+`.github/workflows/pages.yml` builds this console under `/<repository>/` and
+publishes it to GitHub Pages; it runs only when started by hand.
 
 Integrity shows an evaluation scorecard only when one is published: set
 `VITE_SCORECARD_URL` to a witness-chaos `scorecard.json` served next to the

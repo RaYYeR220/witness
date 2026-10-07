@@ -1,0 +1,24 @@
+{
+ "items": [
+  {
+   "reportHash": "0x3299d5c61df5630d6fe4c6df4de9e45412b99f63ebf12988369f7457a8061702",
+   "anchored": true,
+   "blockId": "0x409f63d646b0b78a6908088597c879246cefd2c1ec182b5386d19d87309869f5",
+   "ie": null,
+   "msFrom": null,
+   "msTo": null,
+   "iss": "did:iota:testnet:0x6b9a693ebf2ac6fb771a75d25b1284ba75aeb0ae16618eaf5d41d24828a6f7a2",
+   "seq": 1791338680492,
+   "generatedAtMs": 1791338680415,
+   "generatedAt": "2026-10-07T02:04:40.415Z",
+   "anchoredAtMs": 1791338680952,
+   "anchoredAt": "2026-10-07T02:04:40.952Z",
+   "links": {
+    "self": "/reports/0x3299d5c61df5630d6fe4c6df4de9e45412b99f63ebf12988369f7457a8061702",
+    "html": "/reports/0x3299d5c61df5630d6fe4c6df4de9e45412b99f63ebf12988369f7457a8061702.html"
+   }
+  }
+ ],
+ "nextCursor": null,
+ "limit": 200
+}

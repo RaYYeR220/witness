@@ -1,0 +1,118 @@
+{
+ "by": "ie",
+ "key": "ChaosDomain:954372385b3e",
+ "items": [
+  {
+   "blockId": "0x7ed3344e9efa8b4be4351a83c38871b91211fcb059d1e949db9064683962dc99",
+   "prev": null,
+   "seq": 1791349521699,
+   "tag": "trust.score",
+   "kind": "trust.score",
+   "verdict": "PRODUCER_SIGNED",
+   "status": "CONTENT_VERIFIED",
+   "iss": "did:key:z6MkiHHMbugzsbVKBkTyBmyov5ZDok4bGEErk6yQYVtSWzVf",
+   "ieId": "ChaosDomain:954372385b3e",
+   "corr": null,
+   "msIndex": 5124,
+   "wfIndex": 8,
+   "atMs": 1791349523000,
+   "at": "2026-10-07T05:05:23.000Z",
+   "links": {
+    "self": "/messages/0x7ed3344e9efa8b4be4351a83c38871b91211fcb059d1e949db9064683962dc99",
+    "lifecycle": "/messages/0x7ed3344e9efa8b4be4351a83c38871b91211fcb059d1e949db9064683962dc99/lifecycle",
+    "proof": "/proofs/0x7ed3344e9efa8b4be4351a83c38871b91211fcb059d1e949db9064683962dc99"
+   },
+   "claimsIssuer": false
+  },
+  {
+   "blockId": "0xf2c1ad39b1691a1fca6ecb553c2345d7c2d637bafcc9a55399140936725adea8",
+   "prev": null,
+   "seq": 1791349567556,
+   "tag": "trust.score",
+   "kind": "trust.score",
+   "verdict": "PRODUCER_SIGNED",
+   "status": "CONTENT_VERIFIED",
+   "iss": "did:key:z6MkiHHMbugzsbVKBkTyBmyov5ZDok4bGEErk6yQYVtSWzVf",
+   "ieId": "ChaosDomain:954372385b3e",
+   "corr": null,
+   "msIndex": 5133,
+   "wfIndex": 6,
+   "atMs": 1791349568000,
+   "at": "2026-10-07T05:06:08.000Z",
+   "links": {
+    "self": "/messages/0xf2c1ad39b1691a1fca6ecb553c2345d7c2d637bafcc9a55399140936725adea8",
+    "lifecycle": "/messages/0xf2c1ad39b1691a1fca6ecb553c2345d7c2d637bafcc9a55399140936725adea8/lifecycle",
+    "proof": "/proofs/0xf2c1ad39b1691a1fca6ecb553c2345d7c2d637bafcc9a55399140936725adea8"
+   },
+   "claimsIssuer": false
+  },
+  {
+   "blockId": "0x72aac37eff736986b7cc9ce94a869537e5612c76ddca142a85368dc6e5bd05ab",
+   "prev": null,
+   "seq": 1791349613193,
+   "tag": "trust.score",
+   "kind": "trust.score",
+   "verdict": "PRODUCER_SIGNED",
+   "status": "CONTENT_VERIFIED",
+   "iss": "did:key:z6MkiHHMbugzsbVKBkTyBmyov5ZDok4bGEErk6yQYVtSWzVf",
+   "ieId": "ChaosDomain:954372385b3e",
+   "corr": null,
+   "msIndex": 5142,
+   "wfIndex": 4,
+   "atMs": 1791349613000,
+   "at": "2026-10-07T05:06:53.000Z",
+   "links": {
+    "self": "/messages/0x72aac37eff736986b7cc9ce94a869537e5612c76ddca142a85368dc6e5bd05ab",
+    "lifecycle": "/messages/0x72aac37eff736986b7cc9ce94a869537e5612c76ddca142a85368dc6e5bd05ab/lifecycle",
+    "proof": "/proofs/0x72aac37eff736986b7cc9ce94a869537e5612c76ddca142a85368dc6e5bd05ab"
+   },
+   "claimsIssuer": false
+  },
+  {
+   "blockId": "0xb2747e80d71e022ca045b2d69a5de357fe7ba9e24a5f171990188bfbd3a3a183",
+   "prev": null,
+   "seq": 1791349658558,
+   "tag": "trust.score",
+   "kind": "trust.score",
+   "verdict": "PRODUCER_SIGNED",
+   "status": "CONTENT_VERIFIED",
+   "iss": "did:key:z6MkiHHMbugzsbVKBkTyBmyov5ZDok4bGEErk6yQYVtSWzVf",
+   "ieId": "ChaosDomain:954372385b3e",
+   "corr": null,
+   "msIndex": 5152,
+   "wfIndex": 5,
+   "atMs": 1791349663000,
+   "at": "2026-10-07T05:07:43.000Z",
+   "links": {
+    "self": "/messages/0xb2747e80d71e022ca045b2d69a5de357fe7ba9e24a5f171990188bfbd3a3a183",
+    "lifecycle": "/messages/0xb2747e80d71e022ca045b2d69a5de357fe7ba9e24a5f171990188bfbd3a3a183/lifecycle",
+    "proof": "/proofs/0xb2747e80d71e022ca045b2d69a5de357fe7ba9e24a5f171990188bfbd3a3a183"
+   },
+   "claimsIssuer": false
+  },
+  {
+   "blockId": "0xc86944ea134ee2573bb9a4b8c0905a5c722c190677a4fea10e3118143c612160",
+   "prev": null,
+   "seq": 1791352302190,
+   "tag": "trust.score",
+   "kind": "trust.score",
+   "verdict": "PRODUCER_SIGNED",
+   "status": "CONTENT_VERIFIED",
+   "iss": "did:key:z6MkiHHMbugzsbVKBkTyBmyov5ZDok4bGEErk6yQYVtSWzVf",
+   "ieId": "ChaosDomain:954372385b3e",
+   "corr": null,
+   "msIndex": 5680,
+   "wfIndex": 10,
+   "atMs": 1791352303000,
+   "at": "2026-10-07T05:51:43.000Z",
+   "links": {
+    "self": "/messages/0xc86944ea134ee2573bb9a4b8c0905a5c722c190677a4fea10e3118143c612160",
+    "lifecycle": "/messages/0xc86944ea134ee2573bb9a4b8c0905a5c722c190677a4fea10e3118143c612160/lifecycle",
+    "proof": "/proofs/0xc86944ea134ee2573bb9a4b8c0905a5c722c190677a4fea10e3118143c612160"
+   },
+   "claimsIssuer": false
+  }
+ ],
+ "total": 5,
+ "chain": null
+}

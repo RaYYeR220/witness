@@ -13,7 +13,9 @@ import { expect, test, type Page } from "@playwright/test";
 
 import { axeCheck, ladderResult, noSideScroll, SCREENS } from "./helpers";
 
-const SNAPSHOT = join(dirname(fileURLToPath(import.meta.url)), ".snapshot");
+const HERE = dirname(fileURLToPath(import.meta.url));
+/** The snapshot e2e/prepare-replay.mjs served: e2e/.snapshot when recorded, else the committed one. */
+const SNAPSHOT = existsSync(join(HERE, ".snapshot", "manifest.json")) ? join(HERE, ".snapshot") : join(HERE, "..", "public", "replay");
 const has = existsSync(join(SNAPSHOT, "manifest.json"));
 const read = (name: string) => JSON.parse(readFileSync(join(SNAPSHOT, name), "utf8"));
 
@@ -69,6 +71,43 @@ test("Verify computes the five checks in the browser from a recorded proof", asy
     expect(steps[4]).toBe("unknown");
     test.info().annotations.push({ type: "note", description: "IOTA Rebased was not reachable: step 5 not checked" });
   }
+  expect(hits).toEqual([]);
+});
+
+test("a forged message of the evaluation fails check 4 in the browser", async ({ page }) => {
+  const hits = watchApi(page);
+  // the A02 trial JUDGES.md names; else any FORGED message with its proof
+  const named = "0xc28899293cca00d7233727df3ba380564f24b403c026ae190f210bd2a35f54a5";
+  const forged = existsSync(join(SNAPSHOT, "bundles", `${named}.json`))
+    ? named
+    : read("messages.json").items.find((x: { blockId: string; verdict: string }) => x.verdict === "FORGED" && existsSync(join(SNAPSHOT, "bundles", `${x.blockId}.json`)))?.blockId;
+  test.skip(!forged, "the snapshot holds no forged message with a proof");
+  await page.goto(`/m/${forged}`);
+  const { overall, steps } = await ladderResult(page);
+  expect(overall).toBe("INVALID");
+  expect(steps.slice(0, 4)).toEqual(["pass", "pass", "pass", "fail"]);
+  expect(hits).toEqual([]);
+});
+
+test("the forged-milestone proof passes checks 1 to 4 and fails the anchor read from IOTA Rebased", async ({ page }) => {
+  const hits = watchApi(page);
+  await page.goto(`/m/${anyMessage() ?? "0x" + "0".repeat(64)}`);
+  await page.getByRole("link", { name: "Try a forged proof" }).click();
+  await expect(page).toHaveURL(/\/verify\/forged-milestone$/);
+  const { overall, steps } = await ladderResult(page);
+  expect(steps.slice(0, 4)).toEqual(["pass", "pass", "pass", "pass"]);
+  if (overall === "PARTIAL") {
+    expect(steps[4]).toBe("unknown");
+    test.info().annotations.push({ type: "note", description: "IOTA Rebased was not reachable: step 5 not checked" });
+  } else {
+    expect(overall).toBe("INVALID");
+    expect(steps[4]).toBe("fail");
+    await expect(page.locator("li.step[data-step=anchor] .detail")).toHaveText("checkpoint does not match on-chain record");
+  }
+  const { critical } = await axeCheck(page);
+  expect(critical).toEqual([]);
+  await page.setViewportSize({ width: 390, height: 844 });
+  await noSideScroll(page, "forged proof");
   expect(hits).toEqual([]);
 });
 

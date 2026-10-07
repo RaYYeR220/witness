@@ -1,0 +1,78 @@
+{
+ "id": 9,
+ "title": "Trust score of ChaosDomain:811ddd91de42 dropped 0.90 -> 0.10",
+ "severity": "high",
+ "status": "closed:quiet",
+ "ieId": "ChaosDomain:811ddd91de42",
+ "keys": [
+  "ie:ChaosDomain:811ddd91de42"
+ ],
+ "openedAtMs": 1791349923000,
+ "openedAt": "2026-10-07T05:12:03.000Z",
+ "lastEventMs": 1791349923000,
+ "lastEventAt": "2026-10-07T05:12:03.000Z",
+ "closedAtMs": 1791351741260,
+ "closedAt": "2026-10-07T05:42:21.260Z",
+ "closedBy": null,
+ "baselineScore": 0.9,
+ "lowScore": null,
+ "events": [
+  {
+   "blockId": "0x0e92320149e958879d3ea78e2e965d7e1967b59a4cc4cda9f1acdbaa8ae3a4cd",
+   "role": "alert",
+   "atMs": 1791349923000,
+   "at": "2026-10-07T05:12:03.000Z",
+   "tag": "trust.score",
+   "kind": "trust.score",
+   "verdict": "PRODUCER_SIGNED",
+   "status": "SHADOW",
+   "msIndex": 5204,
+   "dateMs": 1791349923000,
+   "date": "2026-10-07T05:12:03.000Z",
+   "indexed": true,
+   "detail": {
+    "as": "trust-drop",
+    "tag": "trust.score",
+    "was": "trigger",
+    "kind": "trust.score",
+    "score": 0.1,
+    "trust": "proven",
+    "revoked": "shadow",
+    "verdict": "PRODUCER_SIGNED",
+    "previousScore": 0.9,
+    "previousBlockId": "0x6135003677447cd7a36b61c2e5e83900c53fe0e41bb230e053873899391e673d"
+   },
+   "links": {
+    "self": "/messages/0x0e92320149e958879d3ea78e2e965d7e1967b59a4cc4cda9f1acdbaa8ae3a4cd",
+    "lifecycle": "/messages/0x0e92320149e958879d3ea78e2e965d7e1967b59a4cc4cda9f1acdbaa8ae3a4cd/lifecycle",
+    "proof": "/proofs/0x0e92320149e958879d3ea78e2e965d7e1967b59a4cc4cda9f1acdbaa8ae3a4cd"
+   }
+  }
+ ],
+ "eventsTotal": 1,
+ "nextEventsCursor": null,
+ "alerts": [
+  {
+   "id": 13141,
+   "rule": "SHADOW",
+   "severity": "high",
+   "blockId": "0x0e92320149e958879d3ea78e2e965d7e1967b59a4cc4cda9f1acdbaa8ae3a4cd",
+   "ieId": "ChaosDomain:811ddd91de42",
+   "evidence": {
+    "iss": "did:key:z6MkiHHMbugzsbVKBkTyBmyov5ZDok4bGEErk6yQYVtSWzVf",
+    "tag": "trust.score",
+    "graceS": 30,
+    "reason": "confirmed on the Tangle but never received through the Messages API: written around the relay",
+    "msIndex": 5204,
+    "verdict": "PRODUCER_SIGNED",
+    "baselineMs": 1791330874581,
+    "confirmedAtMs": 1791349923000
+   },
+   "atMs": 1791349954809,
+   "at": "2026-10-07T05:12:34.809Z",
+   "dedupeKey": null
+  }
+ ],
+ "alertsTotal": 1,
+ "nextAlertsAfter": null
+}

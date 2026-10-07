@@ -1,0 +1,859 @@
+{
+ "items": [
+  {
+   "id": 28,
+   "title": "Tangle content differs from the submitted message in block 0x4c8d7d8517... (CONTENT_MISMATCH)",
+   "severity": "critical",
+   "status": "closed:quiet",
+   "ieId": null,
+   "keys": [
+    "ledger"
+   ],
+   "openedAtMs": 1791350424586,
+   "openedAt": "2026-10-07T05:20:24.586Z",
+   "lastEventMs": 1791350789217,
+   "lastEventAt": "2026-10-07T05:26:29.217Z",
+   "closedAtMs": 1791352621555,
+   "closedAt": "2026-10-07T05:57:01.555Z",
+   "closedBy": null,
+   "baselineScore": null,
+   "lowScore": null
+  },
+  {
+   "id": 27,
+   "title": "Trust score of ChaosDomain:7bb9e127d3aa dropped 0.90 -> 0.10",
+   "severity": "high",
+   "status": "closed:quiet",
+   "ieId": "ChaosDomain:7bb9e127d3aa",
+   "keys": [
+    "ie:ChaosDomain:7bb9e127d3aa"
+   ],
+   "openedAtMs": 1791350018000,
+   "openedAt": "2026-10-07T05:13:38.000Z",
+   "lastEventMs": 1791350018000,
+   "lastEventAt": "2026-10-07T05:13:38.000Z",
+   "closedAtMs": 1791351832096,
+   "closedAt": "2026-10-07T05:43:52.096Z",
+   "closedBy": null,
+   "baselineScore": 0.9,
+   "lowScore": null
+  },
+  {
+   "id": 26,
+   "title": "Trust score of ChaosDomain:963c08058601 dropped 0.90 -> 0.10",
+   "severity": "high",
+   "status": "closed:quiet",
+   "ieId": "ChaosDomain:963c08058601",
+   "keys": [
+    "ie:ChaosDomain:963c08058601"
+   ],
+   "openedAtMs": 1791350013000,
+   "openedAt": "2026-10-07T05:13:33.000Z",
+   "lastEventMs": 1791350013000,
+   "lastEventAt": "2026-10-07T05:13:33.000Z",
+   "closedAtMs": 1791351832096,
+   "closedAt": "2026-10-07T05:43:52.096Z",
+   "closedBy": null,
+   "baselineScore": 0.9,
+   "lowScore": null
+  },
+  {
+   "id": 25,
+   "title": "Trust score of ChaosDomain:72d126ce3f03 dropped 0.90 -> 0.10",
+   "severity": "high",
+   "status": "closed:quiet",
+   "ieId": "ChaosDomain:72d126ce3f03",
+   "keys": [
+    "ie:ChaosDomain:72d126ce3f03"
+   ],
+   "openedAtMs": 1791350008000,
+   "openedAt": "2026-10-07T05:13:28.000Z",
+   "lastEventMs": 1791350008000,
+   "lastEventAt": "2026-10-07T05:13:28.000Z",
+   "closedAtMs": 1791351832096,
+   "closedAt": "2026-10-07T05:43:52.096Z",
+   "closedBy": null,
+   "baselineScore": 0.9,
+   "lowScore": null
+  },
+  {
+   "id": 24,
+   "title": "Trust score of ChaosDomain:af5a0f19a167 dropped 0.90 -> 0.10",
+   "severity": "high",
+   "status": "closed:quiet",
+   "ieId": "ChaosDomain:af5a0f19a167",
+   "keys": [
+    "ie:ChaosDomain:af5a0f19a167"
+   ],
+   "openedAtMs": 1791350003000,
+   "openedAt": "2026-10-07T05:13:23.000Z",
+   "lastEventMs": 1791350003000,
+   "lastEventAt": "2026-10-07T05:13:23.000Z",
+   "closedAtMs": 1791351832096,
+   "closedAt": "2026-10-07T05:43:52.096Z",
+   "closedBy": null,
+   "baselineScore": 0.9,
+   "lowScore": null
+  },
+  {
+   "id": 23,
+   "title": "Trust score of ChaosDomain:9848e6c3cb7a dropped 0.90 -> 0.10",
+   "severity": "high",
+   "status": "closed:quiet",
+   "ieId": "ChaosDomain:9848e6c3cb7a",
+   "keys": [
+    "ie:ChaosDomain:9848e6c3cb7a"
+   ],
+   "openedAtMs": 1791349998000,
+   "openedAt": "2026-10-07T05:13:18.000Z",
+   "lastEventMs": 1791349998000,
+   "lastEventAt": "2026-10-07T05:13:18.000Z",
+   "closedAtMs": 1791351832096,
+   "closedAt": "2026-10-07T05:43:52.096Z",
+   "closedBy": null,
+   "baselineScore": 0.9,
+   "lowScore": null
+  },
+  {
+   "id": 22,
+   "title": "Trust score of ChaosDomain:617319a8e9d2 dropped 0.90 -> 0.10",
+   "severity": "high",
+   "status": "closed:quiet",
+   "ieId": "ChaosDomain:617319a8e9d2",
+   "keys": [
+    "ie:ChaosDomain:617319a8e9d2"
+   ],
+   "openedAtMs": 1791349993000,
+   "openedAt": "2026-10-07T05:13:13.000Z",
+   "lastEventMs": 1791349993000,
+   "lastEventAt": "2026-10-07T05:13:13.000Z",
+   "closedAtMs": 1791351801803,
+   "closedAt": "2026-10-07T05:43:21.803Z",
+   "closedBy": null,
+   "baselineScore": 0.9,
+   "lowScore": null
+  },
+  {
+   "id": 21,
+   "title": "Trust score of ChaosDomain:b88781291aef dropped 0.90 -> 0.10",
+   "severity": "high",
+   "status": "closed:quiet",
+   "ieId": "ChaosDomain:b88781291aef",
+   "keys": [
+    "ie:ChaosDomain:b88781291aef"
+   ],
+   "openedAtMs": 1791349988000,
+   "openedAt": "2026-10-07T05:13:08.000Z",
+   "lastEventMs": 1791349988000,
+   "lastEventAt": "2026-10-07T05:13:08.000Z",
+   "closedAtMs": 1791351801803,
+   "closedAt": "2026-10-07T05:43:21.803Z",
+   "closedBy": null,
+   "baselineScore": 0.9,
+   "lowScore": null
+  },
+  {
+   "id": 20,
+   "title": "Trust score of ChaosDomain:87e935781def dropped 0.90 -> 0.10",
+   "severity": "high",
+   "status": "closed:quiet",
+   "ieId": "ChaosDomain:87e935781def",
+   "keys": [
+    "ie:ChaosDomain:87e935781def"
+   ],
+   "openedAtMs": 1791349983000,
+   "openedAt": "2026-10-07T05:13:03.000Z",
+   "lastEventMs": 1791349983000,
+   "lastEventAt": "2026-10-07T05:13:03.000Z",
+   "closedAtMs": 1791351801803,
+   "closedAt": "2026-10-07T05:43:21.803Z",
+   "closedBy": null,
+   "baselineScore": 0.9,
+   "lowScore": null
+  },
+  {
+   "id": 19,
+   "title": "Trust score of ChaosDomain:4fbec9ec6f1b dropped 0.90 -> 0.10",
+   "severity": "high",
+   "status": "closed:quiet",
+   "ieId": "ChaosDomain:4fbec9ec6f1b",
+   "keys": [
+    "ie:ChaosDomain:4fbec9ec6f1b"
+   ],
+   "openedAtMs": 1791349978000,
+   "openedAt": "2026-10-07T05:12:58.000Z",
+   "lastEventMs": 1791349978000,
+   "lastEventAt": "2026-10-07T05:12:58.000Z",
+   "closedAtMs": 1791351801803,
+   "closedAt": "2026-10-07T05:43:21.803Z",
+   "closedBy": null,
+   "baselineScore": 0.9,
+   "lowScore": null
+  },
+  {
+   "id": 18,
+   "title": "Trust score of ChaosDomain:ab91913e9b4a dropped 0.90 -> 0.10",
+   "severity": "high",
+   "status": "closed:quiet",
+   "ieId": "ChaosDomain:ab91913e9b4a",
+   "keys": [
+    "ie:ChaosDomain:ab91913e9b4a"
+   ],
+   "openedAtMs": 1791349973000,
+   "openedAt": "2026-10-07T05:12:53.000Z",
+   "lastEventMs": 1791349973000,
+   "lastEventAt": "2026-10-07T05:12:53.000Z",
+   "closedAtMs": 1791351801803,
+   "closedAt": "2026-10-07T05:43:21.803Z",
+   "closedBy": null,
+   "baselineScore": 0.9,
+   "lowScore": null
+  },
+  {
+   "id": 17,
+   "title": "Trust score of ChaosDomain:a8b962764221 dropped 0.90 -> 0.10",
+   "severity": "high",
+   "status": "closed:quiet",
+   "ieId": "ChaosDomain:a8b962764221",
+   "keys": [
+    "ie:ChaosDomain:a8b962764221"
+   ],
+   "openedAtMs": 1791349963000,
+   "openedAt": "2026-10-07T05:12:43.000Z",
+   "lastEventMs": 1791349963000,
+   "lastEventAt": "2026-10-07T05:12:43.000Z",
+   "closedAtMs": 1791351771537,
+   "closedAt": "2026-10-07T05:42:51.537Z",
+   "closedBy": null,
+   "baselineScore": 0.9,
+   "lowScore": null
+  },
+  {
+   "id": 16,
+   "title": "Trust score of ChaosDomain:f13439f86f4e dropped 0.90 -> 0.10",
+   "severity": "high",
+   "status": "closed:quiet",
+   "ieId": "ChaosDomain:f13439f86f4e",
+   "keys": [
+    "ie:ChaosDomain:f13439f86f4e"
+   ],
+   "openedAtMs": 1791349958000,
+   "openedAt": "2026-10-07T05:12:38.000Z",
+   "lastEventMs": 1791349958000,
+   "lastEventAt": "2026-10-07T05:12:38.000Z",
+   "closedAtMs": 1791351771537,
+   "closedAt": "2026-10-07T05:42:51.537Z",
+   "closedBy": null,
+   "baselineScore": 0.9,
+   "lowScore": null
+  },
+  {
+   "id": 15,
+   "title": "Trust score of ChaosDomain:208b556d8d06 dropped 0.90 -> 0.10",
+   "severity": "high",
+   "status": "closed:quiet",
+   "ieId": "ChaosDomain:208b556d8d06",
+   "keys": [
+    "ie:ChaosDomain:208b556d8d06"
+   ],
+   "openedAtMs": 1791349953000,
+   "openedAt": "2026-10-07T05:12:33.000Z",
+   "lastEventMs": 1791349953000,
+   "lastEventAt": "2026-10-07T05:12:33.000Z",
+   "closedAtMs": 1791351771537,
+   "closedAt": "2026-10-07T05:42:51.537Z",
+   "closedBy": null,
+   "baselineScore": 0.9,
+   "lowScore": null
+  },
+  {
+   "id": 14,
+   "title": "Trust score of ChaosDomain:799f9bf03d0a dropped 0.90 -> 0.10",
+   "severity": "high",
+   "status": "closed:quiet",
+   "ieId": "ChaosDomain:799f9bf03d0a",
+   "keys": [
+    "ie:ChaosDomain:799f9bf03d0a"
+   ],
+   "openedAtMs": 1791349948000,
+   "openedAt": "2026-10-07T05:12:28.000Z",
+   "lastEventMs": 1791349948000,
+   "lastEventAt": "2026-10-07T05:12:28.000Z",
+   "closedAtMs": 1791351771537,
+   "closedAt": "2026-10-07T05:42:51.537Z",
+   "closedBy": null,
+   "baselineScore": 0.9,
+   "lowScore": null
+  },
+  {
+   "id": 13,
+   "title": "Trust score of ChaosDomain:d233493712b5 dropped 0.90 -> 0.10",
+   "severity": "high",
+   "status": "closed:quiet",
+   "ieId": "ChaosDomain:d233493712b5",
+   "keys": [
+    "ie:ChaosDomain:d233493712b5"
+   ],
+   "openedAtMs": 1791349943000,
+   "openedAt": "2026-10-07T05:12:23.000Z",
+   "lastEventMs": 1791349943000,
+   "lastEventAt": "2026-10-07T05:12:23.000Z",
+   "closedAtMs": 1791351771537,
+   "closedAt": "2026-10-07T05:42:51.537Z",
+   "closedBy": null,
+   "baselineScore": 0.9,
+   "lowScore": null
+  },
+  {
+   "id": 12,
+   "title": "Trust score of ChaosDomain:022e7e00d96f dropped 0.90 -> 0.10",
+   "severity": "high",
+   "status": "closed:quiet",
+   "ieId": "ChaosDomain:022e7e00d96f",
+   "keys": [
+    "ie:ChaosDomain:022e7e00d96f"
+   ],
+   "openedAtMs": 1791349938000,
+   "openedAt": "2026-10-07T05:12:18.000Z",
+   "lastEventMs": 1791349938000,
+   "lastEventAt": "2026-10-07T05:12:18.000Z",
+   "closedAtMs": 1791351771537,
+   "closedAt": "2026-10-07T05:42:51.537Z",
+   "closedBy": null,
+   "baselineScore": 0.9,
+   "lowScore": null
+  },
+  {
+   "id": 11,
+   "title": "Trust score of ChaosDomain:42c73ca679a0 dropped 0.90 -> 0.10",
+   "severity": "high",
+   "status": "closed:quiet",
+   "ieId": "ChaosDomain:42c73ca679a0",
+   "keys": [
+    "ie:ChaosDomain:42c73ca679a0"
+   ],
+   "openedAtMs": 1791349933000,
+   "openedAt": "2026-10-07T05:12:13.000Z",
+   "lastEventMs": 1791349933000,
+   "lastEventAt": "2026-10-07T05:12:13.000Z",
+   "closedAtMs": 1791351741260,
+   "closedAt": "2026-10-07T05:42:21.260Z",
+   "closedBy": null,
+   "baselineScore": 0.9,
+   "lowScore": null
+  },
+  {
+   "id": 10,
+   "title": "Trust score of ChaosDomain:b78ee379fb6b dropped 0.90 -> 0.10",
+   "severity": "high",
+   "status": "closed:quiet",
+   "ieId": "ChaosDomain:b78ee379fb6b",
+   "keys": [
+    "ie:ChaosDomain:b78ee379fb6b"
+   ],
+   "openedAtMs": 1791349928000,
+   "openedAt": "2026-10-07T05:12:08.000Z",
+   "lastEventMs": 1791349928000,
+   "lastEventAt": "2026-10-07T05:12:08.000Z",
+   "closedAtMs": 1791351741260,
+   "closedAt": "2026-10-07T05:42:21.260Z",
+   "closedBy": null,
+   "baselineScore": 0.9,
+   "lowScore": null
+  },
+  {
+   "id": 9,
+   "title": "Trust score of ChaosDomain:811ddd91de42 dropped 0.90 -> 0.10",
+   "severity": "high",
+   "status": "closed:quiet",
+   "ieId": "ChaosDomain:811ddd91de42",
+   "keys": [
+    "ie:ChaosDomain:811ddd91de42"
+   ],
+   "openedAtMs": 1791349923000,
+   "openedAt": "2026-10-07T05:12:03.000Z",
+   "lastEventMs": 1791349923000,
+   "lastEventAt": "2026-10-07T05:12:03.000Z",
+   "closedAtMs": 1791351741260,
+   "closedAt": "2026-10-07T05:42:21.260Z",
+   "closedBy": null,
+   "baselineScore": 0.9,
+   "lowScore": null
+  },
+  {
+   "id": 8,
+   "title": "Trust score of ChaosDomain:b20559731ec1 dropped 0.90 -> 0.10",
+   "severity": "high",
+   "status": "closed:quiet",
+   "ieId": "ChaosDomain:b20559731ec1",
+   "keys": [
+    "ie:ChaosDomain:b20559731ec1"
+   ],
+   "openedAtMs": 1791349918000,
+   "openedAt": "2026-10-07T05:11:58.000Z",
+   "lastEventMs": 1791349918000,
+   "lastEventAt": "2026-10-07T05:11:58.000Z",
+   "closedAtMs": 1791351741260,
+   "closedAt": "2026-10-07T05:42:21.260Z",
+   "closedBy": null,
+   "baselineScore": 0.9,
+   "lowScore": null
+  },
+  {
+   "id": 30,
+   "title": "Stored record altered in block 0x4c7e1f960b... (DB_TAMPER)",
+   "severity": "critical",
+   "status": "closed:quiet",
+   "ieId": null,
+   "keys": [
+    "ledger"
+   ],
+   "openedAtMs": 1791349703840,
+   "openedAt": "2026-10-07T05:08:23.840Z",
+   "lastEventMs": 1791349703840,
+   "lastEventAt": "2026-10-07T05:08:23.840Z",
+   "closedAtMs": 1791351529457,
+   "closedAt": "2026-10-07T05:38:49.457Z",
+   "closedBy": null,
+   "baselineScore": null,
+   "lowScore": null
+  },
+  {
+   "id": 39,
+   "title": "Stored record altered in block 0x947c22f60e... (DB_TAMPER)",
+   "severity": "critical",
+   "status": "closed:quiet",
+   "ieId": null,
+   "keys": [
+    "ledger"
+   ],
+   "openedAtMs": 1791349612548,
+   "openedAt": "2026-10-07T05:06:52.548Z",
+   "lastEventMs": 1791349612548,
+   "lastEventAt": "2026-10-07T05:06:52.548Z",
+   "closedAtMs": 1791351801803,
+   "closedAt": "2026-10-07T05:43:21.803Z",
+   "closedBy": null,
+   "baselineScore": null,
+   "lowScore": null
+  },
+  {
+   "id": 41,
+   "title": "Stored record altered in block 0x016ac48265... (DB_TAMPER)",
+   "severity": "critical",
+   "status": "closed:quiet",
+   "ieId": null,
+   "keys": [
+    "ledger"
+   ],
+   "openedAtMs": 1791348559543,
+   "openedAt": "2026-10-07T04:49:19.543Z",
+   "lastEventMs": 1791348559543,
+   "lastEventAt": "2026-10-07T04:49:19.543Z",
+   "closedAtMs": 1791351983406,
+   "closedAt": "2026-10-07T05:46:23.406Z",
+   "closedBy": null,
+   "baselineScore": null,
+   "lowScore": null
+  },
+  {
+   "id": 32,
+   "title": "Stored record altered in block 0x64d5a0ac04... (DB_TAMPER)",
+   "severity": "critical",
+   "status": "closed:quiet",
+   "ieId": null,
+   "keys": [
+    "ledger"
+   ],
+   "openedAtMs": 1791348511443,
+   "openedAt": "2026-10-07T04:48:31.443Z",
+   "lastEventMs": 1791348511443,
+   "lastEventAt": "2026-10-07T04:48:31.443Z",
+   "closedAtMs": 1791351257119,
+   "closedAt": "2026-10-07T05:34:17.119Z",
+   "closedBy": null,
+   "baselineScore": null,
+   "lowScore": null
+  },
+  {
+   "id": 38,
+   "title": "Stored record altered in block 0xfa94ff8c00... (DB_TAMPER)",
+   "severity": "critical",
+   "status": "closed:quiet",
+   "ieId": null,
+   "keys": [
+    "ledger"
+   ],
+   "openedAtMs": 1791348370105,
+   "openedAt": "2026-10-07T04:46:10.105Z",
+   "lastEventMs": 1791348370105,
+   "lastEventAt": "2026-10-07T04:46:10.105Z",
+   "closedAtMs": 1791351741260,
+   "closedAt": "2026-10-07T05:42:21.260Z",
+   "closedBy": null,
+   "baselineScore": null,
+   "lowScore": null
+  },
+  {
+   "id": 33,
+   "title": "Stored record altered in block 0x71016973d7... (DB_TAMPER)",
+   "severity": "critical",
+   "status": "closed:quiet",
+   "ieId": null,
+   "keys": [
+    "ledger"
+   ],
+   "openedAtMs": 1791348018000,
+   "openedAt": "2026-10-07T04:40:18.000Z",
+   "lastEventMs": 1791348018000,
+   "lastEventAt": "2026-10-07T04:40:18.000Z",
+   "closedAtMs": 1791351317608,
+   "closedAt": "2026-10-07T05:35:17.608Z",
+   "closedBy": null,
+   "baselineScore": null,
+   "lowScore": null
+  },
+  {
+   "id": 37,
+   "title": "Stored record altered in block 0xd9e029bd38... (DB_TAMPER)",
+   "severity": "critical",
+   "status": "closed:quiet",
+   "ieId": null,
+   "keys": [
+    "ledger"
+   ],
+   "openedAtMs": 1791347967223,
+   "openedAt": "2026-10-07T04:39:27.223Z",
+   "lastEventMs": 1791347967223,
+   "lastEventAt": "2026-10-07T04:39:27.223Z",
+   "closedAtMs": 1791351680736,
+   "closedAt": "2026-10-07T05:41:20.736Z",
+   "closedBy": null,
+   "baselineScore": null,
+   "lowScore": null
+  },
+  {
+   "id": 36,
+   "title": "Stored record altered in block 0x203de53cc0... (DB_TAMPER)",
+   "severity": "critical",
+   "status": "closed:quiet",
+   "ieId": null,
+   "keys": [
+    "ledger"
+   ],
+   "openedAtMs": 1791347690812,
+   "openedAt": "2026-10-07T04:34:50.812Z",
+   "lastEventMs": 1791347690812,
+   "lastEventAt": "2026-10-07T04:34:50.812Z",
+   "closedAtMs": 1791351559732,
+   "closedAt": "2026-10-07T05:39:19.732Z",
+   "closedBy": null,
+   "baselineScore": null,
+   "lowScore": null
+  },
+  {
+   "id": 43,
+   "title": "Stored record altered in block 0x3661eea969... (DB_TAMPER)",
+   "severity": "critical",
+   "status": "closed:quiet",
+   "ieId": null,
+   "keys": [
+    "ledger"
+   ],
+   "openedAtMs": 1791347618000,
+   "openedAt": "2026-10-07T04:33:38.000Z",
+   "lastEventMs": 1791347618000,
+   "lastEventAt": "2026-10-07T04:33:38.000Z",
+   "closedAtMs": 1791352104451,
+   "closedAt": "2026-10-07T05:48:24.451Z",
+   "closedBy": null,
+   "baselineScore": null,
+   "lowScore": null
+  },
+  {
+   "id": 35,
+   "title": "Stored record altered in block 0x7e220f8514... (DB_TAMPER)",
+   "severity": "critical",
+   "status": "closed:quiet",
+   "ieId": null,
+   "keys": [
+    "ledger"
+   ],
+   "openedAtMs": 1791347389860,
+   "openedAt": "2026-10-07T04:29:49.860Z",
+   "lastEventMs": 1791347389860,
+   "lastEventAt": "2026-10-07T04:29:49.860Z",
+   "closedAtMs": 1791351499198,
+   "closedAt": "2026-10-07T05:38:19.198Z",
+   "closedBy": null,
+   "baselineScore": null,
+   "lowScore": null
+  },
+  {
+   "id": 29,
+   "title": "Stored record altered in block 0x3742113231... (DB_TAMPER)",
+   "severity": "critical",
+   "status": "closed:quiet",
+   "ieId": null,
+   "keys": [
+    "ledger"
+   ],
+   "openedAtMs": 1791347341444,
+   "openedAt": "2026-10-07T04:29:01.444Z",
+   "lastEventMs": 1791347341444,
+   "lastEventAt": "2026-10-07T04:29:01.444Z",
+   "closedAtMs": 1791351075640,
+   "closedAt": "2026-10-07T05:31:15.640Z",
+   "closedBy": null,
+   "baselineScore": null,
+   "lowScore": null
+  },
+  {
+   "id": 40,
+   "title": "Stored record altered in block 0xb83e396eff... (DB_TAMPER)",
+   "severity": "critical",
+   "status": "closed:quiet",
+   "ieId": null,
+   "keys": [
+    "ledger"
+   ],
+   "openedAtMs": 1791347244629,
+   "openedAt": "2026-10-07T04:27:24.629Z",
+   "lastEventMs": 1791347244629,
+   "lastEventAt": "2026-10-07T04:27:24.629Z",
+   "closedAtMs": 1791351862351,
+   "closedAt": "2026-10-07T05:44:22.351Z",
+   "closedBy": null,
+   "baselineScore": null,
+   "lowScore": null
+  },
+  {
+   "id": 45,
+   "title": "Stored record altered in block 0x2fb1f95429... (DB_TAMPER)",
+   "severity": "critical",
+   "status": "closed:quiet",
+   "ieId": null,
+   "keys": [
+    "ledger"
+   ],
+   "openedAtMs": 1791347166902,
+   "openedAt": "2026-10-07T04:26:06.902Z",
+   "lastEventMs": 1791347166902,
+   "lastEventAt": "2026-10-07T04:26:06.902Z",
+   "closedAtMs": 1791352225496,
+   "closedAt": "2026-10-07T05:50:25.496Z",
+   "closedBy": null,
+   "baselineScore": null,
+   "lowScore": null
+  },
+  {
+   "id": 34,
+   "title": "Stored record altered in block 0x5da41f767d... (DB_TAMPER)",
+   "severity": "critical",
+   "status": "closed:quiet",
+   "ieId": null,
+   "keys": [
+    "ledger"
+   ],
+   "openedAtMs": 1791347016416,
+   "openedAt": "2026-10-07T04:23:36.416Z",
+   "lastEventMs": 1791347016416,
+   "lastEventAt": "2026-10-07T04:23:36.416Z",
+   "closedAtMs": 1791351438647,
+   "closedAt": "2026-10-07T05:37:18.647Z",
+   "closedBy": null,
+   "baselineScore": null,
+   "lowScore": null
+  },
+  {
+   "id": 31,
+   "title": "Stored record altered in block 0x7c54fd61c8... (DB_TAMPER)",
+   "severity": "critical",
+   "status": "closed:quiet",
+   "ieId": null,
+   "keys": [
+    "ledger"
+   ],
+   "openedAtMs": 1791347013000,
+   "openedAt": "2026-10-07T04:23:33.000Z",
+   "lastEventMs": 1791347013000,
+   "lastEventAt": "2026-10-07T04:23:33.000Z",
+   "closedAtMs": 1791351196622,
+   "closedAt": "2026-10-07T05:33:16.622Z",
+   "closedBy": null,
+   "baselineScore": null,
+   "lowScore": null
+  },
+  {
+   "id": 42,
+   "title": "Stored record altered in block 0x80540f9885... (DB_TAMPER)",
+   "severity": "critical",
+   "status": "closed:quiet",
+   "ieId": null,
+   "keys": [
+    "ledger"
+   ],
+   "openedAtMs": 1791347004096,
+   "openedAt": "2026-10-07T04:23:24.096Z",
+   "lastEventMs": 1791347004096,
+   "lastEventAt": "2026-10-07T04:23:24.096Z",
+   "closedAtMs": 1791352043902,
+   "closedAt": "2026-10-07T05:47:23.902Z",
+   "closedBy": null,
+   "baselineScore": null,
+   "lowScore": null
+  },
+  {
+   "id": 44,
+   "title": "Stored record altered in block 0x578ce44828... (DB_TAMPER)",
+   "severity": "critical",
+   "status": "closed:quiet",
+   "ieId": null,
+   "keys": [
+    "ledger"
+   ],
+   "openedAtMs": 1791346877704,
+   "openedAt": "2026-10-07T04:21:17.704Z",
+   "lastEventMs": 1791346877704,
+   "lastEventAt": "2026-10-07T04:21:17.704Z",
+   "closedAtMs": 1791352164973,
+   "closedAt": "2026-10-07T05:49:24.973Z",
+   "closedBy": null,
+   "baselineScore": null,
+   "lowScore": null
+  },
+  {
+   "id": 6,
+   "title": "Submitted block never confirmed in block 0xb6464387f9... (ORPHANED)",
+   "severity": "high",
+   "status": "closed:quiet",
+   "ieId": null,
+   "keys": [
+    "ledger"
+   ],
+   "openedAtMs": 1791342683948,
+   "openedAt": "2026-10-07T03:11:23.948Z",
+   "lastEventMs": 1791342683948,
+   "lastEventAt": "2026-10-07T03:11:23.948Z",
+   "closedAtMs": 1791344503760,
+   "closedAt": "2026-10-07T03:41:43.760Z",
+   "closedBy": null,
+   "baselineScore": null,
+   "lowScore": null
+  },
+  {
+   "id": 4,
+   "title": "Stored record altered in block 0x4b47b9721f... (DB_TAMPER)",
+   "severity": "critical",
+   "status": "closed:quiet",
+   "ieId": null,
+   "keys": [
+    "ledger"
+   ],
+   "openedAtMs": 1791338913670,
+   "openedAt": "2026-10-07T02:08:33.670Z",
+   "lastEventMs": 1791338913670,
+   "lastEventAt": "2026-10-07T02:08:33.670Z",
+   "closedAtMs": 1791340738545,
+   "closedAt": "2026-10-07T02:38:58.545Z",
+   "closedBy": null,
+   "baselineScore": null,
+   "lowScore": null
+  },
+  {
+   "id": 5,
+   "title": "Stored record altered in block 0x3d2daf1b48... (DB_TAMPER)",
+   "severity": "critical",
+   "status": "closed:quiet",
+   "ieId": null,
+   "keys": [
+    "ledger"
+   ],
+   "openedAtMs": 1791338886656,
+   "openedAt": "2026-10-07T02:08:06.656Z",
+   "lastEventMs": 1791338886656,
+   "lastEventAt": "2026-10-07T02:08:06.656Z",
+   "closedAtMs": 1791341396035,
+   "closedAt": "2026-10-07T02:49:56.035Z",
+   "closedBy": null,
+   "baselineScore": null,
+   "lowScore": null
+  },
+  {
+   "id": 7,
+   "title": "Stored record altered in block 0x347bff6ac4... (DB_TAMPER)",
+   "severity": "critical",
+   "status": "closed:quiet",
+   "ieId": null,
+   "keys": [
+    "ledger"
+   ],
+   "openedAtMs": 1791338880389,
+   "openedAt": "2026-10-07T02:08:00.389Z",
+   "lastEventMs": 1791338880389,
+   "lastEventAt": "2026-10-07T02:08:00.389Z",
+   "closedAtMs": 1791344292923,
+   "closedAt": "2026-10-07T03:38:12.923Z",
+   "closedBy": null,
+   "baselineScore": null,
+   "lowScore": null
+  },
+  {
+   "id": 3,
+   "title": "Tangle content differs from the submitted message in block 0x59c5320866... (CONTENT_MISMATCH)",
+   "severity": "critical",
+   "status": "closed:quiet",
+   "ieId": null,
+   "keys": [
+    "ledger"
+   ],
+   "openedAtMs": 1791332578123,
+   "openedAt": "2026-10-07T00:22:58.123Z",
+   "lastEventMs": 1791332692831,
+   "lastEventAt": "2026-10-07T00:24:52.831Z",
+   "closedAtMs": 1791334497306,
+   "closedAt": "2026-10-07T00:54:57.306Z",
+   "closedBy": null,
+   "baselineScore": null,
+   "lowScore": null
+  },
+  {
+   "id": 2,
+   "title": "Trust score of ChaosDomain:79c67275e6b0 dropped 0.90 -> 0.10",
+   "severity": "high",
+   "status": "closed:quiet",
+   "ieId": "ChaosDomain:79c67275e6b0",
+   "keys": [
+    "ie:ChaosDomain:79c67275e6b0"
+   ],
+   "openedAtMs": 1791332389000,
+   "openedAt": "2026-10-07T00:19:49.000Z",
+   "lastEventMs": 1791332389000,
+   "lastEventAt": "2026-10-07T00:19:49.000Z",
+   "closedAtMs": 1791334196020,
+   "closedAt": "2026-10-07T00:49:56.020Z",
+   "closedBy": null,
+   "baselineScore": 0.9,
+   "lowScore": null
+  },
+  {
+   "id": 1,
+   "title": "Trust score of ChaosDomain:8aa883039ded dropped 0.90 -> 0.10",
+   "severity": "high",
+   "status": "closed:quiet",
+   "ieId": "ChaosDomain:8aa883039ded",
+   "keys": [
+    "ie:ChaosDomain:8aa883039ded"
+   ],
+   "openedAtMs": 1791332384000,
+   "openedAt": "2026-10-07T00:19:44.000Z",
+   "lastEventMs": 1791332384000,
+   "lastEventAt": "2026-10-07T00:19:44.000Z",
+   "closedAtMs": 1791334196020,
+   "closedAt": "2026-10-07T00:49:56.020Z",
+   "closedBy": null,
+   "baselineScore": 0.9,
+   "lowScore": null
+  }
+ ]
+}

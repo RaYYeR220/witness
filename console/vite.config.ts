@@ -1,6 +1,8 @@
 import vue from "@vitejs/plugin-vue";
+import { rmSync } from "node:fs";
+import { resolve } from "node:path";
 import { fileURLToPath, URL } from "node:url";
-import type { ProxyOptions, UserConfig } from "vite";
+import type { Plugin, ProxyOptions, UserConfig } from "vite";
 import { defineConfig } from "vitest/config";
 
 /**
@@ -40,8 +42,33 @@ const lib: UserConfig["build"] = {
   },
 };
 
+/**
+ * The recorded snapshot in public/replay/ is for replay builds only: any other
+ * build drops it from its output. A replay build also gets a 404.html that is
+ * the app itself, because static hosts (GitHub Pages) answer a path they do not
+ * hold with that file: a deep link such as /m/0x… then opens its screen.
+ */
+function replayOutput(mode: string): Plugin {
+  let outDir = "dist";
+  return {
+    name: "witness-replay-output",
+    apply: "build",
+    enforce: "post",
+    configResolved(c) {
+      outDir = resolve(c.root, c.build.outDir);
+    },
+    generateBundle(_, bundle) {
+      const index = bundle["index.html"];
+      if (mode === "replay" && index?.type === "asset") this.emitFile({ type: "asset", fileName: "404.html", source: index.source });
+    },
+    closeBundle() {
+      if (mode !== "replay") rmSync(resolve(outDir, "replay"), { recursive: true, force: true });
+    },
+  };
+}
+
 export default defineConfig(({ mode }) => ({
-  plugins: [vue()],
+  plugins: [vue(), ...(mode === "lib" ? [] : [replayOutput(mode)])],
   resolve: {
     alias: { "@": fileURLToPath(new URL("./src", import.meta.url)) },
   },

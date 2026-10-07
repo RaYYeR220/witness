@@ -1,0 +1,34 @@
+{
+ "by": "issuer",
+ "key": "did:key:z6MkjGfXWtbHb9FwmCfJuwUKAZu24yPun2pqXiRe9426q9vj",
+ "items": [
+  {
+   "blockId": "0xa361c70788d43548caed215eb080aa54cefad98afa0f27c9ecea4ba968050211",
+   "prev": null,
+   "seq": 1,
+   "tag": "trust.score",
+   "kind": "trust.score",
+   "verdict": "UNAUTHORIZED_WRITER",
+   "status": "CONTENT_VERIFIED",
+   "iss": "did:key:z6MkjGfXWtbHb9FwmCfJuwUKAZu24yPun2pqXiRe9426q9vj",
+   "ieId": "MyDomain:aabbccddeeff",
+   "corr": null,
+   "msIndex": 2159,
+   "wfIndex": 1,
+   "atMs": 1791334699000,
+   "at": "2026-10-07T00:58:19.000Z",
+   "links": {
+    "self": "/messages/0xa361c70788d43548caed215eb080aa54cefad98afa0f27c9ecea4ba968050211",
+    "lifecycle": "/messages/0xa361c70788d43548caed215eb080aa54cefad98afa0f27c9ecea4ba968050211/lifecycle",
+    "proof": "/proofs/0xa361c70788d43548caed215eb080aa54cefad98afa0f27c9ecea4ba968050211"
+   },
+   "claimsIssuer": true
+  }
+ ],
+ "total": 1,
+ "chain": {
+  "links": 0,
+  "gaps": [],
+  "forks": []
+ }
+}

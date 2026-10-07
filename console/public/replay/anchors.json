@@ -1,0 +1,283 @@
+{
+ "items": [
+  {
+   "seq": 9,
+   "fromMilestone": 5761,
+   "toMilestone": 6480,
+   "msRoot": "0xa432b5c50981f278332e45bc2edc4a599b92fb290eb51d57d59619b801994192",
+   "checkpoint": {
+    "v": 1,
+    "to": {
+     "id": "0xf95b91b9d417163b51fed242151dc9e4fb7eb27118016074978b7d3d2056ce17",
+     "index": 6480
+    },
+    "from": {
+     "id": "0xa98bf1501e5a754b658dad2d7db628cc61cffa55147d82e226f9049d05572e84",
+     "index": 5761
+    },
+    "kind": "witness.checkpoint",
+    "prev": "0xf2473174ede43b4856b1b24702fbc73658427c456529ed0e2804975210fe6a42",
+    "domain": "did:iota:testnet:0x6b9a693ebf2ac6fb771a75d25b1284ba75aeb0ae16618eaf5d41d24828a6f7a2",
+    "msRoot": "0xa432b5c50981f278332e45bc2edc4a599b92fb290eb51d57d59619b801994192",
+    "network": "private_tangle1",
+    "msgCount": 173,
+    "policyHash": "0x3528f872e870cb009dd06557c8d5b1bba21050e222a35b60e2a5e4329c70be4e"
+   },
+   "checkpointHash": "0xd4416d2ce7d8201801ed3900ede091b4c2c5eec6f7bf8cd9b3688d69b75cab7e",
+   "network": "testnet",
+   "tx": "94Y5ayon3xiuX9e3fxyvCittDbcyz9RGXJmBYG9L4bWH",
+   "record": 9,
+   "status": "anchored",
+   "createdAtMs": 1791356312000,
+   "createdAt": "2026-10-07T06:58:32.000Z"
+  },
+  {
+   "seq": 8,
+   "fromMilestone": 5041,
+   "toMilestone": 5760,
+   "msRoot": "0x099858870a7755f0e954d6f8b4e54f592b5c705e760f4b37dd1dcacc1a6ce181",
+   "checkpoint": {
+    "v": 1,
+    "to": {
+     "id": "0x0a7c019b482eed0a584e7e9f7136590b92fedbec14222878389f6d64c476e9ca",
+     "index": 5760
+    },
+    "from": {
+     "id": "0xdbe6ba474402e49c1eb3f2921991aa1b8a1b089e681ce6e1895d870d68807eb1",
+     "index": 5041
+    },
+    "kind": "witness.checkpoint",
+    "prev": "0x2ba013ceec4efc318153a27e83e52a785943f066f40fff3d1f49469b6d46150f",
+    "domain": "did:iota:testnet:0x6b9a693ebf2ac6fb771a75d25b1284ba75aeb0ae16618eaf5d41d24828a6f7a2",
+    "msRoot": "0x099858870a7755f0e954d6f8b4e54f592b5c705e760f4b37dd1dcacc1a6ce181",
+    "network": "private_tangle1",
+    "msgCount": 537,
+    "policyHash": "0x3528f872e870cb009dd06557c8d5b1bba21050e222a35b60e2a5e4329c70be4e"
+   },
+   "checkpointHash": "0xf2473174ede43b4856b1b24702fbc73658427c456529ed0e2804975210fe6a42",
+   "network": "testnet",
+   "tx": "CmvJoWeLonEA6QDhUoasddeR5e3ryznyvmX4K25x8GM5",
+   "record": 8,
+   "status": "anchored",
+   "createdAtMs": 1791352718000,
+   "createdAt": "2026-10-07T05:58:38.000Z"
+  },
+  {
+   "seq": 7,
+   "fromMilestone": 4321,
+   "toMilestone": 5040,
+   "msRoot": "0xa94cf3801da476bc93555527754001ba06c54ef428b345d25f62d01495cc75f0",
+   "checkpoint": {
+    "v": 1,
+    "to": {
+     "id": "0xd27516bf252c9b3ab976ce036a24dbe5b2aabe53a43e7c00943b03c3ea081eca",
+     "index": 5040
+    },
+    "from": {
+     "id": "0xb23e45bfc8db24b06bcb9099287c63f81bd5e67bdaa4a5edfd627f7a9c2ffd49",
+     "index": 4321
+    },
+    "kind": "witness.checkpoint",
+    "prev": "0x5a5a90da2df0b710c76d8e79dad38a857a936ba79514ec0c8e16873c047f3754",
+    "domain": "did:iota:testnet:0x6b9a693ebf2ac6fb771a75d25b1284ba75aeb0ae16618eaf5d41d24828a6f7a2",
+    "msRoot": "0xa94cf3801da476bc93555527754001ba06c54ef428b345d25f62d01495cc75f0",
+    "network": "private_tangle1",
+    "msgCount": 860,
+    "policyHash": "0x0443b65a4d98d29b8302324e39d54d48ad1744403585a1310680b8444528580e"
+   },
+   "checkpointHash": "0x2ba013ceec4efc318153a27e83e52a785943f066f40fff3d1f49469b6d46150f",
+   "network": "testnet",
+   "tx": "3z3tUCnUj6kFqiJ414K2LdbDt9G2jiDmb97Vg37EJ8kU",
+   "record": 7,
+   "status": "anchored",
+   "createdAtMs": 1791349123000,
+   "createdAt": "2026-10-07T04:58:43.000Z"
+  },
+  {
+   "seq": 6,
+   "fromMilestone": 3601,
+   "toMilestone": 4320,
+   "msRoot": "0xbf5a77c7b1eac587b80a531267ad2698cd4e06ed8486a3720c200b71cd2d9469",
+   "checkpoint": {
+    "v": 1,
+    "to": {
+     "id": "0xf010a8382e86d91f48bcdf8cd4adb4fe7039fa7dee3bc91286dc7f796c0519b9",
+     "index": 4320
+    },
+    "from": {
+     "id": "0xbc070860f5b28e77c4cb6001ac44f8deecc2681876e852d15a530f42e4581490",
+     "index": 3601
+    },
+    "kind": "witness.checkpoint",
+    "prev": "0x3fc99aa8506a3d9e30ef8c5076a2971c992edc9bec5a83ff357ec1e40689af9c",
+    "domain": "did:iota:testnet:0x6b9a693ebf2ac6fb771a75d25b1284ba75aeb0ae16618eaf5d41d24828a6f7a2",
+    "msRoot": "0xbf5a77c7b1eac587b80a531267ad2698cd4e06ed8486a3720c200b71cd2d9469",
+    "network": "private_tangle1",
+    "msgCount": 210,
+    "policyHash": "0x0443b65a4d98d29b8302324e39d54d48ad1744403585a1310680b8444528580e"
+   },
+   "checkpointHash": "0x5a5a90da2df0b710c76d8e79dad38a857a936ba79514ec0c8e16873c047f3754",
+   "network": "testnet",
+   "tx": "eiuwn8haaueKj4afD4aKhNWtT1kKEoTLpK9kpeQk4Ac",
+   "record": 6,
+   "status": "anchored",
+   "createdAtMs": 1791345518000,
+   "createdAt": "2026-10-07T03:58:38.000Z"
+  },
+  {
+   "seq": 5,
+   "fromMilestone": 2881,
+   "toMilestone": 3600,
+   "msRoot": "0x7935c32ce43e960d6e20b8309127872be9bda84db497e002b6e872127ff3602e",
+   "checkpoint": {
+    "v": 1,
+    "to": {
+     "id": "0x5516cbf9e4acb4c967e6452a046a51ea1275f7d422202e4186620a4eaed58375",
+     "index": 3600
+    },
+    "from": {
+     "id": "0x3bf6e03bf4a8ff108435ff5f498304204d4793efb61fc95a227e5c050deed619",
+     "index": 2881
+    },
+    "kind": "witness.checkpoint",
+    "prev": "0xcd595dd00bef4129702c323ae002441ca0757d5890a2949f8731f899a052a82d",
+    "domain": "did:iota:testnet:0x6b9a693ebf2ac6fb771a75d25b1284ba75aeb0ae16618eaf5d41d24828a6f7a2",
+    "msRoot": "0x7935c32ce43e960d6e20b8309127872be9bda84db497e002b6e872127ff3602e",
+    "network": "private_tangle1",
+    "msgCount": 205,
+    "policyHash": "0x3528f872e870cb009dd06557c8d5b1bba21050e222a35b60e2a5e4329c70be4e"
+   },
+   "checkpointHash": "0x3fc99aa8506a3d9e30ef8c5076a2971c992edc9bec5a83ff357ec1e40689af9c",
+   "network": "testnet",
+   "tx": "3NhM1uopnHRo666wr3mAAvFygFiiW5Hfpb618xwEzUwa",
+   "record": 5,
+   "status": "anchored",
+   "createdAtMs": 1791341918000,
+   "createdAt": "2026-10-07T02:58:38.000Z"
+  },
+  {
+   "seq": 4,
+   "fromMilestone": 2161,
+   "toMilestone": 2880,
+   "msRoot": "0xe47cb1019708562723b7f937677cf730ed2a479d73e65438ed7839dac25a6687",
+   "checkpoint": {
+    "v": 1,
+    "to": {
+     "id": "0xd2c8c8bfbfcc56ef10bf710e5f6bfe1e749d339eb81b7ac66f47def37b1dec85",
+     "index": 2880
+    },
+    "from": {
+     "id": "0x13dd4f5f261b15646a8183eaefd09174b1cf49116a290dfbe2de95f24faae7ae",
+     "index": 2161
+    },
+    "kind": "witness.checkpoint",
+    "prev": "0x7aec4a3790796c3af428a1f96b2cda02703a82db66f61ec7b9477ebc2ead51b2",
+    "domain": "did:iota:testnet:0x6b9a693ebf2ac6fb771a75d25b1284ba75aeb0ae16618eaf5d41d24828a6f7a2",
+    "msRoot": "0xe47cb1019708562723b7f937677cf730ed2a479d73e65438ed7839dac25a6687",
+    "network": "private_tangle1",
+    "msgCount": 169,
+    "policyHash": "0x3528f872e870cb009dd06557c8d5b1bba21050e222a35b60e2a5e4329c70be4e"
+   },
+   "checkpointHash": "0xcd595dd00bef4129702c323ae002441ca0757d5890a2949f8731f899a052a82d",
+   "network": "testnet",
+   "tx": "E7onRsfrvhy5yBmamkXHKJmWeWkKJcQNFDcz9Dn9uKsz",
+   "record": 4,
+   "status": "anchored",
+   "createdAtMs": 1791338324000,
+   "createdAt": "2026-10-07T01:58:44.000Z"
+  },
+  {
+   "seq": 3,
+   "fromMilestone": 1441,
+   "toMilestone": 2160,
+   "msRoot": "0x0ffea2373b540b32c9a5c3b04c00a2029a221374d94861e1a198f4cc29f8c550",
+   "checkpoint": {
+    "v": 1,
+    "to": {
+     "id": "0x179f5de4ec8b94867fddd0f0b331c21748883aa383b29d33ae1c67e61c96fff7",
+     "index": 2160
+    },
+    "from": {
+     "id": "0xed5d67675d1c99cbd4eef77a76753db5c790f672ed4a18c37fbfb8271f6b7a77",
+     "index": 1441
+    },
+    "kind": "witness.checkpoint",
+    "prev": "0xa5317ece87d9f3a0236968f61c257527dee22b9317a6becaa971784e74b8a8fe",
+    "domain": "did:iota:testnet:0x6b9a693ebf2ac6fb771a75d25b1284ba75aeb0ae16618eaf5d41d24828a6f7a2",
+    "msRoot": "0x0ffea2373b540b32c9a5c3b04c00a2029a221374d94861e1a198f4cc29f8c550",
+    "network": "private_tangle1",
+    "msgCount": 267,
+    "policyHash": "0x3528f872e870cb009dd06557c8d5b1bba21050e222a35b60e2a5e4329c70be4e"
+   },
+   "checkpointHash": "0x7aec4a3790796c3af428a1f96b2cda02703a82db66f61ec7b9477ebc2ead51b2",
+   "network": "testnet",
+   "tx": "3ucWZULXkxkRkAvt4P7xA4NpjNEFV99JBNbfXVdWQefs",
+   "record": 3,
+   "status": "anchored",
+   "createdAtMs": 1791334719000,
+   "createdAt": "2026-10-07T00:58:39.000Z"
+  },
+  {
+   "seq": 2,
+   "fromMilestone": 721,
+   "toMilestone": 1440,
+   "msRoot": "0xf70f34bd7b52d5e54b4b30197246eb1ee4dc72e03caccce1b8c1b3a5e407b352",
+   "checkpoint": {
+    "v": 1,
+    "to": {
+     "id": "0x59119e2f9185bf669b8446f8f49a1bd4c55a92bd3db416672c589ae7a186b934",
+     "index": 1440
+    },
+    "from": {
+     "id": "0x01596cf781d60c1830468573272894eb6317ff79528accfd2da28803675e3bd2",
+     "index": 721
+    },
+    "kind": "witness.checkpoint",
+    "prev": "0xf425f2721a73511c9dee7b45b4559712e9dc8535c5426c675a2b7ff5fa0d0b13",
+    "domain": "did:iota:testnet:0x6b9a693ebf2ac6fb771a75d25b1284ba75aeb0ae16618eaf5d41d24828a6f7a2",
+    "msRoot": "0xf70f34bd7b52d5e54b4b30197246eb1ee4dc72e03caccce1b8c1b3a5e407b352",
+    "network": "private_tangle1",
+    "msgCount": 143,
+    "policyHash": "0x3528f872e870cb009dd06557c8d5b1bba21050e222a35b60e2a5e4329c70be4e"
+   },
+   "checkpointHash": "0xa5317ece87d9f3a0236968f61c257527dee22b9317a6becaa971784e74b8a8fe",
+   "network": "testnet",
+   "tx": "5K3CqSHNQR7t3yuuUqjZYxk2cRmDPwtPHuHYQhy7coj5",
+   "record": 2,
+   "status": "anchored",
+   "createdAtMs": 1791331114000,
+   "createdAt": "2026-10-06T23:58:34.000Z"
+  },
+  {
+   "seq": 1,
+   "fromMilestone": 1,
+   "toMilestone": 720,
+   "msRoot": "0x5db80eb12bd5ccdca9f6d0c8f3bc7260fe648e93db06c79d735e716211a3f91c",
+   "checkpoint": {
+    "v": 1,
+    "to": {
+     "id": "0x99672fa1b49debeabd48569dc75b4121c0accdfc8e5b21c5d5fba149a2dec781",
+     "index": 720
+    },
+    "from": {
+     "id": "0x55b2bbfd6ff214c59299a169b2332c56056d844a272b5f59330bd4c3edc64594",
+     "index": 1
+    },
+    "kind": "witness.checkpoint",
+    "prev": null,
+    "domain": "did:iota:testnet:0x6b9a693ebf2ac6fb771a75d25b1284ba75aeb0ae16618eaf5d41d24828a6f7a2",
+    "msRoot": "0x5db80eb12bd5ccdca9f6d0c8f3bc7260fe648e93db06c79d735e716211a3f91c",
+    "network": "private_tangle1",
+    "msgCount": 175,
+    "policyHash": "0x3528f872e870cb009dd06557c8d5b1bba21050e222a35b60e2a5e4329c70be4e"
+   },
+   "checkpointHash": "0xf425f2721a73511c9dee7b45b4559712e9dc8535c5426c675a2b7ff5fa0d0b13",
+   "network": "testnet",
+   "tx": "7L4icmUm2Y3cwRUWxEQxSRMeiCc3C7ptoLrpDkoayABr",
+   "record": 1,
+   "status": "anchored",
+   "createdAtMs": 1791330879000,
+   "createdAt": "2026-10-06T23:54:39.000Z"
+  }
+ ]
+}

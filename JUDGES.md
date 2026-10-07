@@ -24,7 +24,7 @@ checkpoint record from IOTA Rebased testnet live.
   `/m/0xc28899293cca00d7233727df3ba380564f24b403c026ae190f210bd2a35f54a5` directly: an
   evaluation trial of class A02, a valid `trust.score` envelope replayed under the `LLO-K8s`
   tag (listed in [`results/eval-final/full/trials.jsonl`](results/eval-final/full/trials.jsonl)).
-  It is not part of the offline replay snapshot. The Verify screen shows two
+  The replay snapshot holds it too. The Verify screen shows two
   verdicts: the one the explorer recorded when it indexed the block, and the five checks your
   browser just ran from the bundle's bytes. Expect ①, ② and ③ green (the block is real and a
   milestone confirmed it) and ④ red: the envelope does not verify for the issuer it names.
@@ -32,6 +32,10 @@ checkpoint record from IOTA Rebased testnet live.
   Manager whose milestone is anchored. All five checks are green; ⑤ shows the hash of the
   checkpoint it read from the chain. "Download bundle" saves the exact proof the browser
   checked.
+- **A forged milestone.** On Verify, "Try a forged proof" runs the same checks on a bundle made
+  offline with IOTA's public sample coordinator keys (a test-vector bundle like `forged-ms.json`
+  in section 2, pointed at record 1 of our trail): ① to ④ green, ⑤ red, because the record your
+  browser reads from IOTA Rebased commits to another checkpoint.
 
 ### 2. Verify a bundle yourself
 

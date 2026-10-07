@@ -22,6 +22,8 @@ const routes: RouteRecordRaw[] = [
   ...SCREENS.map(
     (s) => ({ path: s.path, name: s.name, component: VIEWS[s.name]!, meta: { title: s.title, blurb: s.blurb } }) as RouteRecordRaw,
   ),
+  // a proof made offline with the sample coordinator keys, to try the checks on (reached from Verify)
+  { path: "/verify/forged-milestone", name: "forged", component: () => import("@/views/ForgedView.vue"), meta: { title: "A forged proof" } },
   // incidents live on Integrity
   { path: "/incidents", redirect: { name: "integrity" } },
   { path: "/incidents/:id", redirect: (to) => ({ name: "integrity", query: { incident: String(to.params.id) } }) },

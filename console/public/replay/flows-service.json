@@ -1,0 +1,37 @@
+{
+ "by": "service",
+ "items": [
+  {
+   "key": "urn:ngsi-ld:ServiceComponent:TrapDomain:api",
+   "count": 45,
+   "firstAtMs": 1791331904000,
+   "firstAt": "2026-10-07T00:11:44.000Z",
+   "lastAtMs": 1791348588000,
+   "lastAt": "2026-10-07T04:49:48.000Z"
+  },
+  {
+   "key": "urn:ngsi-ld:ServiceComponent:TrapDomain:broker",
+   "count": 41,
+   "firstAtMs": 1791331959000,
+   "firstAt": "2026-10-07T00:12:39.000Z",
+   "lastAtMs": 1791348568000,
+   "lastAt": "2026-10-07T04:49:28.000Z"
+  },
+  {
+   "key": "urn:ngsi-ld:ServiceComponent:TrapDomain:frontend",
+   "count": 50,
+   "firstAtMs": 1791331939000,
+   "firstAt": "2026-10-07T00:12:19.000Z",
+   "lastAtMs": 1791348563000,
+   "lastAt": "2026-10-07T04:49:23.000Z"
+  },
+  {
+   "key": "urn:ngsi-ld:ServiceComponent:TrapDomain:worker",
+   "count": 73,
+   "firstAtMs": 1791331894000,
+   "firstAt": "2026-10-07T00:11:34.000Z",
+   "lastAtMs": 1791348518000,
+   "lastAt": "2026-10-07T04:48:38.000Z"
+  }
+ ]
+}

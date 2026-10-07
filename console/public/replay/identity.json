@@ -1,0 +1,616 @@
+{
+ "anchor": {
+  "status": "ok",
+  "network": "testnet",
+  "identities": [
+   {
+    "name": "domain",
+    "did": "did:iota:testnet:0x6b9a693ebf2ac6fb771a75d25b1284ba75aeb0ae16618eaf5d41d24828a6f7a2",
+    "objectId": "0x6b9a693ebf2ac6fb771a75d25b1284ba75aeb0ae16618eaf5d41d24828a6f7a2",
+    "controller": {
+     "kind": "address",
+     "address": "0xd40892daf5c81e3d67ffe9806575970b973ecf6625eb8a88562afae0d8c940c8"
+    },
+    "keys": [
+     {
+      "kid": "did:iota:testnet:0x6b9a693ebf2ac6fb771a75d25b1284ba75aeb0ae16618eaf5d41d24828a6f7a2#sig-1",
+      "type": "Ed25519",
+      "relationships": [
+       "authentication",
+       "assertionMethod"
+      ],
+      "publicKeyHex": "0a13c053c77f3eb3b7efd3fb251a8b280d6b556c328ba0ea81bbcb3ebd2f9735",
+      "publicKeyJwk": {
+       "kty": "OKP",
+       "crv": "Ed25519",
+       "x": "ChPAU8d_PrO379P7JRqLKA1rVWwyi6DqgbvLPr0vlzU",
+       "alg": "EdDSA"
+      }
+     },
+     {
+      "kid": "did:iota:testnet:0x6b9a693ebf2ac6fb771a75d25b1284ba75aeb0ae16618eaf5d41d24828a6f7a2#kex-1",
+      "type": "X25519",
+      "relationships": [
+       "keyAgreement"
+      ],
+      "publicKeyHex": "d26a5a7eb7b5a14a0636ea55b54373a47cfe156854ae89f3e5b397cfd352eb25",
+      "publicKeyJwk": {
+       "kty": "OKP",
+       "crv": "X25519",
+       "x": "0mpafre1oUoGNupVtUNzpHz-FWhUronz5bOXz9NS6yU"
+      }
+     }
+    ],
+    "createdTx": "5SpNx1Rcix5XB6doa3w4bHYme7PqrMXcunLWHfUaNwrX",
+    "createdAt": "2026-10-06T14:30:43.263Z",
+    "links": {
+     "identity": "https://explorer.iota.org/object/0x6b9a693ebf2ac6fb771a75d25b1284ba75aeb0ae16618eaf5d41d24828a6f7a2?network=testnet",
+     "createdTx": "https://explorer.iota.org/txblock/5SpNx1Rcix5XB6doa3w4bHYme7PqrMXcunLWHfUaNwrX?network=testnet"
+    }
+   },
+   {
+    "name": "trust-manager",
+    "did": "did:iota:testnet:0x15eb8c4d90fa4fff1d49f3ae8b1676a61e09c883303acd383cbfaacb538db9ba",
+    "objectId": "0x15eb8c4d90fa4fff1d49f3ae8b1676a61e09c883303acd383cbfaacb538db9ba",
+    "controller": {
+     "kind": "identity",
+     "did": "did:iota:testnet:0x6b9a693ebf2ac6fb771a75d25b1284ba75aeb0ae16618eaf5d41d24828a6f7a2",
+     "objectId": "0x6b9a693ebf2ac6fb771a75d25b1284ba75aeb0ae16618eaf5d41d24828a6f7a2"
+    },
+    "keys": [
+     {
+      "kid": "did:iota:testnet:0x15eb8c4d90fa4fff1d49f3ae8b1676a61e09c883303acd383cbfaacb538db9ba#sig-1",
+      "type": "Ed25519",
+      "relationships": [
+       "authentication",
+       "assertionMethod"
+      ],
+      "publicKeyHex": "25604297f446e0a370e491dc44846289c9ea26456451e0d84bf3b54a567f3fc5",
+      "publicKeyJwk": {
+       "kty": "OKP",
+       "crv": "Ed25519",
+       "x": "JWBCl_RG4KNw5JHcRIRiicnqJkVkUeDYS_O1SlZ_P8U",
+       "alg": "EdDSA"
+      }
+     },
+     {
+      "kid": "did:iota:testnet:0x15eb8c4d90fa4fff1d49f3ae8b1676a61e09c883303acd383cbfaacb538db9ba#kex-1",
+      "type": "X25519",
+      "relationships": [
+       "keyAgreement"
+      ],
+      "publicKeyHex": "9d828eb7203780f38d6c4fdaa8b02ea597b155e77fd3ca2454f5c301739b8a11",
+      "publicKeyJwk": {
+       "kty": "OKP",
+       "crv": "X25519",
+       "x": "nYKOtyA3gPONbE_aqLAupZexVed_08okVPXDAXObihE"
+      }
+     }
+    ],
+    "createdTx": "HXAvVS9R5p4tz8jpCuMeXhrLFHVLsRvCvAatNdXgKkD8",
+    "createdAt": "2026-10-06T14:30:45.938Z",
+    "links": {
+     "identity": "https://explorer.iota.org/object/0x15eb8c4d90fa4fff1d49f3ae8b1676a61e09c883303acd383cbfaacb538db9ba?network=testnet",
+     "createdTx": "https://explorer.iota.org/txblock/HXAvVS9R5p4tz8jpCuMeXhrLFHVLsRvCvAatNdXgKkD8?network=testnet"
+    }
+   },
+   {
+    "name": "llo-k8s",
+    "did": "did:iota:testnet:0x5a50c4a62cd8281d82f2f9526a6593248bd404657cf01130221839154698e715",
+    "objectId": "0x5a50c4a62cd8281d82f2f9526a6593248bd404657cf01130221839154698e715",
+    "controller": {
+     "kind": "identity",
+     "did": "did:iota:testnet:0x6b9a693ebf2ac6fb771a75d25b1284ba75aeb0ae16618eaf5d41d24828a6f7a2",
+     "objectId": "0x6b9a693ebf2ac6fb771a75d25b1284ba75aeb0ae16618eaf5d41d24828a6f7a2"
+    },
+    "keys": [
+     {
+      "kid": "did:iota:testnet:0x5a50c4a62cd8281d82f2f9526a6593248bd404657cf01130221839154698e715#sig-1",
+      "type": "Ed25519",
+      "relationships": [
+       "authentication",
+       "assertionMethod"
+      ],
+      "publicKeyHex": "9b813a54fa82f7c33af66dfcd538cfab4e46a2c0b51be132bcf6670f0569f5f5",
+      "publicKeyJwk": {
+       "kty": "OKP",
+       "crv": "Ed25519",
+       "x": "m4E6VPqC98M69m381TjPq05GosC1G-EyvPZnDwVp9fU",
+       "alg": "EdDSA"
+      }
+     },
+     {
+      "kid": "did:iota:testnet:0x5a50c4a62cd8281d82f2f9526a6593248bd404657cf01130221839154698e715#kex-1",
+      "type": "X25519",
+      "relationships": [
+       "keyAgreement"
+      ],
+      "publicKeyHex": "b3bb35dde3eda7f469dbf9e5466783a82a4fdc63b9c24770b1bf414a8095f675",
+      "publicKeyJwk": {
+       "kty": "OKP",
+       "crv": "X25519",
+       "x": "s7s13ePtp_Rp2_nlRmeDqCpP3GO5wkdwsb9BSoCV9nU"
+      }
+     }
+    ],
+    "createdTx": "CCfvxdxiNSWSGBbBtnJdaHhDUafVqSgAPH1y2CJcpQmj",
+    "createdAt": "2026-10-06T14:30:48.666Z",
+    "links": {
+     "identity": "https://explorer.iota.org/object/0x5a50c4a62cd8281d82f2f9526a6593248bd404657cf01130221839154698e715?network=testnet",
+     "createdTx": "https://explorer.iota.org/txblock/CCfvxdxiNSWSGBbBtnJdaHhDUafVqSgAPH1y2CJcpQmj?network=testnet"
+    }
+   },
+   {
+    "name": "self-orchestrator",
+    "did": "did:iota:testnet:0x7cb4f7bd777e7c90e26640bdb47efa9f9fe95f1dce64e9bb0edc7c32fd9d9472",
+    "objectId": "0x7cb4f7bd777e7c90e26640bdb47efa9f9fe95f1dce64e9bb0edc7c32fd9d9472",
+    "controller": {
+     "kind": "identity",
+     "did": "did:iota:testnet:0x6b9a693ebf2ac6fb771a75d25b1284ba75aeb0ae16618eaf5d41d24828a6f7a2",
+     "objectId": "0x6b9a693ebf2ac6fb771a75d25b1284ba75aeb0ae16618eaf5d41d24828a6f7a2"
+    },
+    "keys": [
+     {
+      "kid": "did:iota:testnet:0x7cb4f7bd777e7c90e26640bdb47efa9f9fe95f1dce64e9bb0edc7c32fd9d9472#sig-1",
+      "type": "Ed25519",
+      "relationships": [
+       "authentication",
+       "assertionMethod"
+      ],
+      "publicKeyHex": "385dd7c6ba0be9fbfa2b5f9a3d8c76fa62a484a87e2735a6a085340f233749e5",
+      "publicKeyJwk": {
+       "kty": "OKP",
+       "crv": "Ed25519",
+       "x": "OF3XxroL6fv6K1-aPYx2-mKkhKh-JzWmoIU0DyM3SeU",
+       "alg": "EdDSA"
+      }
+     },
+     {
+      "kid": "did:iota:testnet:0x7cb4f7bd777e7c90e26640bdb47efa9f9fe95f1dce64e9bb0edc7c32fd9d9472#kex-1",
+      "type": "X25519",
+      "relationships": [
+       "keyAgreement"
+      ],
+      "publicKeyHex": "e5933f89b75ab0f0434fb67462f77173c3c2f86f777399fe83bbbf89df776810",
+      "publicKeyJwk": {
+       "kty": "OKP",
+       "crv": "X25519",
+       "x": "5ZM_ibdasPBDT7Z0Yvdxc8PC-G93c5n-g7u_id93aBA"
+      }
+     }
+    ],
+    "createdTx": "CJTm7r3HmXoutZZLpkJoApTXxXXAznntCNWAFWobuP7x",
+    "createdAt": "2026-10-06T14:30:51.335Z",
+    "links": {
+     "identity": "https://explorer.iota.org/object/0x7cb4f7bd777e7c90e26640bdb47efa9f9fe95f1dce64e9bb0edc7c32fd9d9472?network=testnet",
+     "createdTx": "https://explorer.iota.org/txblock/CJTm7r3HmXoutZZLpkJoApTXxXXAznntCNWAFWobuP7x?network=testnet"
+    }
+   },
+   {
+    "name": "relay",
+    "did": "did:iota:testnet:0xe6cf1bf1e06f82d7956585085306fc23daee082cc75120459f7d39bb152f0459",
+    "objectId": "0xe6cf1bf1e06f82d7956585085306fc23daee082cc75120459f7d39bb152f0459",
+    "controller": {
+     "kind": "identity",
+     "did": "did:iota:testnet:0x6b9a693ebf2ac6fb771a75d25b1284ba75aeb0ae16618eaf5d41d24828a6f7a2",
+     "objectId": "0x6b9a693ebf2ac6fb771a75d25b1284ba75aeb0ae16618eaf5d41d24828a6f7a2"
+    },
+    "keys": [
+     {
+      "kid": "did:iota:testnet:0xe6cf1bf1e06f82d7956585085306fc23daee082cc75120459f7d39bb152f0459#sig-1",
+      "type": "Ed25519",
+      "relationships": [
+       "authentication",
+       "assertionMethod"
+      ],
+      "publicKeyHex": "6358aae88a14591b0b39dc6ff6db4a890ca2d458b120afe2052a3e7fa73b620a",
+      "publicKeyJwk": {
+       "kty": "OKP",
+       "crv": "Ed25519",
+       "x": "Y1iq6IoUWRsLOdxv9ttKiQyi1FixIK_iBSo-f6c7Ygo",
+       "alg": "EdDSA"
+      }
+     },
+     {
+      "kid": "did:iota:testnet:0xe6cf1bf1e06f82d7956585085306fc23daee082cc75120459f7d39bb152f0459#kex-1",
+      "type": "X25519",
+      "relationships": [
+       "keyAgreement"
+      ],
+      "publicKeyHex": "331fe7d8e06ebd962f4f7a9928d69b2082a2c5fc57a1f8db1069c2c25aefc77b",
+      "publicKeyJwk": {
+       "kty": "OKP",
+       "crv": "X25519",
+       "x": "Mx_n2OBuvZYvT3qZKNabIIKixfxXofjbEGnCwlrvx3s"
+      }
+     }
+    ],
+    "createdTx": "AWcqKhqixKGf8sk4txHKBKku65ydAtzSKsYnugeqVuhE",
+    "createdAt": "2026-10-06T14:30:54.027Z",
+    "links": {
+     "identity": "https://explorer.iota.org/object/0xe6cf1bf1e06f82d7956585085306fc23daee082cc75120459f7d39bb152f0459?network=testnet",
+     "createdTx": "https://explorer.iota.org/txblock/AWcqKhqixKGf8sk4txHKBKku65ydAtzSKsYnugeqVuhE?network=testnet"
+    }
+   },
+   {
+    "name": "anchor",
+    "did": "did:iota:testnet:0x6b5cef6e575705bd1e3486fee9929d695fbc0a06650b8a2ef4d252f69ce12d59",
+    "objectId": "0x6b5cef6e575705bd1e3486fee9929d695fbc0a06650b8a2ef4d252f69ce12d59",
+    "controller": {
+     "kind": "identity",
+     "did": "did:iota:testnet:0x6b9a693ebf2ac6fb771a75d25b1284ba75aeb0ae16618eaf5d41d24828a6f7a2",
+     "objectId": "0x6b9a693ebf2ac6fb771a75d25b1284ba75aeb0ae16618eaf5d41d24828a6f7a2"
+    },
+    "keys": [
+     {
+      "kid": "did:iota:testnet:0x6b5cef6e575705bd1e3486fee9929d695fbc0a06650b8a2ef4d252f69ce12d59#sig-1",
+      "type": "Ed25519",
+      "relationships": [
+       "authentication",
+       "assertionMethod"
+      ],
+      "publicKeyHex": "5efcd90ebc39345a64b79369d4351d609fb8a11a0ff3a2a7399b2ede88668b98",
+      "publicKeyJwk": {
+       "kty": "OKP",
+       "crv": "Ed25519",
+       "x": "XvzZDrw5NFpkt5Np1DUdYJ-4oRoP86KnOZsu3ohmi5g",
+       "alg": "EdDSA"
+      }
+     },
+     {
+      "kid": "did:iota:testnet:0x6b5cef6e575705bd1e3486fee9929d695fbc0a06650b8a2ef4d252f69ce12d59#kex-1",
+      "type": "X25519",
+      "relationships": [
+       "keyAgreement"
+      ],
+      "publicKeyHex": "0147a755a602bf13e0b8c2d5d7884e5faa0df173d8ec8c604152e275b4a0d007",
+      "publicKeyJwk": {
+       "kty": "OKP",
+       "crv": "X25519",
+       "x": "AUenVaYCvxPguMLV14hOX6oN8XPY7IxgQVLidbSg0Ac"
+      }
+     }
+    ],
+    "createdTx": "3J6qEzk8YJmxF4ehFQ6nvYCGfV2MNVAh7V8iwz3p4NzY",
+    "createdAt": "2026-10-06T14:30:56.804Z",
+    "links": {
+     "identity": "https://explorer.iota.org/object/0x6b5cef6e575705bd1e3486fee9929d695fbc0a06650b8a2ef4d252f69ce12d59?network=testnet",
+     "createdTx": "https://explorer.iota.org/txblock/3J6qEzk8YJmxF4ehFQ6nvYCGfV2MNVAh7V8iwz3p4NzY?network=testnet"
+    }
+   }
+  ],
+  "previous": [
+   {
+    "name": "domain",
+    "did": "did:iota:testnet:0xb4833e9fd4285c5f399484e07419a1b475b5bdd8a254a79c23f1fd19c8d82476",
+    "objectId": "0xb4833e9fd4285c5f399484e07419a1b475b5bdd8a254a79c23f1fd19c8d82476",
+    "controller": null,
+    "keys": [
+     {
+      "kid": "did:iota:testnet:0xb4833e9fd4285c5f399484e07419a1b475b5bdd8a254a79c23f1fd19c8d82476#sig-1",
+      "type": "Ed25519",
+      "relationships": [
+       "authentication",
+       "assertionMethod"
+      ],
+      "publicKeyHex": "f819d20f468f1378247712b70ca6efe8873fbcccb4c940f7c5ec883cfb8be340",
+      "publicKeyJwk": {
+       "kty": "OKP",
+       "crv": "Ed25519",
+       "x": "-BnSD0aPE3gkdxK3DKbv6Ic_vMy0yUD3xeyIPPuL40A",
+       "alg": "EdDSA"
+      }
+     },
+     {
+      "kid": "did:iota:testnet:0xb4833e9fd4285c5f399484e07419a1b475b5bdd8a254a79c23f1fd19c8d82476#kex-1",
+      "type": "X25519",
+      "relationships": [
+       "keyAgreement"
+      ],
+      "publicKeyHex": "0b10c214b3d2b7b50a1a814c4e000ad9a7b7620240de44573d17b40b38edd047",
+      "publicKeyJwk": {
+       "kty": "OKP",
+       "crv": "X25519",
+       "x": "CxDCFLPSt7UKGoFMTgAK2ae3YgJA3kRXPRe0Czjt0Ec"
+      }
+     }
+    ],
+    "createdTx": "58gmczR9vgf8cdES5XTEFbiRpWRD2FRCViqaoefUNmCp",
+    "createdAt": "2026-10-06T12:18:01.201Z",
+    "links": {
+     "identity": "https://explorer.iota.org/object/0xb4833e9fd4285c5f399484e07419a1b475b5bdd8a254a79c23f1fd19c8d82476?network=testnet",
+     "createdTx": "https://explorer.iota.org/txblock/58gmczR9vgf8cdES5XTEFbiRpWRD2FRCViqaoefUNmCp?network=testnet"
+    },
+    "retiredAt": "2026-10-06T14:30:39.016Z",
+    "reason": "replaced by identities controlled by the domain DID"
+   },
+   {
+    "name": "trust-manager",
+    "did": "did:iota:testnet:0xd7f18edbb6271a62d393f0c5c1f7267799b24f93273ae3575834baf47add3771",
+    "objectId": "0xd7f18edbb6271a62d393f0c5c1f7267799b24f93273ae3575834baf47add3771",
+    "controller": null,
+    "keys": [
+     {
+      "kid": "did:iota:testnet:0xd7f18edbb6271a62d393f0c5c1f7267799b24f93273ae3575834baf47add3771#sig-1",
+      "type": "Ed25519",
+      "relationships": [
+       "authentication",
+       "assertionMethod"
+      ],
+      "publicKeyHex": "7fc3f3b72d92492962456bbd7674e07943c0d190be386e24459834abbffcfe36",
+      "publicKeyJwk": {
+       "kty": "OKP",
+       "crv": "Ed25519",
+       "x": "f8Pzty2SSSliRWu9dnTgeUPA0ZC-OG4kRZg0q7_8_jY",
+       "alg": "EdDSA"
+      }
+     },
+     {
+      "kid": "did:iota:testnet:0xd7f18edbb6271a62d393f0c5c1f7267799b24f93273ae3575834baf47add3771#kex-1",
+      "type": "X25519",
+      "relationships": [
+       "keyAgreement"
+      ],
+      "publicKeyHex": "8372bbf73cdd22e1ffec398c09774e62f6904f7994552e75d618555ca015547e",
+      "publicKeyJwk": {
+       "kty": "OKP",
+       "crv": "X25519",
+       "x": "g3K79zzdIuH_7DmMCXdOYvaQT3mUVS511hhVXKAVVH4"
+      }
+     }
+    ],
+    "createdTx": "Gkne4Ezva4mqKWhJ195pweTmWBjHBZPxzkQoiTL33eya",
+    "createdAt": "2026-10-06T12:18:04.083Z",
+    "links": {
+     "identity": "https://explorer.iota.org/object/0xd7f18edbb6271a62d393f0c5c1f7267799b24f93273ae3575834baf47add3771?network=testnet",
+     "createdTx": "https://explorer.iota.org/txblock/Gkne4Ezva4mqKWhJ195pweTmWBjHBZPxzkQoiTL33eya?network=testnet"
+    },
+    "retiredAt": "2026-10-06T14:30:39.016Z",
+    "reason": "replaced by identities controlled by the domain DID"
+   },
+   {
+    "name": "llo-k8s",
+    "did": "did:iota:testnet:0x4c9ff7d99b646d8866f6b2e7be3a75d6ad57f2867be25d06531815a64096dfb8",
+    "objectId": "0x4c9ff7d99b646d8866f6b2e7be3a75d6ad57f2867be25d06531815a64096dfb8",
+    "controller": null,
+    "keys": [
+     {
+      "kid": "did:iota:testnet:0x4c9ff7d99b646d8866f6b2e7be3a75d6ad57f2867be25d06531815a64096dfb8#sig-1",
+      "type": "Ed25519",
+      "relationships": [
+       "authentication",
+       "assertionMethod"
+      ],
+      "publicKeyHex": "2454d7465436c2567a19d41cadb300284adf9015802294bd8a13421b3a6f2974",
+      "publicKeyJwk": {
+       "kty": "OKP",
+       "crv": "Ed25519",
+       "x": "JFTXRlQ2wlZ6GdQcrbMAKErfkBWAIpS9ihNCGzpvKXQ",
+       "alg": "EdDSA"
+      }
+     },
+     {
+      "kid": "did:iota:testnet:0x4c9ff7d99b646d8866f6b2e7be3a75d6ad57f2867be25d06531815a64096dfb8#kex-1",
+      "type": "X25519",
+      "relationships": [
+       "keyAgreement"
+      ],
+      "publicKeyHex": "11834a526b870e7bbbcd8d72e058babf94b26dfe5820ba109c4a73b5e9414376",
+      "publicKeyJwk": {
+       "kty": "OKP",
+       "crv": "X25519",
+       "x": "EYNKUmuHDnu7zY1y4Fi6v5Sybf5YILoQnEpztelBQ3Y"
+      }
+     }
+    ],
+    "createdTx": "8Q9RfbGDVhhV7sScRMJNevVnz6bEwpuj7jJAHSMknzub",
+    "createdAt": "2026-10-06T12:18:06.914Z",
+    "links": {
+     "identity": "https://explorer.iota.org/object/0x4c9ff7d99b646d8866f6b2e7be3a75d6ad57f2867be25d06531815a64096dfb8?network=testnet",
+     "createdTx": "https://explorer.iota.org/txblock/8Q9RfbGDVhhV7sScRMJNevVnz6bEwpuj7jJAHSMknzub?network=testnet"
+    },
+    "retiredAt": "2026-10-06T14:30:39.016Z",
+    "reason": "replaced by identities controlled by the domain DID"
+   },
+   {
+    "name": "self-orchestrator",
+    "did": "did:iota:testnet:0x50d61c0c17c167822a8fb7eef0080b84408d0221908091cfa4dbf45a7b50a09c",
+    "objectId": "0x50d61c0c17c167822a8fb7eef0080b84408d0221908091cfa4dbf45a7b50a09c",
+    "controller": null,
+    "keys": [
+     {
+      "kid": "did:iota:testnet:0x50d61c0c17c167822a8fb7eef0080b84408d0221908091cfa4dbf45a7b50a09c#sig-1",
+      "type": "Ed25519",
+      "relationships": [
+       "authentication",
+       "assertionMethod"
+      ],
+      "publicKeyHex": "63aeaf0ddf1d13c6efa87ffb85d3cb3c75ec30f589a605a7d52129b40071a575",
+      "publicKeyJwk": {
+       "kty": "OKP",
+       "crv": "Ed25519",
+       "x": "Y66vDd8dE8bvqH_7hdPLPHXsMPWJpgWn1SEptABxpXU",
+       "alg": "EdDSA"
+      }
+     },
+     {
+      "kid": "did:iota:testnet:0x50d61c0c17c167822a8fb7eef0080b84408d0221908091cfa4dbf45a7b50a09c#kex-1",
+      "type": "X25519",
+      "relationships": [
+       "keyAgreement"
+      ],
+      "publicKeyHex": "9153233abac461d127500142341ff53def3517ddff72f909caf8bc9d49ab147d",
+      "publicKeyJwk": {
+       "kty": "OKP",
+       "crv": "X25519",
+       "x": "kVMjOrrEYdEnUAFCNB_1Pe81F93_cvkJyvi8nUmrFH0"
+      }
+     }
+    ],
+    "createdTx": "6m9dkX3mwqZSTPytqYahjZ3Yh3N8kpcvcdgw1NYAyG8A",
+    "createdAt": "2026-10-06T12:18:09.891Z",
+    "links": {
+     "identity": "https://explorer.iota.org/object/0x50d61c0c17c167822a8fb7eef0080b84408d0221908091cfa4dbf45a7b50a09c?network=testnet",
+     "createdTx": "https://explorer.iota.org/txblock/6m9dkX3mwqZSTPytqYahjZ3Yh3N8kpcvcdgw1NYAyG8A?network=testnet"
+    },
+    "retiredAt": "2026-10-06T14:30:39.016Z",
+    "reason": "replaced by identities controlled by the domain DID"
+   },
+   {
+    "name": "relay",
+    "did": "did:iota:testnet:0xc4c749d6c8e08d45edfe50221fdf1912f92cd448bf934d52e6e2a82dfc1a5747",
+    "objectId": "0xc4c749d6c8e08d45edfe50221fdf1912f92cd448bf934d52e6e2a82dfc1a5747",
+    "controller": null,
+    "keys": [
+     {
+      "kid": "did:iota:testnet:0xc4c749d6c8e08d45edfe50221fdf1912f92cd448bf934d52e6e2a82dfc1a5747#sig-1",
+      "type": "Ed25519",
+      "relationships": [
+       "authentication",
+       "assertionMethod"
+      ],
+      "publicKeyHex": "d360266cba1c65e0cfc7438faeea039ede8f3e79856ee20c5fc0e47f3c48be32",
+      "publicKeyJwk": {
+       "kty": "OKP",
+       "crv": "Ed25519",
+       "x": "02AmbLocZeDPx0OPruoDnt6PPnmFbuIMX8DkfzxIvjI",
+       "alg": "EdDSA"
+      }
+     },
+     {
+      "kid": "did:iota:testnet:0xc4c749d6c8e08d45edfe50221fdf1912f92cd448bf934d52e6e2a82dfc1a5747#kex-1",
+      "type": "X25519",
+      "relationships": [
+       "keyAgreement"
+      ],
+      "publicKeyHex": "9fbcf774e5d6c40701e4be7d39ffc6629ebfa59794de4fad0b121bb4af7aa05b",
+      "publicKeyJwk": {
+       "kty": "OKP",
+       "crv": "X25519",
+       "x": "n7z3dOXWxAcB5L59Of_GYp6_pZeU3k-tCxIbtK96oFs"
+      }
+     }
+    ],
+    "createdTx": "7rjRyRhDEFtqrj9fqMJGfXDq4Lq3WPZ9qUW9WoMtZJpv",
+    "createdAt": "2026-10-06T12:18:12.757Z",
+    "links": {
+     "identity": "https://explorer.iota.org/object/0xc4c749d6c8e08d45edfe50221fdf1912f92cd448bf934d52e6e2a82dfc1a5747?network=testnet",
+     "createdTx": "https://explorer.iota.org/txblock/7rjRyRhDEFtqrj9fqMJGfXDq4Lq3WPZ9qUW9WoMtZJpv?network=testnet"
+    },
+    "retiredAt": "2026-10-06T14:30:39.016Z",
+    "reason": "replaced by identities controlled by the domain DID"
+   },
+   {
+    "name": "anchor",
+    "did": "did:iota:testnet:0xb063931151622471b23fb59b2ff654259eb8a72e3cfe602ec29fff5fcd7d67bc",
+    "objectId": "0xb063931151622471b23fb59b2ff654259eb8a72e3cfe602ec29fff5fcd7d67bc",
+    "controller": null,
+    "keys": [
+     {
+      "kid": "did:iota:testnet:0xb063931151622471b23fb59b2ff654259eb8a72e3cfe602ec29fff5fcd7d67bc#sig-1",
+      "type": "Ed25519",
+      "relationships": [
+       "authentication",
+       "assertionMethod"
+      ],
+      "publicKeyHex": "67143c4930f9f966b03cbd5ffa53e8e91031fe4ec072e70124ecbde0a7df3234",
+      "publicKeyJwk": {
+       "kty": "OKP",
+       "crv": "Ed25519",
+       "x": "ZxQ8STD5-WawPL1f-lPo6RAx_k7AcucBJOy94KffMjQ",
+       "alg": "EdDSA"
+      }
+     },
+     {
+      "kid": "did:iota:testnet:0xb063931151622471b23fb59b2ff654259eb8a72e3cfe602ec29fff5fcd7d67bc#kex-1",
+      "type": "X25519",
+      "relationships": [
+       "keyAgreement"
+      ],
+      "publicKeyHex": "9546dbf74f6e91f6a7241bdc72de4988ba3f63b1e0bbffab49e78332f7c2bf51",
+      "publicKeyJwk": {
+       "kty": "OKP",
+       "crv": "X25519",
+       "x": "lUbb909ukfanJBvcct5JiLo_Y7Hgu_-rSeeDMvfCv1E"
+      }
+     }
+    ],
+    "createdTx": "BdfRT1S6j12rjnE79DnFiAxGG2PscxM9cmGip6XswsGg",
+    "createdAt": "2026-10-06T12:18:15.619Z",
+    "links": {
+     "identity": "https://explorer.iota.org/object/0xb063931151622471b23fb59b2ff654259eb8a72e3cfe602ec29fff5fcd7d67bc?network=testnet",
+     "createdTx": "https://explorer.iota.org/txblock/BdfRT1S6j12rjnE79DnFiAxGG2PscxM9cmGip6XswsGg?network=testnet"
+    },
+    "retiredAt": "2026-10-06T14:30:39.016Z",
+    "reason": "replaced by identities controlled by the domain DID"
+   }
+  ]
+ },
+ "policy": {
+  "version": 1,
+  "hash": "0x3528f872e870cb009dd06557c8d5b1bba21050e222a35b60e2a5e4329c70be4e",
+  "tags": {
+   "trust.score": {
+    "allowed": [
+     "did:iota:testnet:0x15eb8c4d90fa4fff1d49f3ae8b1676a61e09c883303acd383cbfaacb538db9ba"
+    ],
+    "requireSignature": true,
+    "legacyGrace": false
+   },
+   "LLO-K8s": {
+    "allowed": [
+     "did:iota:testnet:0x5a50c4a62cd8281d82f2f9526a6593248bd404657cf01130221839154698e715",
+     "did:iota:testnet:0xe6cf1bf1e06f82d7956585085306fc23daee082cc75120459f7d39bb152f0459"
+    ],
+    "requireSignature": false,
+    "legacyGrace": true
+   },
+   "LLO-Docker": {
+    "allowed": [
+     "did:iota:testnet:0x5a50c4a62cd8281d82f2f9526a6593248bd404657cf01130221839154698e715",
+     "did:iota:testnet:0xe6cf1bf1e06f82d7956585085306fc23daee082cc75120459f7d39bb152f0459"
+    ],
+    "requireSignature": false,
+    "legacyGrace": true
+   },
+   "self-orchestrator": {
+    "allowed": [
+     "did:iota:testnet:0x7cb4f7bd777e7c90e26640bdb47efa9f9fe95f1dce64e9bb0edc7c32fd9d9472",
+     "did:iota:testnet:0xe6cf1bf1e06f82d7956585085306fc23daee082cc75120459f7d39bb152f0459"
+    ],
+    "requireSignature": false,
+    "legacyGrace": true
+   },
+   "self-security": {
+    "allowed": [
+     "did:iota:testnet:0xe6cf1bf1e06f82d7956585085306fc23daee082cc75120459f7d39bb152f0459"
+    ],
+    "requireSignature": false,
+    "legacyGrace": true
+   },
+   "audit.report": {
+    "allowed": [
+     "did:iota:testnet:0x6b9a693ebf2ac6fb771a75d25b1284ba75aeb0ae16618eaf5d41d24828a6f7a2",
+     "did:iota:testnet:0x15eb8c4d90fa4fff1d49f3ae8b1676a61e09c883303acd383cbfaacb538db9ba",
+     "did:iota:testnet:0xe6cf1bf1e06f82d7956585085306fc23daee082cc75120459f7d39bb152f0459"
+    ],
+    "requireSignature": false,
+    "legacyGrace": true
+   },
+   "witness.anchor": {
+    "allowed": [
+     "did:iota:testnet:0x6b5cef6e575705bd1e3486fee9929d695fbc0a06650b8a2ef4d252f69ce12d59"
+    ],
+    "requireSignature": false,
+    "legacyGrace": true
+   }
+  },
+  "default": {
+   "allowed": [
+    "*"
+   ],
+   "requireSignature": false,
+   "legacyGrace": true
+  }
+ }
+}

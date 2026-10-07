@@ -1,0 +1,38 @@
+{
+ "ieId": "ChaosDomain:ce1a02d5d474",
+ "entries": [
+  {
+   "blockId": "0xc52b619c8d6901795b3564ca1bb19b6b469e664318b56da1d96a6c5f15caa507",
+   "prev": null,
+   "seq": 1791350895702,
+   "kind": "trust.score",
+   "verdict": "PRODUCER_SIGNED",
+   "msIndex": 5399,
+   "wfIndex": 8,
+   "atMs": 1791350898000,
+   "at": "2026-10-07T05:28:18.000Z",
+   "score": 0.474,
+   "links": {
+    "self": "/messages/0xc52b619c8d6901795b3564ca1bb19b6b469e664318b56da1d96a6c5f15caa507",
+    "lifecycle": "/messages/0xc52b619c8d6901795b3564ca1bb19b6b469e664318b56da1d96a6c5f15caa507/lifecycle",
+    "proof": "/proofs/0xc52b619c8d6901795b3564ca1bb19b6b469e664318b56da1d96a6c5f15caa507"
+   }
+  }
+ ],
+ "total": 1,
+ "ledger": {
+  "score": 0.474,
+  "blockId": "0xc52b619c8d6901795b3564ca1bb19b6b469e664318b56da1d96a6c5f15caa507",
+  "verdict": "PRODUCER_SIGNED",
+  "msIndex": 5399,
+  "atMs": 1791350898000,
+  "at": "2026-10-07T05:28:18.000Z"
+ },
+ "orion": {
+  "status": "unknown_entity",
+  "value": null,
+  "entityId": "urn:ngsi-ld:InfrastructureElement:ChaosDomain:ce1a02d5d474"
+ },
+ "drift": null,
+ "epsilon": 0.01
+}

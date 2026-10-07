@@ -188,7 +188,8 @@ export function stepValue(step: Pick<StepView, "name" | "status" | "detail">): s
     case "envelope": {
       if (status === "pass") {
         const kid = /#[\w-]+$/.exec(detail)?.[0];
-        return kid ? `Ed25519, key ${kid}` : "Ed25519";
+        // a did:key fragment is the whole multibase key: shortened like the hashes (the full detail is next to it)
+        return kid ? `Ed25519, key ${kid.length > 16 ? `${kid.slice(0, 8)}…${kid.slice(-4)}` : kid}` : "Ed25519";
       }
       return /^FORGED/.test(detail) ? "signature rejected" : (detail.split(":")[0] ?? "rejected").toLowerCase();
     }
