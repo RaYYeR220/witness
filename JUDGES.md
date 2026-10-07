@@ -5,6 +5,8 @@ stack on your machine. What each check proves is in
 [docs/architecture.md](docs/architecture.md#the-proof-ladder); every claim and its evidence is
 in [CLAIMS.md](CLAIMS.md).
 
+No time at all? A two-minute walkthrough of the same console: [youtu.be/ArWoH4ses8Q](https://youtu.be/ArWoH4ses8Q).
+
 ## Five minutes
 
 ### 1. The replay console

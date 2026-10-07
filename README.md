@@ -8,6 +8,7 @@ and byte-for-byte the bytes that were sent). Each block is provable from raw byt
 checkpoint on public IOTA Rebased.
 
 Replay console, nothing to install: [https://rayyer220.github.io/witness/](https://rayyer220.github.io/witness/)
+· Two-minute demo video: [youtu.be/ArWoH4ses8Q](https://youtu.be/ArWoH4ses8Q)
 · Judges start here: [JUDGES.md](JUDGES.md)
 · Every claim with its evidence: [CLAIMS.md](CLAIMS.md)
 
