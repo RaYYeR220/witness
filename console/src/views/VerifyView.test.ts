@@ -128,6 +128,24 @@ describe("Verify", () => {
     w.unmount();
   });
 
+  it("reads a validly signed message with a body that breaks its schema as both holding", async () => {
+    const { data, lookups, blockId } = fakeData("valid_anchored", "MALFORMED");
+    const { w } = await mountScreen(VerifyView, { path: `/m/${blockId}`, data, lookups });
+    await until(() => w.find(".overall").attributes("data-o") === "VALID");
+    expect(w.find(".compare").text()).toContain("Both hold");
+    expect(w.find(".compare").text()).toContain("schema");
+    w.unmount();
+  });
+
+  it("still flags a malformed record with no issuer that passes every check", async () => {
+    const { data, lookups, blockId, message } = fakeData("valid_anchored", "MALFORMED");
+    (message as { iss: string | null }).iss = null;
+    const { w } = await mountScreen(VerifyView, { path: `/m/${blockId}`, data, lookups });
+    await until(() => w.find(".overall").attributes("data-o") === "VALID");
+    expect(w.find(".compare").text()).toContain("They disagree");
+    w.unmount();
+  });
+
   it("has no critical or serious axe violations", async () => {
     const { data, lookups, blockId } = fakeData("valid_anchored", "PRODUCER_SIGNED");
     const { w } = await mountScreen(VerifyView, { path: `/m/${blockId}`, data, lookups });

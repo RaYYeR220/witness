@@ -274,6 +274,14 @@ const comparison = computed(() => {
         text: `Both hold. The bytes, the milestone, the signature and the anchor are genuine, yet the indexer judged it ${verdictInfo(v).label.toLowerCase()}: a question of context (earlier messages, the writer policy) the five checks do not cover.`,
       };
     }
+    // The indexer keeps the issuer of a MALFORMED message only when the signature checked out
+    // and the body broke its tag's schema; a broken envelope has no recorded issuer.
+    if (v === "MALFORMED" && msg.value?.iss) {
+      return {
+        tone: "note",
+        text: "Both hold. The bytes, the milestone, the signature and the anchor are genuine, yet the indexer judged it malformed: the signed body breaks its tag's schema, which the five checks do not cover.",
+      };
+    }
     return { tone: "bad", text: `They disagree. The indexer recorded ${verdictInfo(v).label.toLowerCase()}; every check passed in your browser.` };
   }
   if (v === "UNSIGNED_LEGACY" && o === "PARTIAL") {

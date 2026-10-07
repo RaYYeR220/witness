@@ -65,7 +65,7 @@ const VERDICT_INFO: Record<string, { label: string; family: VerdictFamily; gloss
   REPLAY: { label: "Replay", family: "rejected", gloss: "A copy of a message already on the ledger, or a reused sequence number." },
   REVOKED_KEY: { label: "Revoked key", family: "rejected", gloss: "Signed with a key revoked before the message was confirmed." },
   UNAUTHORIZED_WRITER: { label: "Unauthorized writer", family: "rejected", gloss: "Correctly signed, but by an identity the writer policy does not allow for this tag." },
-  MALFORMED: { label: "Malformed", family: "rejected", gloss: "Claims to be a signed envelope but does not follow its format." },
+  MALFORMED: { label: "Malformed", family: "rejected", gloss: "Breaks the envelope format, is validly signed but its body breaks its tag's schema, or is not a JSON object on a known aeriOS tag." },
 };
 
 export function verdictInfo(v: string | null | undefined): { label: string; family: VerdictFamily; gloss: string } {
