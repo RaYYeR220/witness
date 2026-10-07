@@ -51,6 +51,24 @@ Every port is published on the loopback interfaces only, 127.0.0.1 and ::1
 (`localhost` resolves to ::1 first on some hosts). The organisers' HORNET compose
 publishes on all interfaces; `hornet-loopback.yml` overrides that.
 
+On a host without IPv6 the `[::1]` bindings fail ("cannot assign requested address"). Keep
+the IPv4 ones with a local override file (not committed) that replaces each service's port
+list, and pass it after the file it overrides:
+
+```yaml
+# deploy/compose/witness.ipv4.yml
+services:
+  witness-console: {ports: !override ["127.0.0.1:8080:8080"]}
+  witness-api: {ports: !override ["127.0.0.1:7200:7200"]}
+  witness-relay: {ports: !override ["127.0.0.1:5557:5555"]}
+  witness-anchor: {ports: !override ["127.0.0.1:7300:7300"]}
+  trust-manager-witness: {ports: !override ["127.0.0.1:3101:3000"]}
+```
+
+`docker compose -f deploy/compose/docker-compose.witness.yml -f deploy/compose/witness.ipv4.yml up -d`;
+the base compose files (`hornet-loopback.yml`, `messages-api.yml`, `inx-poi.yml`,
+`docker-compose.aerios.yml`) take the same kind of override.
+
 Check it is alive: `curl -s localhost:14265/api/core/v2/info` and watch
 `confirmedMilestone.index` grow about every 5 seconds. `isHealthy` stays
 `false` on this single-node private Tangle; that is expected.
@@ -191,7 +209,12 @@ served by the API at `GET /incidents` and `GET /incidents/{id}`.
 - `--no-incidents` turns the engine off.
 
 ```bash
-mosquitto_sub -h 127.0.0.1 -u observer -P "$(cat secrets/mosquitto/observer.password)" -t 'witness/alerts/#' -v
+# The read-only observer login, from an options file rather than the command line
+# (mosquitto_sub reads ~/.config/mosquitto_sub; printf is a shell builtin, so the password
+# never shows up in the process list).
+(umask 077; mkdir -p ~/.config && printf -- '-u observer\n-P %s\n' \
+  "$(cat secrets/mosquitto/observer.password)" > ~/.config/mosquitto_sub)
+mosquitto_sub -h 127.0.0.1 -t 'witness/alerts/#' -v
 ```
 
 Health shows up in `Store.stats()`, and so in `GET /stats` under `services` (row counts are
@@ -369,7 +392,8 @@ that exist before the release:
 
 ```bash
 # Database URLs: postgres/*.dsn from setup-secrets.sh, edited for the cluster's database host.
-# Create the relay's role there first: RELAY_DB_PASSWORD=... psql -f deploy/compose/db-init.sql
+# Create the relay's role there first (the password goes through the environment):
+#   RELAY_DB_PASSWORD="$(cat secrets/postgres/relay.password)" psql -f deploy/compose/db-init.sql
 kubectl create secret generic witness-db --from-file=dsn=secrets/postgres/explorer.dsn
 kubectl create secret generic witness-relay-db --from-file=dsn=secrets/postgres/relay.dsn
 kubectl create secret generic witness-relay-env --from-env-file=secrets/compose/relay.env
@@ -389,8 +413,29 @@ helm install witness deploy/helm/witness --set anchor.loop=true --set anchor.add
 Values from files, never from the command line (`--from-literal` leaves passwords in the
 shell history and the process list). The broker URLs inside the env files name
 `witness-mosquitto`; point them at the cluster's broker. The database URL in the env files is
-overridden by the chart's database Secrets. Images are built from the Dockerfiles above and pushed to your
-registry (`<component>.image.repository`); CI builds them but publishes nothing.
+overridden by the chart's database Secrets. Images are built from the Dockerfiles above and
+pushed to your registry (`<component>.image.repository`); CI builds them but publishes nothing.
+
+### A fresh clone with your own identities
+
+The committed `deploy/identity/testnet.json`, `deploy/policy.json` and the console's pins
+(`console/src/config/verifier.json`) name this project's DIDs, Audit Trail and wallet. To run
+under your own:
+
+1. Fund an IOTA Rebased testnet address in an IOTA CLI keystore. In `deploy/compose/.env`
+   set `WITNESS_IOTA_KEYSTORE` (the keystore file), `WITNESS_ANCHOR_ADDRESS` and leave
+   `WITNESS_TRAIL_ID` empty.
+2. Create the DIDs and keys:
+   `ANCHOR_KEYSTORE_PATH=<keystore file> ANCHOR_ADDRESS=0x... SECRETS_DIR=../secrets pnpm --filter @witness/anchor bootstrap:identities`.
+   It writes the public side to `deploy/identity/testnet.json` and the private keys to
+   `secrets/<component>/`.
+3. Rewrite the writer policy from that file: `python scripts/make_policy.py` (each aeriOS
+   tag to the components that write it). Or keep a policy of your own elsewhere and point
+   `WITNESS_POLICY_FILE` at it; relay, indexer, API and anchor all read that one file.
+4. `deploy/compose/stack-up.sh --witness`. The anchor creates a trail on its first window
+   (`docker logs witness-anchor`, "trail created"); put its id in `WITNESS_TRAIL_ID` and run
+   `docker compose -f deploy/compose/docker-compose.witness.yml up -d --build`, so the API
+   serves it and the console image pins it with your writer address.
 
 ## Troubleshooting
 
