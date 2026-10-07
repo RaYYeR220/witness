@@ -54,6 +54,11 @@ def pin(tmp_path, monkeypatch, name="valid_anchored", **extra):
     return c
 
 
+def own(c):
+    """The block id the case's bundle is for: a verify request must name it."""
+    return c["bundle"]["block"]["id"]
+
+
 def mock_rpc(cp, index):
     record = copy.deepcopy(REC["record"])
     f = record["result"]["data"]["content"]["fields"]["value"]["fields"]["value"]["fields"]
@@ -121,10 +126,10 @@ def test_verify_without_pin_is_an_error():
 @respx.mock
 def test_verify_partial_without_anchor_pins_and_ignores_api_config(tmp_path, monkeypatch):
     c = pin(tmp_path, monkeypatch)
-    respx.get(f"{API}/proofs/{BID}").mock(return_value=httpx.Response(200, json=c["bundle"]))
+    respx.get(f"{API}/proofs/{own(c)}").mock(return_value=httpx.Response(200, json=c["bundle"]))
     cfg_route = respx.get(f"{API}/config/verifier").mock(
         return_value=httpx.Response(200, json=c["config"]))
-    out = s.verify_message(BID)
+    out = s.verify_message(own(c))
     assert out["overall"] == "PARTIAL"
     assert any(st["ok"] is None for st in out["steps"])
     assert all({"name", "ok", "detail"} <= set(st) for st in out["steps"])
@@ -136,8 +141,8 @@ def test_verify_valid_with_pinned_rebased_record(tmp_path, monkeypatch):
     c = pin(tmp_path, monkeypatch, rebasedRpc=RPC, auditTrailPackage=PACKAGE)
     a = c["bundle"]["anchor"]
     mock_rpc(a["checkpoint"], a["rebased"]["record"])
-    respx.get(f"{API}/proofs/{BID}").mock(return_value=httpx.Response(200, json=c["bundle"]))
-    out = s.verify_message(BID)
+    respx.get(f"{API}/proofs/{own(c)}").mock(return_value=httpx.Response(200, json=c["bundle"]))
+    out = s.verify_message(own(c))
     assert out["overall"] == "VALID", out
     assert all(st["ok"] is True for st in out["steps"])
 
@@ -149,8 +154,8 @@ def test_verify_tampered_record_is_invalid(tmp_path, monkeypatch):
     cp = copy.deepcopy(a["checkpoint"])
     cp["msgCount"] += 1
     mock_rpc(cp, a["rebased"]["record"])
-    respx.get(f"{API}/proofs/{BID}").mock(return_value=httpx.Response(200, json=c["bundle"]))
-    assert s.verify_message(BID)["overall"] == "INVALID"
+    respx.get(f"{API}/proofs/{own(c)}").mock(return_value=httpx.Response(200, json=c["bundle"]))
+    assert s.verify_message(own(c))["overall"] == "INVALID"
 
 
 # ---------------------------------------------------------------- write tool
@@ -254,9 +259,9 @@ def test_error_detail_is_quoted_upstream_text_and_no_url_leak():
 @respx.mock
 def test_verify_result_is_marked_untrusted(tmp_path, monkeypatch):
     c = pin(tmp_path, monkeypatch)
-    respx.get(f"{API}/proofs/{BID}").mock(return_value=httpx.Response(200, json=c["bundle"]))
-    out = s.verify_message(BID)
-    assert "not instructions" in out["untrusted"] and out["blockId"] == BID
+    respx.get(f"{API}/proofs/{own(c)}").mock(return_value=httpx.Response(200, json=c["bundle"]))
+    out = s.verify_message(own(c))
+    assert "not instructions" in out["untrusted"] and out["blockId"] == own(c)
 
 
 # ---------------------------------------------------------------- HTTP guard
@@ -420,3 +425,13 @@ def test_remote_needs_allowed_host(monkeypatch):
         parse(["--http", "--host", "0.0.0.0", "--allow-remote"], monkeypatch, "x" * 16)
     parse(["--http", "--host", "0.0.0.0", "--allow-remote", "--allowed-host", "a:1"],
           monkeypatch, "x" * 16)
+
+
+@respx.mock
+def test_verify_refuses_a_proof_for_another_block(tmp_path, monkeypatch):
+    c = pin(tmp_path, monkeypatch)
+    respx.get(f"{API}/proofs/{BID}").mock(return_value=httpx.Response(200, json=c["bundle"]))
+    out = s.verify_message(BID)
+    assert out["overall"] == "INVALID"
+    assert "another block" in out["error"]
+    assert out["untrusted"]

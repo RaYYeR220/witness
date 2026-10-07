@@ -584,6 +584,18 @@ def _overall(steps: list[StepResult]) -> Overall:
     return "PARTIAL"
 
 
+def served_block_id(b: Any) -> str | None:
+    """The block id a fetched bundle claims, lowercase, or None if it names none.
+
+    Step ① ties this id to the raw bytes, but nothing in the ladder ties it to the block the
+    caller asked for: a caller that fetched a bundle by id must compare the two itself, or an
+    API could answer with the valid proof of some other block.
+    """
+    block = b.get("block") if isinstance(b, dict) else None
+    bid = block.get("id") if isinstance(block, dict) else None
+    return bid.lower() if isinstance(bid, str) else None
+
+
 def verify(
     b: dict,
     cfg: VerifierConfig,

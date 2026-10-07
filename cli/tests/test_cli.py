@@ -135,13 +135,26 @@ def test_verify_json_is_machine_readable(files):
 def test_verify_from_api_uses_pinned_config_not_api_config(files, vectors):
     f = files("untrusted_key_set")  # pins attacker coordinator keys -> must be INVALID
     good = case(vectors, "valid_anchored")
-    respx.get(f"{API}/proofs/0xabc").mock(return_value=httpx.Response(200, json=good["bundle"]))
+    bid = good["bundle"]["block"]["id"]
+    respx.get(f"{API}/proofs/{bid}").mock(return_value=httpx.Response(200, json=good["bundle"]))
     cfg_route = respx.get(f"{API}/config/verifier").mock(
         return_value=httpx.Response(200, json=good["config"]))
-    r = runner.invoke(app, ["verify", "0xabc", "--from-api", "--api", API,
+    r = runner.invoke(app, ["verify", bid, "--from-api", "--api", API,
                             "--config", str(f["config"]), "--did-snapshot", str(f["snapshot"])])
     assert r.exit_code == 1, r.output
     assert not cfg_route.called
+
+
+@respx.mock
+def test_verify_from_api_refuses_a_proof_for_another_block(files, vectors):
+    f = files("valid_anchored")
+    good = case(vectors, "valid_anchored")
+    asked = "0x" + "ab" * 32
+    respx.get(f"{API}/proofs/{asked}").mock(return_value=httpx.Response(200, json=good["bundle"]))
+    r = runner.invoke(app, ["verify", asked, "--from-api", "--api", API,
+                            "--config", str(f["config"]), "--did-snapshot", str(f["snapshot"])])
+    assert r.exit_code == 1, r.output
+    assert "another block" in r.output
 
 
 @respx.mock

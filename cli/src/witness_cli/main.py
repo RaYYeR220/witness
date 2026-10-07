@@ -245,6 +245,10 @@ def verify(
     cfg = load_config(config)
     if from_api:
         doc = call("GET", api, f"/proofs/{quote(bundle, safe='')}")
+        served = wbundle.served_block_id(doc)
+        if served != bundle.lower():
+            fail(f"the API served a proof for another block ({served or 'none'}), "
+                 f"not {bundle}", EXIT_INVALID)
     elif bundle == "-":
         try:
             doc = nesting.loads(sys.stdin.read())

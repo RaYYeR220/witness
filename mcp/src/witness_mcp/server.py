@@ -291,6 +291,14 @@ def verify_message(block_id: str) -> dict[str, Any]:
     _check(block_id, BLOCK_ID, "block id")
     cfg = load_config()
     doc = call("GET", f"/proofs/{block_id}")
+    served = wbundle.served_block_id(doc)
+    if served != block_id.lower():
+        return untrusted({
+            "blockId": block_id,
+            "overall": "INVALID",
+            "steps": [],
+            "error": f"the API served a proof for another block ({served or 'none'})",
+        })
     fetch = rebased.make_fetcher(cfg, timeout=TIMEOUT) if cfg.rebased_rpc else None
     try:
         ladder = wbundle.verify(doc, cfg, fetch, _did_resolver())
