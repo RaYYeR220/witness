@@ -56,7 +56,7 @@ The member set is closed: an envelope with any other top-level member is `MALFOR
 | `iat` | yes | integer in `[0, 2^53 − 1]`: issue time, milliseconds since the Unix epoch |
 | `nonce` | yes | 16 random bytes, canonical unpadded base64url: exactly 22 characters of `[A-Za-z0-9_-]` that decode to 16 bytes and re-encode to the same string |
 | `att` | yes | object; `mode` is `"producer"` or `"relay"`; with `"relay"`, `sub` MUST be a non-empty string; when present, `sub` MUST be a string. Other members of `att` are not interpreted but are covered by the signature |
-| `body` | exactly one of `body`, `enc` | a JSON object, or `null` |
+| `body` | exactly one of `body`, `enc` | a JSON object (`null` passes the signature check but is `MALFORMED` in the explorer and refused by the relay) |
 | `enc` | exactly one of `body`, `enc` | object: a sealed body (section 5) |
 | `bix` | no | array of strings: blind index tokens (section 5.2) |
 | `cmt` | no | object whose values are strings: commitments (section 5.3) |
@@ -178,8 +178,8 @@ The explorer decides in this order and stops at the first that applies
 `{"version", "tags": {<tag>: {"allowed": [<DID>…], "require_signature", "legacy_grace"}},
 "default": {…}}`; an unlisted tag uses `default`, and `"*"` allows any issuer. Its hash,
 `BLAKE2b-256(JCS(policy))`, is committed in every checkpoint. On a tag with
-`require_signature`, an unsigned message raises the `UNSIGNED` alert; with `legacy_grace`
-false as well, the relay refuses unsigned uploads from callers without a Keycloak identity.
+`require_signature` and `legacy_grace` false, an unsigned message raises `UNSIGNED` and the
+relay refuses unsigned uploads from callers without a Keycloak identity.
 
 ### 7.2 Sequence numbers and nonces
 
