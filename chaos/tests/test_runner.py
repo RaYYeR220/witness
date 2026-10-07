@@ -698,3 +698,18 @@ def test_allow_nonlocal_is_a_recorded_flag():
     a = R._parser().parse_args(["run", "--allow-nonlocal"])
     cfg = R.config_from_args(a, environ={})
     assert cfg.allow_nonlocal is True and cfg.public()["allow_nonlocal"] is True
+
+
+@respx.mock
+async def test_alerts_older_than_the_injection_are_not_the_trials(key):
+    clock = Clock()
+    respx.get(f"{API}/messages/{BID}").mock(return_value=httpx.Response(
+        200, json={"verdict": "PRODUCER_SIGNED", "indexed": True}))
+    respx.get(f"{API}/alerts").mock(return_value=httpx.Response(200, json={"items": [
+        alert(1, "UNSIGNED", "medium", clock.ms - 60_000),
+        alert(2, "DB_TAMPER", "critical", clock.ms + 9_000)]}))
+    r = rec("A19", at=clock.ms)
+    o = await run_observe(key, "A19", r, clock, by_ie=False)
+    assert o.detected and list(o.alerts) == [2]
+    row = R.trial_row(cls(key, "A19"), 0, r, o, trial_start_ms=r.injected_at_ms)
+    assert row["alerts"] == ["DB_TAMPER"] and row["latency_ms"] == 9_000

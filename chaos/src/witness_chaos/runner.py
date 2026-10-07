@@ -442,7 +442,9 @@ async def snapshot(api: ExplorerApi, cls: dict, rec: InjectionRecord, o: Observa
             o.indexed = bool(msg.get("indexed", True))
             o.verdict = msg.get("verdict")
         for a in await api.alerts(block_id=rec.block_id):
-            o.alerts[a["id"]] = a
+            # An alert the block already carried before the injection is not this trial's.
+            if (a.get("atMs") or 0) >= rec.injected_at_ms:
+                o.alerts[a["id"]] = a
     if by_ie and rec.ie_id:
         for a in await api.alerts(ie=rec.ie_id, since_ms=since_ms):
             o.alerts[a["id"]] = a
