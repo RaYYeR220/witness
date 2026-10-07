@@ -12,8 +12,9 @@
 //
 // --chaos-revoked also creates `chaos-revoked`, a test identity for the fault-injection eval
 // (class A05): controlled by the domain DID like the components, with its #sig-1 removed
-// right after creation, so anything it signs later is REVOKED_KEY. It writes nothing anywhere;
-// the deploy file lists it under `eval` with the revocation, never among the components.
+// right after creation, so anything it signs later is REVOKED_KEY. No writer policy lists it.
+// Its keys go to ${SECRETS_DIR}/chaos-revoked/ like a component's; the deploy file lists it
+// under `eval` with the revocation, never among the components.
 //
 //   pnpm --filter @witness/anchor bootstrap:identities [--retire-existing] [--chaos-revoked]
 import path from "node:path";
