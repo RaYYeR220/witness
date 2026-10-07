@@ -488,7 +488,7 @@
     "evidence": {
      "delta": -0.8,
      "score": 0.1,
-     "reason": "score moved by -0.800 with no trustworthy security event for this IE in the preceding 300 s",
+     "reason": "score moved by -0.800 with no corroborating security event for this IE in the preceding 300 s",
      "windowS": 300,
      "threshold": 0.3,
      "ignoredEvents": [],

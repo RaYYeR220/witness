@@ -123,7 +123,7 @@ from witness_core.policy import WriterPolicy
 from . import events
 from .orion import OrionClient, ie_id_of
 from .rules import _clean as _clean_value
-from .rules import _clean_text
+from .rules import _clean_text, is_error_code
 from .store import Alert, MessageRow, Store
 
 __all__ = ["AlertPublisher", "CorrelatedRules", "IncidentConfig", "IncidentEngine",
@@ -249,16 +249,7 @@ def _score(v: Any) -> float | None:
     return v if math.isfinite(v) and 0 <= v <= 1 else None
 
 
-def _is_error(code: Any) -> bool:
-    if isinstance(code, bool):
-        return code
-    if isinstance(code, int):
-        return code != 0
-    if isinstance(code, float):
-        return math.isfinite(code) and code != 0
-    if isinstance(code, str):
-        return code.strip() not in ("", "0")
-    return False
+_is_error = is_error_code
 
 
 def _msg_time(m: dict | MessageRow | None, window_ms: int) -> int | None:

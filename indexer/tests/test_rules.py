@@ -697,6 +697,32 @@ async def test_drift_episode_survives_orion_outage(make_engine, orion):
     assert a.rule == "DRIFT" and a.evidence["divergingSinceMs"] == start
 
 
+async def test_anomaly_not_explained_by_a_routine_status_report(engine, store):
+    w = Writer()
+    assert await ingest(engine, w.score(0.8, **at(0))) == []
+    for code in ("0", 0, ""):
+        ok = message("self-orchestrator", {"infrastructureElementId": URN + IE,
+                                           "errorCode": code},
+                     verdict=V.RELAY_ATTESTED, ms=101, ts=T0 + 50)
+        assert await ingest(engine, ok) == []
+    [a] = await fired(engine, w.score(0.3, **at(1)))
+    assert a.rule == "ANOMALY"
+    assert {e["why"] for e in a.evidence["ignoredEvents"]} == {
+        "self-orchestrator report without an error"}
+    assert "no corroborating security event" in a.evidence["reason"]
+
+
+async def test_anomaly_explained_by_a_self_security_alert(engine, store):
+    w = Writer()
+    assert await ingest(engine, w.score(0.8, **at(0))) == []
+    alert = message("self-security", {"infrastructureElementId": URN + IE,
+                                      "alert": "ET SCAN Nmap Scripting Engine", "priority": 1},
+                    verdict=V.RELAY_ATTESTED, ms=101, ts=T0 + 50)
+    assert alert.ie_id == IE
+    assert await ingest(engine, alert) == []
+    assert await ingest(engine, w.score(0.3, **at(1))) == []
+
+
 async def test_anomaly_not_explained_by_untrusted_events(engine, store):
     w = Writer()
     assert await ingest(engine, w.score(0.8, **at(0))) == []

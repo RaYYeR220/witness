@@ -22,6 +22,7 @@ KINDS: dict[str, str] = {
     "LLO-K8s": "llo.k8s",
     "LLO-Docker": "llo.docker",
     "self-orchestrator": "self-orchestrator",
+    "self-security": "self-security",
     "witness.anchor": "witness.anchor",
     "audit.report": "audit.report",
 }
@@ -97,15 +98,25 @@ def _llo(m: dict) -> tuple[bool, str | None]:
     return all(_text(m.get(k)) for k in ("event", "lloId", "serviceComponentId")), None
 
 
+def _ie_ref(ie: str) -> str:
+    # Orion entity ids carry a URN prefix; strip it so ids line up with trust.score.
+    return ie[len(_IE_URN):] if ie.startswith(_IE_URN) and len(ie) > len(_IE_URN) else ie
+
+
 def _self_orchestrator(m: dict) -> tuple[bool, str | None]:
     ie = m.get("infrastructureElementId")
     code = m.get("errorCode")
     code_ok = _text(code) or (isinstance(code, int) and not isinstance(code, bool))
     if not _text(ie):
         return False, None
-    # Orion entity ids carry a URN prefix; strip it so ids line up with trust.score.
-    norm = ie[len(_IE_URN):] if ie.startswith(_IE_URN) and len(ie) > len(_IE_URN) else ie
-    return code_ok, norm
+    return code_ok, _ie_ref(ie)
+
+
+def _self_security(m: dict) -> tuple[bool, str | None]:
+    """Self-security alerts have no published schema: any JSON object fits. The IE they are
+    about (`infrastructureElementId`, else `ieId`) is kept so they can explain a score jump."""
+    ie = m.get("infrastructureElementId", m.get("ieId"))
+    return True, _ie_ref(ie.strip()) if _text(ie) and ie.strip() else None
 
 
 _ANCHOR_FIELDS = {"seq", "checkpoint", "checkpointHash", "rebased"}
@@ -171,6 +182,7 @@ _CHECKS = {
     "llo.k8s": _llo,
     "llo.docker": _llo,
     "self-orchestrator": _self_orchestrator,
+    "self-security": _self_security,
     "witness.anchor": _witness_anchor,
     "audit.report": _audit_report,
 }

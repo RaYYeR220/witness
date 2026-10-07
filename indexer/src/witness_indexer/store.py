@@ -764,10 +764,12 @@ class Store:
     async def security_events(self, ie_id: str, tags: list[str], verdicts: list[str],
                               from_ts: int, to_ts: int, limit: int = 20) -> list[dict]:
         """Messages with one of `tags` about the IE between two milestone times (seconds):
-        block_id, tag, ts, verdict, plus whether a submission names the block
-        (`submitted`) and whether it carries a SHADOW alert (`shadowed`)."""
+        block_id, tag, kind, ts, verdict, the body's `errorCode` (`error_code`, None when
+        absent), plus whether a submission names the block (`submitted`) and whether it
+        carries a SHADOW alert (`shadowed`)."""
         return await self._fetch(
-            "SELECT m.block_id, m.tag, m.ts, m.verdict, "
+            "SELECT m.block_id, m.tag, m.kind, m.ts, m.verdict, "
+            "m.json->'errorCode' AS error_code, "
             "EXISTS (SELECT 1 FROM submissions s WHERE s.block_id = m.block_id) AS submitted, "
             "EXISTS (SELECT 1 FROM alerts a WHERE a.rule = 'SHADOW' "
             "AND a.block_id = m.block_id) AS shadowed "

@@ -6,8 +6,10 @@ Per message (`on_message`, called once the verdict pipeline has stored the row):
   pipeline's verdict, with evidence saying why;
 - R4 UNSIGNED: an unsigned message on a tag whose writer policy requires signatures;
 - R6 UNKNOWN_IE: a message about an Infrastructure Element that Orion does not know;
-- R7 ANOMALY: a trust score jump beyond `jump_threshold` with no trustworthy security event
-  for the IE (self-orchestrator error, self-security alert) shortly before it;
+- R7 ANOMALY: a trust score jump beyond `jump_threshold` with no corroborating security
+  event for the IE shortly before it: a self-orchestrator report with a non-zero
+  `errorCode` or a self-security alert, producer-signed, relay-attested, or unsigned on a
+  tag that allows it, received through the Messages API and not flagged SHADOW;
 - R12 CLOCK_SKEW: the signer's `iat` far from the milestone timestamp;
 - R15 CHAIN_GAP: the envelope's `prev` is not the issuer's last seen block;
 - R16 CHAIN_FORK: two messages of one issuer continue from the same `prev`.
@@ -103,6 +105,7 @@ SEVERITY: dict[str, str] = {
 # Verdicts that prove the issuer: the only messages chain, replay and skew rules look at.
 PROVEN = (V.PRODUCER_SIGNED, V.RELAY_ATTESTED)
 SCORE_KIND = "trust.score"
+ORCHESTRATOR_KIND = "self-orchestrator"
 # An IE missing from the cached Orion list triggers a refresh, at most this often.
 ORION_MISS_REFRESH_S = 5.0
 # Evidence limits: text is cut, deep or long structures are summarised.
@@ -112,6 +115,20 @@ ITEMS_MAX = 64
 # Persistent rule state (Store.get_rule_state / set_rule_state).
 ANCHOR_CURSOR = "r11.cursor"
 SHADOW_BASELINE = "r14.baseline_ms"
+
+
+def is_error_code(code: Any) -> bool:
+    """Whether a self-orchestrator `errorCode` reports an error: 0, "0", "" and false are
+    routine status reports."""
+    if isinstance(code, bool):
+        return code
+    if isinstance(code, int):
+        return code != 0
+    if isinstance(code, float):
+        return math.isfinite(code) and code != 0
+    if isinstance(code, str):
+        return code.strip() not in ("", "0")
+    return False
 
 
 @dataclass(frozen=True)
@@ -600,6 +617,8 @@ class RulesEngine:
 
     def _corroborates(self, event: dict) -> str | None:
         """None when a security event can explain a score jump, else why it cannot."""
+        if event["kind"] == ORCHESTRATOR_KIND and not is_error_code(event["error_code"]):
+            return "self-orchestrator report without an error"
         if event["verdict"] in PROVEN:
             return None
         if event["verdict"] != V.UNSIGNED_LEGACY or self._requires_signature(event["tag"]):
@@ -643,7 +662,7 @@ class RulesEngine:
                     "threshold": self.cfg.jump_threshold,
                     "previousBlockId": _hex(prev["block_id"]), "windowS": window,
                     "ignoredEvents": ignored,
-                    "reason": f"score moved by {delta:+.3f} with no trustworthy security event "
+                    "reason": f"score moved by {delta:+.3f} with no corroborating security event "
                               f"for this IE in the preceding {window} s"}
         return self._alert("ANOMALY", row, evidence, now)
 
