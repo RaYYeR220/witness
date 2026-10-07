@@ -243,7 +243,7 @@ function download() {
               </div>
             </dl>
 
-            <details v-if="result.anchored && isBlockId(result.blockId)" class="ladder" :open="state === 'mismatch'">
+            <details v-if="result.anchored && isBlockId(result.blockId)" class="ladder">
               <summary>The five checks on the audit.report block, in your browser</summary>
               <LadderPanel :state="ladder" :anchor-pinned="anchorOk" />
             </details>
