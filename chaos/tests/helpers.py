@@ -7,6 +7,15 @@ VALIDATOR_ALERTS = {"ORPHANED": "high", "CONTENT_MISMATCH": "critical",
                     "DB_TAMPER": "critical", "NOT_FOUND": "critical"}
 
 
+def control_ok(trial=0, **over):
+    """A C01 control row that passes: indexed, PRODUCER_SIGNED, no alert."""
+    return {"control": "C01", "trial": trial, "status": "ok", "blockId": f"0x{trial:064x}",
+            "indexed": True, "verdict": "PRODUCER_SIGNED", "alerts": [], **over}
+
+
+CONTROLS_OK = [control_ok(0), control_ok(1)]
+
+
 def cls(key, cid):
     return next(c for c in key["classes"] if c["id"] == cid)
 

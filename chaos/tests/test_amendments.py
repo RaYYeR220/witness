@@ -184,10 +184,12 @@ def test_control_and_scorecard_control_section(key):
     assert scorecard.control_passed(ctl, [])
     assert not scorecard.control_passed(ctl, ["SHADOW"])
     assert not scorecard.control_passed(ctl, ["CLOCK_SKEW"])
+    ok = {"control": "C01", "trial": 0, "status": "ok", "blockId": "0x01", "indexed": True,
+          "verdict": "PRODUCER_SIGNED", "alerts": []}
     card = scorecard.build_scorecard(
-        make(key), None, key,
-        [{"control": "C01", "alerts": []}, {"control": "C01", "alerts": ["SHADOW"]}])
-    assert card["controls"] == {"trials": 2, "passed": 1}
+        make(key), None, key, [ok, {**ok, "trial": 1, "alerts": ["SHADOW"]}])
+    assert (card["controls"]["trials"], card["controls"]["passed"]) == (2, 1)
+    assert card["valid"] is False
     assert "Positive control: 1/2" in scorecard.render_markdown(card)
 
 

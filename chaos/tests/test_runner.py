@@ -390,7 +390,8 @@ def test_scorecard_files_and_rescore(tmp_path, key):
             for t in range(3)]
     rows.append({"class": "A02", "trial": 0, "status": "error", "error": "boom",
                  "detected": False, "observed": None})
-    controls = [{"control": "C01", "trial": 0, "alerts": []}]
+    controls = [{"control": "C01", "trial": 0, "status": "ok", "blockId": BID,
+                 "indexed": True, "verdict": "PRODUCER_SIGNED", "alerts": []}]
     trap = {"messages": 40, "duration_s": 180, "alerts": 0, "verdicts": {"PRODUCER_SIGNED": 40}}
     meta = {"git": {"commit": "abc", "dirty": False}, "configHash": "f" * 64,
             "answerKeySha256": "e" * 64, "config": {"trials": 3}}
@@ -398,7 +399,8 @@ def test_scorecard_files_and_rescore(tmp_path, key):
                              [{"class": "A05", "trials": 3, "reason": "no revoked identity"}],
                              meta, {"A01": {"FORGED": 1}})
     assert card["detected"] == 2 and card["attacks"] == 3
-    assert card["controls"] == {"trials": 1, "passed": 1}
+    assert card["controls"] == {"trials": 1, "passed": 1, "failures": []}
+    assert card["valid"] is True
     assert card["headline"] == ("detected 2/3 attacks, 0/40 false positives "
                                 "(4 planned trials not run: A02, A05)")
     assert card["run"]["git"]["commit"] == "abc" and card["run"]["trialsPerClass"] == 3
@@ -593,3 +595,52 @@ async def test_a19_only_picks_rows_of_the_run_producer(monkeypatch):
     assert seen[1] == (A.TAMPER_SQL, (bytes.fromhex("cd" * 32),))
     assert ctx.tampered[-1] == bytes.fromhex("cd" * 32)
     assert rec.block_id == "0x" + "cd" * 32 and rec.detail["victimIss"] == "did:key:zRun"
+
+
+# ---------------------------------------------------------------------------- control gate
+
+
+async def test_control_that_cannot_run_fails_the_run(tmp_path, key, monkeypatch):
+    r, _ = make_runner(tmp_path, trials=2)
+
+    async def broken(ctx):
+        raise httpx.ConnectError("relay down")
+
+    monkeypatch.setitem(A.CONTROLS, "C01", broken)
+    monkeypatch.setattr(r, "register_ies", _no_ies)
+    rows: list = []
+    await r.run_class(key["controls"][0], control=True, emit=rows.append)
+    assert [(x["control"], x["status"], x["passed"]) for x in rows] == [
+        ("C01", "error", False)] * 2
+    card = R.write_scorecard(tmp_path / "o", key, [], None, rows, [], {}, {})
+    assert card["valid"] is False and card["controls"]["passed"] == 0
+    assert card["headline"].startswith("INVALID RUN (control C01 failed)")
+    await r.aclose()
+
+
+@respx.mock
+async def test_control_row_records_indexing_and_verdict(tmp_path, key, monkeypatch):
+    r, clock = make_runner(tmp_path, trials=1)
+
+    async def c01(ctx):
+        return A.InjectionRecord("C01", BID, None, A.expected_for("C01"), clock(), {})
+
+    monkeypatch.setitem(A.CONTROLS, "C01", c01)
+    monkeypatch.setattr(r, "register_ies", _no_ies)
+    respx.get(f"{API}/messages/{BID}").mock(return_value=httpx.Response(
+        200, json={"verdict": "PRODUCER_SIGNED", "indexed": False}))
+    respx.get(f"{API}/alerts").mock(return_value=httpx.Response(200, json={"items": []}))
+    rows: list = []
+    await r.run_class(key["controls"][0], control=True, emit=rows.append)
+    assert rows[0]["indexed"] is False and rows[0]["passed"] is False
+    assert rows[0]["why"] == "block never indexed"
+    await r.aclose()
+
+
+@pytest.mark.parametrize(("valid", "code"), [(True, 0), (False, 1)])
+def test_invalid_run_exits_non_zero(monkeypatch, valid, code):
+    async def fake(cfg):
+        return {"valid": valid, "headline": "h"}
+
+    monkeypatch.setattr(R, "amain", fake)
+    assert R.main(["run", "--no-trap"]) == code

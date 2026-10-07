@@ -1023,8 +1023,13 @@ class Runner:
 
     async def observe_trial(self, c: dict, trial: Trial, *, control: bool = False) -> None:
         if trial.error is not None or trial.rec is None:
-            trial.row = trial_row(c, trial.t, None, None, trial_start_ms=trial.start_ms,
-                                  error=trial.error or "no injection record")
+            error = trial.error or "no injection record"
+            if control:  # a control that could not run fails the run, it is not skipped
+                trial.row = {"control": c["id"], "trial": trial.t, "status": "error",
+                             "startedAtMs": trial.start_ms, "error": error, "passed": False}
+            else:
+                trial.row = trial_row(c, trial.t, None, None, trial_start_ms=trial.start_ms,
+                                      error=error)
             return
         by_ie = bool(c.get("per_trial_ie")) or control
         o = await observe(self.api, c, trial.rec, trial_start_ms=trial.start_ms,
@@ -1034,12 +1039,12 @@ class Runner:
                           keepalive_s=self.cfg.drift_keepalive_s)
         trial.obs = o
         if control:
-            trial.row = {"control": c["id"], "trial": trial.t, "startedAtMs": trial.start_ms,
-                         "status": "ok", "blockId": trial.rec.block_id,
-                         "ieId": trial.rec.ie_id, "verdict": o.verdict,
-                         "alerts": o.labels(c), "alertIds": sorted(o.alerts),
-                         "passed": scorecard.control_passed(c, o.labels(c)),
-                         "detail": trial.rec.detail, "polls": o.polls}
+            row = {"control": c["id"], "trial": trial.t, "startedAtMs": trial.start_ms,
+                   "status": "ok", "blockId": trial.rec.block_id, "ieId": trial.rec.ie_id,
+                   "verdict": o.verdict, "indexed": o.indexed, "alerts": o.labels(c),
+                   "alertIds": sorted(o.alerts), "detail": trial.rec.detail, "polls": o.polls}
+            row["passed"], row["why"] = scorecard.control_row_passed(c, row)
+            trial.row = row
         else:
             trial.row = trial_row(c, trial.t, trial.rec, o, trial_start_ms=trial.start_ms)
         await self.cleanup_ies(*trial.ies)
@@ -1388,7 +1393,7 @@ def main(argv: list[str] | None = None) -> int:
     if a.cmd == "score":
         card = rescore(Path(a.out))
         print(card["headline"])
-        return 0
+        return 0 if card["valid"] else 1
     if a.cmd == "keys":
         try:
             made = write_keys(a.out, a.base_policy, force=a.force)
@@ -1409,6 +1414,8 @@ def main(argv: list[str] | None = None) -> int:
         print(f"witness-chaos: preflight failed: {exc}", file=sys.stderr)
         return 2
     print(card["headline"])
+    if a.cmd == "run" and not card["valid"]:
+        return 1  # the positive control failed or did not run: no number may be quoted
     return 0
 
 

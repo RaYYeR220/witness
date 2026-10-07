@@ -88,13 +88,36 @@ def evaluate_trial(cls: dict, obs: dict) -> dict:
 
 
 def control_passed(control: dict, alerts: Iterable[str]) -> bool:
-    """A positive control passes when the forbidden alert (and any alert, if the control
-    says `alerts: 0`) is absent."""
+    """The alert part of a positive control: the forbidden alert (and any alert, if the
+    control says `alerts: 0`) is absent."""
     seen = list(alerts)
     e = control["expect"]
     if "no_alert" in e and e["no_alert"] in seen:
         return False
     return not (e.get("alerts") == 0 and seen)
+
+
+# The control sends a genuine producer-signed block; it proves nothing unless the explorer
+# indexed it as such.
+CONTROL_VERDICT = "PRODUCER_SIGNED"
+
+
+def control_row_passed(control: dict, row: dict) -> tuple[bool, str | None]:
+    """(passed, why not) for one control trial. It passes only if it ran, its block was
+    indexed with verdict PRODUCER_SIGNED, and no alert at all was raised on it. An error,
+    a missing block id or a block the explorer never indexed fails it."""
+    if row.get("status") != "ok":
+        return False, f"not run: {row.get('error') or row.get('status') or 'no status'}"
+    if not row.get("blockId"):
+        return False, "no block id"
+    if row.get("indexed") is not True:
+        return False, "block never indexed"
+    if row.get("verdict") != CONTROL_VERDICT:
+        return False, f"verdict {row.get('verdict')}, not {CONTROL_VERDICT}"
+    alerts = list(row.get("alerts") or [])
+    if alerts or not control_passed(control, alerts):
+        return False, "alerts: " + ", ".join(alerts)
+    return True, None
 
 
 def confusion_matrix(results: list[dict], classes: list[dict]) -> dict[str, dict[str, int]]:
@@ -167,9 +190,17 @@ def build_scorecard(results: list[dict], trap: dict | None, key: dict,
     }
     if control_results is not None:
         by_id = {c["id"]: c for c in key.get("controls", [])}
-        passed = sum(control_passed(by_id[r["control"]], r.get("alerts", []))
-                     for r in control_results)
-        card["controls"] = {"trials": len(control_results), "passed": passed}
+        failures = []
+        for r in control_results:
+            ok, why = control_row_passed(by_id[r["control"]], r)
+            if not ok:
+                failures.append({"control": r["control"], "trial": r.get("trial"), "why": why})
+        card["controls"] = {"trials": len(control_results),
+                            "passed": len(control_results) - len(failures),
+                            "failures": failures}
+    c = card["controls"]
+    # A run counts only if every control trial passed (and there was at least one).
+    card["valid"] = c is not None and c["trials"] > 0 and c["passed"] == c["trials"]
     if trap is not None:
         spec = key["traps"]["expect"]
         fp = trap_false_positives(trap, spec["verdicts"])
@@ -187,8 +218,17 @@ def build_scorecard(results: list[dict], trap: dict | None, key: dict,
     return card
 
 
+def validity_prefix(card: dict) -> str:
+    if card.get("valid"):
+        return ""
+    c = card.get("controls")
+    if not c or not c.get("trials"):
+        return "INVALID RUN (control C01 not run): "
+    return "INVALID RUN (control C01 failed): "
+
+
 def headline(card: dict) -> str:
-    text = f"detected {card['detected']}/{card['attacks']} attacks"
+    text = validity_prefix(card) + f"detected {card['detected']}/{card['attacks']} attacks"
     if card.get("traps"):
         t = card["traps"]
         text += f", {t['false_positives']}/{t['messages']} false positives"
@@ -236,7 +276,11 @@ def render_markdown(card: dict) -> str:
     c = card.get("controls")
     if c:
         lines += ["", (f"Positive control: {c['passed']}/{c['trials']} relay-routed genuine "
-                       "blocks raised no alert.")]
+                       "blocks indexed as PRODUCER_SIGNED with no alert.")]
+        lines += [f"- C01 trial {f['trial']} failed: {f['why']}" for f in c.get("failures", [])]
+    if not card.get("valid", True):
+        lines += ["", ("**The run is invalid: the positive control did not pass, so no "
+                       "number above may be quoted.**")]
     t = card.get("traps")
     if t:
         lines += ["", f"Traps: {t['messages']} genuine messages over "
