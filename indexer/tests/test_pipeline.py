@@ -421,6 +421,20 @@ async def test_signed_body_that_breaks_the_schema_is_malformed(store: Store):
     assert alerts[chain.block_id(1, 2)]["signature"]["mode"] == "relay"
 
 
+async def test_a_malformed_message_does_not_spend_its_seq(store: Store):
+    """A validly signed message with a broken body is MALFORMED and does not use up its seq
+    or nonce: the producer's corrected message with the same seq is accepted (the relay
+    likewise refuses the broken one before claiming the seq)."""
+    ie = "D:aabbccddeeff"
+    chain = FakeChain()
+    chain.add([("trust.score", signed(ALICE, "trust.score", score(ie, 7), 5))])
+    chain.add([("trust.score", signed(ALICE, "trust.score", score(ie, 0.7), 5,
+                                      nonce=b"f" * 16))])
+    await indexer(FakeSource(chain), store).sync()
+    assert [(await msg(store, chain.block_id(i, 0)))["verdict"] for i in (1, 2)] == [
+        "MALFORMED", "PRODUCER_SIGNED"]
+
+
 async def test_out_of_order_seqs_are_not_replays(store: Store):
     ie = "D:aabbccddeeff"
     chain = FakeChain()
