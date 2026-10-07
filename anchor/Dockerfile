@@ -7,7 +7,7 @@
 # keys (SECRETS_DIR/<component>/) and the writer policy are mounted at run time, read-only;
 # the trail and loop state go to a writable volume.
 
-ARG NODE_IMAGE=node:22-slim
+ARG NODE_IMAGE=node:22-slim@sha256:c3de60bf2f9dd0ac6370e6117950ff62d6e339527e7472301c9c78a017978392
 
 FROM ${NODE_IMAGE} AS build
 ENV CI=1

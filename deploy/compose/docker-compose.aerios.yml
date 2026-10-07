@@ -54,7 +54,7 @@ services:
     networks: [iota-net]
 
   postgres:
-    image: postgres:16-alpine
+    image: postgres:16-alpine@sha256:721873c34ceb9f8d8fc265984940dc982404c105f19ad51be9fdc5970a6080ea
     container_name: witness-postgres
     restart: unless-stopped
     # The owner's password is set when the database is first created, from
@@ -82,7 +82,7 @@ services:
     networks: [iota-net]
 
   mosquitto:
-    image: eclipse-mosquitto:2
+    image: eclipse-mosquitto:2@sha256:38c0da4f2ef84284d47b3b3eeea1cb3bdeabe81ee10caf0cd5c5ff61ee3ea408
     container_name: witness-mosquitto
     restart: unless-stopped
     # The broker wants its password file and ACL owned by its own user and not world

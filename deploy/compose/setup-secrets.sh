@@ -92,7 +92,7 @@ done
 if [ "$rebuild" = 1 ]; then
   for user in relay indexer observer; do
     printf '%s:%s\n' "$user" "$(cat "$secrets/mosquitto/$user.password")"
-  done | docker run --rm -i --network none --entrypoint sh eclipse-mosquitto:2 -c \
+  done | docker run --rm -i --network none --entrypoint sh eclipse-mosquitto:2@sha256:38c0da4f2ef84284d47b3b3eeea1cb3bdeabe81ee10caf0cd5c5ff61ee3ea408 -c \
     'cat > /tmp/passwd && mosquitto_passwd -U /tmp/passwd 2>/dev/null && cat /tmp/passwd' \
     >"$secrets/mosquitto/passwd.new"
   [ -s "$secrets/mosquitto/passwd.new" ] || { echo "error: hashing the broker passwords failed" >&2; exit 1; }
@@ -103,7 +103,7 @@ fi
 # Keys and env files, with the Python standard library only. The container reads secrets/
 # read-only and returns the files as a tar stream on stdout; messages go to stderr.
 docker run --rm --network none -e WITNESS_REBASED_NETWORK="${WITNESS_REBASED_NETWORK:-testnet}" \
-  -v "$secrets_n:/s:ro" -v "$identity_n:/identity:ro" python:3.12-slim python -c "$(cat <<'PY'
+  -v "$secrets_n:/s:ro" -v "$identity_n:/identity:ro" python:3.12-slim@sha256:02108f5d322dd89f1c9e552442c25acb0543dfdbc455693a5599624f20d9155d python -c "$(cat <<'PY'
 import base64
 import io
 import json

@@ -8,8 +8,8 @@
 # (console/src/config/verifier.json); ANCHOR_TRAIL_ID pins the Audit Trail the anchors are on and
 # ANCHOR_WRITER_ADDRESS the address allowed to add its records.
 
-ARG NODE_IMAGE=node:22-slim
-ARG NGINX_IMAGE=nginxinc/nginx-unprivileged:1.29-alpine
+ARG NODE_IMAGE=node:22-slim@sha256:c3de60bf2f9dd0ac6370e6117950ff62d6e339527e7472301c9c78a017978392
+ARG NGINX_IMAGE=nginxinc/nginx-unprivileged:1.29-alpine@sha256:0c79d56aee561a1d81c63f00eee5fb5fe29279560cdc55e91425133104c7fbe6
 
 FROM ${NODE_IMAGE} AS build
 ENV CI=1
