@@ -80,6 +80,7 @@ export {
 export {
   fetchRecord,
   makeRebasedFetcher,
+  MAX_RESPONSE_BYTES,
   RebasedError,
   type AnchorRecord,
   type RebasedPins,

@@ -67,8 +67,8 @@ describe("fetchRecord over the recorded testnet responses", () => {
     expect(calls.map((c) => c.method)).toEqual(["iota_getObject", "iotax_getDynamicFieldObject"]);
     expect(calls[0]!.params).toEqual([rec.trail, { showContent: true, showType: true }]);
     expect(calls[1]!.params[1]).toEqual({ type: "u64", value: "4" });
-    // redirects are not followed and every call has a timeout, as in the reference
-    expect(calls.every((c) => c.url === RPC && c.redirect === "manual" && c.signal)).toBe(true);
+    // redirects are refused and every call has a timeout, as in the reference
+    expect(calls.every((c) => c.url === RPC && c.redirect === "error" && c.signal)).toBe(true);
   });
 
   it("returns null when the trail has no such record", async () => {
@@ -96,6 +96,44 @@ describe("fetchRecord over the recorded testnet responses", () => {
     await expect(fetchRecord(RPC, rec.trail, 4, { packageId: PACKAGE, fetch: down })).rejects.toThrow("iota_getObject: TypeError");
     const notJson = (async () => new Response("<html>", { status: 200 })) as unknown as typeof fetch;
     await expect(fetchRecord(RPC, rec.trail, 4, { packageId: PACKAGE, fetch: notJson })).rejects.toThrow("iota_getObject: response is not JSON");
+  });
+
+  it("gives up when the RPC does not answer in time", async () => {
+    const hanging = (async (_url: string, init: RequestInit) =>
+      new Promise<Response>((_resolve, reject) => init.signal!.addEventListener("abort", () => reject(init.signal!.reason)))) as unknown as typeof fetch;
+    const started = Date.now();
+    await expect(fetchRecord(RPC, rec.trail, 4, { packageId: PACKAGE, fetch: hanging, timeoutMs: 30 })).rejects.toThrow("iota_getObject: TimeoutError");
+    expect(Date.now() - started).toBeLessThan(2000);
+  });
+
+  it("refuses a redirect and a response over the size cap", async () => {
+    const redirected = (async () => {
+      throw new TypeError("fetch failed: redirect mode is set to error");
+    }) as unknown as typeof fetch;
+    await expect(fetchRecord(RPC, rec.trail, 4, { packageId: PACKAGE, fetch: redirected })).rejects.toThrow("iota_getObject: TypeError");
+    const big = (async () => new Response("x".repeat(5000), { status: 200 })) as unknown as typeof fetch;
+    await expect(fetchRecord(RPC, rec.trail, 4, { packageId: PACKAGE, fetch: big, maxBytes: 4096 })).rejects.toThrow(
+      "iota_getObject: response over 4096 bytes",
+    );
+    const declared = (async () => new Response("{}", { status: 200, headers: { "content-length": String(10 * 1024 * 1024) } })) as unknown as typeof fetch;
+    await expect(fetchRecord(RPC, rec.trail, 4, { packageId: PACKAGE, fetch: declared })).rejects.toThrow(/response over/);
+  });
+
+  it("fails closed on a nesting bomb, in the response or in the record data", async () => {
+    const deep = "[".repeat(200_000) + "]".repeat(200_000);
+    const bomb = (async () => new Response(deep, { status: 200 })) as unknown as typeof fetch;
+    await expect(fetchRecord(RPC, rec.trail, 4, { packageId: PACKAGE, fetch: bomb, maxBytes: 1_000_000 })).rejects.toThrow(
+      "iota_getObject: response is not JSON",
+    );
+    const record = clone(rec.record);
+    fieldsOf(record).data.fields.pos0 = "[".repeat(100_000) + "]".repeat(100_000);
+    await expect(fetch4({ record })).rejects.toThrow("record data or metadata is not valid JSON");
+  });
+
+  it("does not take a package id that is only a prefix of the trail's package", async () => {
+    // the type check includes "::main::AuditTrail<", so a shorter id never matches a longer one
+    await expect(fetch4({ packageId: PACKAGE.slice(0, 6) })).rejects.toThrow(/Audit Trail/);
+    await expect(fetch4({ packageId: PACKAGE.slice(0, -1) })).rejects.toThrow(/Audit Trail/);
   });
 
   it("insists on https unless plain http is allowed explicitly", async () => {

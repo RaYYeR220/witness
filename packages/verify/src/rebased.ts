@@ -20,6 +20,8 @@ import { get, has, isDict, JsonNumber, JsonParseError, parseJson, pyRepr, pyTrut
 const NOT_FOUND = "dynamicFieldNotFound";
 const MAX_INDEX = Number.MAX_SAFE_INTEGER;
 const DEFAULT_TIMEOUT_MS = 15_000;
+/** A trail object or one record is a few KiB; anything past this is not an answer to read. */
+export const MAX_RESPONSE_BYTES = 2 * 1024 * 1024;
 
 /** The chain could not be read, or what it returned is not the pinned trail's record. */
 export class RebasedError extends Error {
@@ -43,6 +45,8 @@ export interface RebasedReadOptions {
   timeoutMs?: number;
   /** Accept a plain-http RPC (local tests only). */
   allowHttp?: boolean;
+  /** Largest response body read, in bytes (default 2 MiB). */
+  maxBytes?: number;
 }
 
 /** The pins a fetcher reads; the same names as `VerifierConfig`. */
@@ -78,25 +82,62 @@ function schemeOk(url: string, allowHttp: boolean): boolean {
   return s === "https" || (allowHttp && s === "http");
 }
 
+/** `type(exc).__name__`: an Error's name, a DOMException's too (TimeoutError, AbortError). */
 function errorName(e: unknown): string {
-  return e instanceof Error ? e.name : "Error";
+  const name = typeof e === "object" && e !== null ? (e as { name?: unknown }).name : undefined;
+  return typeof name === "string" && name ? name : "Error";
 }
 
-async function rpc(url: string, method: string, params: unknown[], opts: Required<Omit<RebasedReadOptions, "allowHttp">>): Promise<unknown> {
+type ReadOpts = Required<Omit<RebasedReadOptions, "allowHttp">>;
+
+/** The body as text, refusing more than `max` bytes (by header, then while reading). */
+async function readCapped(resp: Response, method: string, max: number): Promise<string> {
+  const declared = Number(resp.headers.get("content-length"));
+  if (Number.isFinite(declared) && declared > max) {
+    void resp.body?.cancel().catch(() => undefined);
+    throw new RebasedError(`${method}: response over ${max} bytes`);
+  }
+  if (!resp.body) return resp.text();
+  const reader = resp.body.getReader();
+  const parts: Uint8Array[] = [];
+  let size = 0;
+  for (;;) {
+    const { value, done } = await reader.read();
+    if (done) break;
+    size += value.byteLength;
+    if (size > max) {
+      void reader.cancel().catch(() => undefined);
+      throw new RebasedError(`${method}: response over ${max} bytes`);
+    }
+    parts.push(value);
+  }
+  const all = new Uint8Array(size);
+  let at = 0;
+  for (const p of parts) {
+    all.set(p, at);
+    at += p.byteLength;
+  }
+  return new TextDecoder().decode(all);
+}
+
+async function rpc(url: string, method: string, params: unknown[], opts: ReadOpts): Promise<unknown> {
   const body = JSON.stringify({ jsonrpc: "2.0", id: 1, method, params });
   let resp: Response;
   let text: string;
   try {
-    // A redirect is not followed: like the reference, anything but a 200 is an error.
+    // Redirects are refused (the fetch rejects); like the reference, anything but a 200 is an error.
     resp = await opts.fetch(url, {
       method: "POST",
       headers: { "content-type": "application/json" },
       body,
-      redirect: "manual",
+      redirect: "error",
       signal: AbortSignal.timeout(opts.timeoutMs),
     });
-    if (resp.status !== 200) throw new RebasedError(`${method}: HTTP ${resp.status}`);
-    text = await resp.text();
+    if (resp.status !== 200) {
+      void resp.body?.cancel().catch(() => undefined);
+      throw new RebasedError(`${method}: HTTP ${resp.status}`);
+    }
+    text = await readCapped(resp, method, opts.maxBytes);
   } catch (e) {
     if (e instanceof RebasedError) throw e;
     throw new RebasedError(`${method}: ${errorName(e)}`);
@@ -117,7 +158,7 @@ async function rpc(url: string, method: string, params: unknown[], opts: Require
   return get(doc, "result") ?? null;
 }
 
-async function recordsTable(url: string, trailId: string, packageId: string, opts: Required<Omit<RebasedReadOptions, "allowHttp">>): Promise<string> {
+async function recordsTable(url: string, trailId: string, packageId: string, opts: ReadOpts): Promise<string> {
   const result = await rpc(url, "iota_getObject", [trailId, { showContent: true, showType: true }], opts);
   const kind = dig(result, "data", "type");
   if (typeof kind !== "string" || !kind.startsWith(`${packageId}::main::AuditTrail<`)) {
@@ -192,7 +233,11 @@ export async function fetchRecord(
   if (typeof index !== "number" || !Number.isInteger(index) || index < 0 || index > MAX_INDEX) {
     throw new RebasedError("record index must be a non-negative integer");
   }
-  const opts = { fetch: options.fetch ?? globalThis.fetch.bind(globalThis), timeoutMs: options.timeoutMs ?? DEFAULT_TIMEOUT_MS };
+  const opts: ReadOpts = {
+    fetch: options.fetch ?? globalThis.fetch.bind(globalThis),
+    timeoutMs: options.timeoutMs ?? DEFAULT_TIMEOUT_MS,
+    maxBytes: options.maxBytes ?? MAX_RESPONSE_BYTES,
+  };
   const table = await recordsTable(rpcUrl, trailId, packageId, opts);
   const result = await rpc(rpcUrl, "iotax_getDynamicFieldObject", [table, { type: "u64", value: String(index) }], opts);
   if (dig(result, "error", "code") === NOT_FOUND) return null;
