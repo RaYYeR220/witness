@@ -47,6 +47,7 @@ export const SCREENS = (ie: string, blockId: string) => [
   { name: "search", path: "/search", ready: ".read" },
   { name: "verify", path: `/m/${blockId}`, ready: '.overall[data-o]:not([data-o="RUNNING"])' },
   { name: "lineage", path: `/ie/${encodeURIComponent(ie)}`, ready: ".plot, .wl-err" },
+  { name: "flows", path: "/flows", ready: ".tl .msg, .x-quiet" },
   { name: "integrity", path: "/integrity", ready: ".card" },
   { name: "identity", path: "/identity", ready: ".x-sec" },
   { name: "anchors", path: "/anchors", ready: ".cp, .x-quiet" },

@@ -66,6 +66,8 @@ test("Live shows trust scores within 10 s, then a new one as it lands, which ope
   );
   test.info().annotations.push({ type: "new row after", description: `${Math.round((Date.now() - started) / 1000)} s (trust scores land about once a minute)` });
   const href = await handle.evaluate((e) => (e as HTMLAnchorElement).getAttribute("href"));
+  // the stream carries its lifecycle transitions: they show on the row
+  await page.waitForFunction((h) => document.querySelector(`.rows a.msg[href="${h}"] .lc`) !== null, href, { timeout: 20_000 });
   await (handle.asElement() as import("@playwright/test").ElementHandle<HTMLElement>).click();
   await expect(page).toHaveURL(new RegExp(`${href}$`));
   await expect(page).toHaveURL(/\/m\/0x[0-9a-f]{64}$/);
@@ -85,6 +87,38 @@ test("an anchored message verifies with all five checks green", async ({ page })
   const { overall, steps } = await ladderResult(page);
   expect(steps).toEqual(["pass", "pass", "pass", "pass", "pass"]);
   expect(overall).toBe("VALID");
+});
+
+test("Verify shows the brief's (c) and (d) above the ladder, with the explorer's recorded results", async ({ page }) => {
+  test.skip(!(await hasExplorer(page)), "this console build has no explorer screens");
+  const id = await anchoredMessage();
+  test.skip(!id, "no anchored trust.score message yet");
+  await page.goto(`/m/${id}`);
+  const tangle = page.locator(".tangle");
+  await expect(tangle.locator('li[data-check="c"] .name')).toHaveText("(c) Solid on the Tangle");
+  await expect(tangle.locator('li[data-check="c"] .via')).toContainText("via HORNET GET /api/core/v2/blocks/{blockId}/metadata");
+  await expect(tangle.locator('li[data-check="d"] .name')).toHaveText("(d) Same content as on the Tangle");
+  await expect(tangle.locator('li[data-check="c"] .when')).toContainText("checked by the explorer at");
+  const above = await page.evaluate(() => {
+    const t = document.querySelector(".tangle");
+    const c = document.querySelector("section.checks");
+    return !!t && !!c && (t.compareDocumentPosition(c) & Node.DOCUMENT_POSITION_FOLLOWING) !== 0;
+  });
+  expect(above).toBe(true);
+});
+
+test("Flows: a producer's chain, each message opening in Verify", async ({ page }) => {
+  test.skip(!(await hasExplorer(page)), "this console build has no explorer screens");
+  const top = (await api("/flows?by=issuer")).items[0];
+  test.skip(!top, "no flow yet");
+  await page.goto("/flows");
+  await expect(page.locator('.list .row[aria-current="true"]')).toHaveAttribute("title", top.key);
+  await expect(page.locator(".chain")).toBeVisible();
+  const first = page.locator(".tl .msg a.x-link").first();
+  await expect(first).toHaveAttribute("href", /^\/m\/0x[0-9a-f]{64}$/);
+  await expect(page.locator(".tl .msg .link").first()).toBeVisible();
+  await first.click();
+  await expect(page).toHaveURL(/\/m\/0x[0-9a-f]{64}$/);
 });
 
 test("Anchors: the browser re-reads the newest checkpoint from IOTA Rebased and the chain agrees", async ({ page }) => {

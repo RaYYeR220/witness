@@ -50,7 +50,7 @@ function args(argv) {
     resolver: "http://127.0.0.1:7300",
     out: resolve(here, "../public/replay"),
     limit: 60,
-    events: 150,
+    events: 400,
     blocks: 120,
     scorecard: "",
   };

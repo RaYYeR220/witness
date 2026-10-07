@@ -110,6 +110,16 @@ test("Reports renders the snapshot's reports, and never embeds a report page", a
   expect(hits).toEqual([]);
 });
 
+test("Flows: the snapshot's producer chains", async ({ page }) => {
+  const hits = watchApi(page);
+  const flows = existsSync(join(SNAPSHOT, "flows-issuer.json")) ? read("flows-issuer.json").items : [];
+  test.skip(!flows.length, "the snapshot holds no flows");
+  await page.goto("/flows");
+  await expect(page.locator(".tl .msg").first()).toBeVisible();
+  await expect(page.locator(".chain")).toBeVisible();
+  expect(hits).toEqual([]);
+});
+
 test("Lineage, Integrity and Anchors show the snapshot's data", async ({ page }) => {
   const ie = read("ie.json").items[0].ieId;
   await page.goto(`/ie/${encodeURIComponent(ie)}`);
