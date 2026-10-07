@@ -40,6 +40,7 @@ import base64
 import contextlib
 import dataclasses
 import hashlib
+import ipaddress
 import json
 import logging
 import os
@@ -129,6 +130,9 @@ class RunConfig:
     wait_indexed_s: float = 30.0
     exclusive_window_s: float = 120.0
     allow_concurrent_producer: bool = False
+    # Attacks go only to our own local stack: every endpoint and the DB must be loopback
+    # unless this is set (and then it is recorded in run.json).
+    allow_nonlocal: bool = False
     cleanup_orion: bool = True
     # Secrets: never written to run.json, never part of the config hash.
     ingest_token: str | None = field(default=None, repr=False)
@@ -142,6 +146,62 @@ class RunConfig:
         for k in self.SECRET_FIELDS:
             d[k] = None if d[k] is None else "<set>"
         return d
+
+
+def is_loopback_host(host: str | None) -> bool:
+    """`localhost` or a loopback address (127.0.0.0/8, ::1)."""
+    if not host:
+        return False
+    host = host.strip("[]").lower()
+    if host == "localhost":
+        return True
+    try:
+        return ipaddress.ip_address(host).is_loopback
+    except ValueError:
+        return False
+
+
+def dsn_hosts(dsn: str) -> list[str]:
+    """The hosts a libpq DSN connects to. No host means the local default (a Unix socket or
+    localhost); a path is a Unix socket directory, local as well."""
+    from psycopg.conninfo import conninfo_to_dict
+
+    params = conninfo_to_dict(dsn)
+    out = []
+    for key in ("host", "hostaddr"):
+        for h in str(params.get(key) or "").split(","):
+            h = h.strip()
+            if h and not h.startswith("/"):
+                out.append(h)
+    return out
+
+
+def nonlocal_endpoints(cfg: RunConfig) -> list[str]:
+    """Every configured endpoint whose host is not loopback, as `option host` (never the
+    URL itself: the broker URL and the DSN carry credentials)."""
+    bad = []
+    for name, url in (("--api", cfg.api), ("--relay", cfg.relay), ("--hornet", cfg.hornet),
+                      ("--orion", cfg.orion), ("--anchor", cfg.anchor),
+                      ("--mqtt", cfg.mqtt_url)):
+        if url and not is_loopback_host(urlsplit(url).hostname):
+            bad.append(f"{name} {urlsplit(url).hostname or '(no host)'}")
+    if cfg.db_dsn:
+        try:
+            hosts = dsn_hosts(cfg.db_dsn)
+        except Exception:  # noqa: BLE001 - an unreadable DSN is refused, never printed
+            bad.append("--db-dsn (unreadable)")
+        else:
+            bad += [f"--db-dsn {h}" for h in hosts if not is_loopback_host(h)]
+    return bad
+
+
+def check_local(cfg: RunConfig) -> dict:
+    """Refuse to attack anything but a stack on this machine (unless --allow-nonlocal)."""
+    bad = nonlocal_endpoints(cfg)
+    if bad and not cfg.allow_nonlocal:
+        raise PreflightError("not a loopback host: " + "; ".join(bad) + ". The evaluation "
+                             "attacks only a local stack (--allow-nonlocal overrides).")
+    return {"nonlocal": bad, "allowNonlocal": cfg.allow_nonlocal}
 
 
 def config_hash(cfg: RunConfig, key_text: str) -> str:
@@ -1120,12 +1180,13 @@ class Runner:
 
     async def run(self) -> dict:
         cfg = self.cfg
+        local = check_local(cfg)  # before anything is sent anywhere
         self.out.mkdir(parents=True, exist_ok=True)
         started = self.clock_ms()
         self.meta.update(schema="witness-chaos/run/v1", startedAtMs=started,
                          git=git_info(cfg.repo), configHash=config_hash(cfg, self.key_text),
                          answerKeySha256=hashlib.sha256(self.key_text.encode()).hexdigest(),
-                         config=cfg.public(), python=sys.version.split()[0])
+                         config=cfg.public(), python=sys.version.split()[0], local=local)
         self.meta["preflight"] = await self.preflight()
         self.ctx = self.build_context()
         producer = self.ctx.producer
@@ -1290,6 +1351,8 @@ def _parser() -> argparse.ArgumentParser:
         r.add_argument("--trap-rate", type=float, default=20.0, help="messages per minute")
         r.add_argument("--trap-settle-s", type=float, default=70.0)
         r.add_argument("--allow-concurrent-producer", action="store_true")
+        r.add_argument("--allow-nonlocal", action="store_true",
+                       help="allow endpoints and a database that are not on loopback")
         r.add_argument("--keep-orion", action="store_true",
                        help="leave the harness's IEs in Orion")
         r.add_argument("-v", "--verbose", action="store_true")
@@ -1361,6 +1424,7 @@ def config_from_args(a: argparse.Namespace, environ: dict[str, str] | None = Non
         trap=not getattr(a, "no_trap", False), trap_minutes=a.trap_minutes,
         trap_messages=a.trap_messages, trap_rate_per_min=a.trap_rate,
         trap_settle_s=a.trap_settle_s, allow_concurrent_producer=a.allow_concurrent_producer,
+        allow_nonlocal=a.allow_nonlocal,
         cleanup_orion=not a.keep_orion,
         trials=getattr(a, "trials", None),
         classes=[c.strip() for c in a.classes.split(",")] if getattr(a, "classes", None)

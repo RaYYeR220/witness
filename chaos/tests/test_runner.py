@@ -644,3 +644,57 @@ def test_invalid_run_exits_non_zero(monkeypatch, valid, code):
 
     monkeypatch.setattr(R, "amain", fake)
     assert R.main(["run", "--no-trap"]) == code
+
+
+# ---------------------------------------------------------------------------- local only
+
+
+@pytest.mark.parametrize("host", ["127.0.0.1", "localhost", "LOCALHOST", "[::1]",
+                                  "127.10.0.3"])
+def test_loopback_hosts_are_accepted(host):
+    cfg = R.RunConfig(api=f"http://{host}:7200", relay=f"http://{host}:5557",
+                      hornet=f"http://{host}:14265", orion=f"http://{host}:1026",
+                      anchor=f"http://{host}:7300", mqtt_url=f"mqtt://u:p@{host}:1883",
+                      db_dsn=f"postgresql://u:p@{host}:5432/postgres")
+    assert R.check_local(cfg) == {"nonlocal": [], "allowNonlocal": False}
+
+
+@pytest.mark.parametrize(("field", "value", "flag"), [
+    ("api", "http://10.0.0.5:7200", "--api 10.0.0.5"),
+    ("relay", "http://witness-relay:5555", "--relay witness-relay"),
+    ("hornet", "http://0.0.0.0:14265", "--hornet 0.0.0.0"),
+    ("orion", "http://orion.example.org:1026", "--orion orion.example.org"),
+    ("anchor", "http://192.168.1.2:7300", "--anchor 192.168.1.2"),
+    ("mqtt_url", "mqtt://relay:s3cret@broker.lan:1883", "--mqtt broker.lan"),
+    ("db_dsn", "postgresql://postgres:pw@db.example:5432/postgres", "--db-dsn db.example"),
+    ("db_dsn", "host=127.0.0.1,10.1.1.1 dbname=x", "--db-dsn 10.1.1.1"),
+])
+def test_nonlocal_endpoints_are_refused(field, value, flag):
+    cfg = R.RunConfig(**{field: value})
+    with pytest.raises(R.PreflightError) as err:
+        R.check_local(cfg)
+    assert flag in str(err.value)
+    assert "s3cret" not in str(err.value) and "pw@" not in str(err.value)
+    cfg.allow_nonlocal = True
+    assert R.check_local(cfg) == {"nonlocal": [flag], "allowNonlocal": True}
+
+
+def test_dsn_without_host_or_with_a_socket_is_local():
+    assert R.check_local(R.RunConfig(db_dsn="dbname=postgres user=postgres"))["nonlocal"] == []
+    assert R.check_local(R.RunConfig(db_dsn="host=/var/run/postgresql dbname=x"))[
+        "nonlocal"] == []
+
+
+async def test_run_refuses_a_remote_stack_before_sending_anything(tmp_path, no_network):
+    cfg = R.RunConfig(api="http://203.0.113.9:7200", out=str(tmp_path / "o"), trap=False)
+    r = R.Runner(cfg, http=httpx.AsyncClient())
+    with pytest.raises(R.PreflightError, match="--api 203.0.113.9"):
+        await r.run()
+    assert not (tmp_path / "o").exists()
+    await r.aclose()
+
+
+def test_allow_nonlocal_is_a_recorded_flag():
+    a = R._parser().parse_args(["run", "--allow-nonlocal"])
+    cfg = R.config_from_args(a, environ={})
+    assert cfg.allow_nonlocal is True and cfg.public()["allow_nonlocal"] is True
