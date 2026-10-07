@@ -11,6 +11,7 @@ const VIEWS: Record<string, RouteRecordRaw["component"]> = {
   search: () => import("@/views/SearchView.vue"),
   verify: () => import("@/views/VerifyView.vue"),
   lineage: () => import("@/views/LineageView.vue"),
+  integrity: () => import("@/views/IntegrityView.vue"),
 };
 
 const routes: RouteRecordRaw[] = [
@@ -30,7 +31,7 @@ export const router = createRouter({
   scrollBehavior(to, from, saved) {
     if (saved) return saved;
     if (to.hash) return { el: to.hash };
-    if (to.name === from.name && to.name === "search") return false; // paging and refining keep the place
+    if (to.name === from.name && (to.name === "search" || to.name === "integrity")) return false; // paging, filtering and picking keep the place
     return { top: 0 };
   },
 });
