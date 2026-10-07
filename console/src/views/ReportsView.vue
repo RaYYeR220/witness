@@ -95,7 +95,8 @@ watch(selected, (h) => h && void open(h), { immediate: true });
 
 const result = computed(() => doc.value?.result ?? null);
 const state = computed(() => check.value?.state ?? "checking");
-const totals = computed(() => reportTotals(result.value?.report));
+/** Shown from the browser's own parse of the text served, the one it hashed; nothing until then. */
+const totals = computed(() => reportTotals(check.value?.report));
 const htmlUrl = computed(() => (result.value ? data.reportHtmlUrl(result.value.reportHash) : null));
 const scope = (r: ReportSummary) =>
   `${r.ie ?? "every IE"}, ${r.msFrom !== null || r.msTo !== null ? `milestones ${r.msFrom ?? "first"}–${r.msTo ?? "last"}` : "all milestones"}`;
@@ -265,9 +266,9 @@ function download() {
               The HTML page is the explorer's rendering of the stored report, opened on its own. It is not what your browser checked; the hashes above
               are.
             </p>
-            <details class="json">
-              <summary>The report JSON, as served</summary>
-              <JsonText :value="result.report" :max="60000" />
+            <details v-if="check && check.report !== undefined" class="json">
+              <summary>The report JSON, as your browser parsed and hashed it</summary>
+              <JsonText :value="check.report" :max="60000" />
             </details>
           </template>
         </section>

@@ -21,19 +21,24 @@ import { bindBundle } from "@/verify/binding";
 
 export const AUDIT_TAG = "audit.report";
 
-/** The canonical hash of the `report` member of a `GET /reports/{hash}` answer, from its exact text. */
-export function recomputeReportHash(text: string): { hash: string | null; problem: string | null } {
+/**
+ * The canonical hash of the `report` member of a `GET /reports/{hash}` answer, from its
+ * exact text, with the verifier's own (depth-capped) parser. `report` is that same parse,
+ * so what the screen shows is what was hashed.
+ */
+export function recomputeReportHash(text: string): { hash: string | null; problem: string | null; report: unknown } {
   let doc: unknown;
   try {
     doc = parseJson(text, { constants: true });
   } catch {
-    return { hash: null, problem: "the answer is not JSON" };
+    return { hash: null, problem: "the answer is not JSON", report: undefined };
   }
-  if (!isDict(doc) || !Object.hasOwn(doc, "report")) return { hash: null, problem: "the answer carries no report" };
+  if (!isDict(doc) || !Object.hasOwn(doc, "report")) return { hash: null, problem: "the answer carries no report", report: undefined };
+  const report = (doc as Record<string, unknown>).report;
   try {
-    return { hash: toHex(canonHash((doc as Record<string, unknown>).report)), problem: null };
+    return { hash: toHex(canonHash(report)), problem: null, report };
   } catch (e) {
-    return { hash: null, problem: `the report cannot be canonicalised (${(e as Error).name})` };
+    return { hash: null, problem: `the report cannot be canonicalised (${(e as Error).name})`, report };
   }
 }
 
@@ -100,6 +105,8 @@ export interface ReportCheck {
   ledgerHash: string | null;
   iss: string | null;
   ladder: Ladder | null;
+  /** The report as the browser parsed it from the text served (the very value it hashed). */
+  report: unknown;
   /** The pinned report signer the block's (step 4 checked) issuer matched, once verified. */
   signer: string | null;
   /** Step 5: the block's milestone is in a checkpoint on IOTA Rebased (null: not run). */
@@ -130,6 +137,7 @@ export async function checkReport(doc: ReportDoc, deps: CheckDeps): Promise<Repo
     ledgerHash: null,
     iss: null,
     ladder: null,
+    report: mine.report,
     signer: null,
     rebased: null,
     reasons: [],

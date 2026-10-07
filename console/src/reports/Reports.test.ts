@@ -78,7 +78,9 @@ afterEach(() => {
 describe("report hash", () => {
   it("is computed in the browser from the JSON served, with the same canonical hash as the API", () => {
     const r = recomputeReportHash(JSON.stringify(REPORT));
-    expect(r).toEqual({ hash: REPORT.reportHash, problem: null });
+    expect(r.hash).toBe(REPORT.reportHash);
+    expect(r.problem).toBeNull();
+    expect(r.report).toEqual(REPORT.report); // the parse that was hashed, for the screen to show
     // key order and spacing do not matter (canonical form); one changed number does
     const reordered = JSON.stringify({ report: Object.fromEntries(Object.entries(REPORT.report as object).reverse()) }, null, 3);
     expect(recomputeReportHash(reordered).hash).toBe(REPORT.reportHash);
@@ -270,6 +272,9 @@ describe("Reports screen", () => {
     expect(html.attributes("rel")).toContain("noopener");
     expect(w.find(".render-note").text()).toContain("not what your browser checked");
     expect(document.querySelector("iframe")).toBeNull();
+    // the JSON on screen is the browser's own parse, the one it hashed
+    expect(w.find(".json summary").text()).toBe("The report JSON, as your browser parsed and hashed it");
+    expect(w.find(".totals").text()).toContain("Messages");
     expect(await axeClean()).toEqual([]);
     w.unmount();
   });
