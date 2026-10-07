@@ -146,7 +146,9 @@ only: the `indexer` login may read `aerios/iota/submissions/#` and write `witnes
   milestone's time). Otherwise nothing is written and the milestone is retried.
 - A writer policy is required: `--policy policy.json` (same format as the relay's),
   or `--allow-any-writer` for development, which logs a warning. Signers missing
-  from the policy get `UNAUTHORIZED_WRITER`.
+  from the policy get `UNAUTHORIZED_WRITER`, unless the key they signed with was
+  revoked by the time the block was confirmed: that is `REVOKED_KEY` whoever the
+  policy lists (the relay and the proof bundle decide it the same way).
 - `--mqtt` stores the Messages API's submission records; `--validate` checks each
   submitted block against the node, and every `--reverify-every-s` (60 s; 0 turns it
   off) re-verifies the parallel database: one pass over every block it checked or

@@ -859,6 +859,31 @@ async def test_did_resolver_is_asked_at_the_milestone_time(store: Store):
     assert (await msg(store, chain.block_id(2, 1)))["verdict"] == "PRODUCER_SIGNED"
 
 
+async def test_revoked_key_wins_over_the_writer_policy(store: Store):
+    """A key the DID revoked signs for nobody: REVOKED_KEY whether or not the policy lists
+    the DID (as the relay's gate and the bundle's envelope step decide). Before the
+    revocation the same unlisted signer is an UNAUTHORIZED_WRITER."""
+    chain = FakeChain()
+    chain.add([("trust.score", iota_signed(1))])
+    chain.add([("trust.score", iota_signed(2)),
+               ("trust.score", signed(BOB, "trust.score", score("D:aabbccddeeff", 0.5), 1))])
+    revoked = chain.ms[2].timestamp * 1000 - 1
+    url = f"{ANCHOR}/resolve/{quote(IOTA_DID, safe='')}"
+    rules = RulesEngine(store, None, DidResolver(None), POLICY)
+    async with respx.mock(assert_all_called=False) as router:
+        router.get(url).mock(return_value=httpx.Response(200, json=did_reply(revoked)))
+        resolver = DidResolver(ANCHOR)
+        await indexer(FakeSource(chain), store, resolve=resolver, rules=rules).sync()
+        await resolver.aclose()
+    assert IOTA_DID not in POLICY.tags["trust.score"].allowed
+    assert [(await msg(store, chain.block_id(*at)))["verdict"] for at in ((1, 0), (2, 0), (2, 1))
+            ] == ["UNAUTHORIZED_WRITER", "REVOKED_KEY", "UNAUTHORIZED_WRITER"]
+    revoked_row = await msg(store, chain.block_id(2, 0))
+    assert (revoked_row["iss"], revoked_row["seq"]) == (IOTA_DID, 2)
+    assert [a["rule"] for a in await store.alerts({"block_id": chain.block_id(2, 0)})] == [
+        "REVOKED_KEY"]
+
+
 async def test_non_canonical_did_is_forged_without_a_lookup(store: Store):
     """An upper-case or short did:iota DID is FORGED "non-canonical DID": the resolver is
     never asked (the anchor would answer for the canonical spelling, which no reply for this

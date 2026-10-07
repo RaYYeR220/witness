@@ -4,10 +4,10 @@
 characters, no lone surrogates, no nesting deeper than MAX_DEPTH) and extracts blind tokens and
 the trust score. `resolve_keys` looks up every signing key a milestone needs, before any
 database transaction is opened. `judge` gives the single verdict, in this order: envelope
-structure and signature, writer policy, replay (an issuer's seq or nonce already used by
-another block), key revocation at the milestone's time (second precision: a revocation
-anywhere inside the milestone's second revokes), and last the body against its tag's schema
-(a validly signed message with a body that breaks it is MALFORMED).
+structure and signature, key revocation at the milestone's time (second precision: a
+revocation anywhere inside the milestone's second revokes), writer policy, replay (an
+issuer's seq or nonce already used by another block), and last the body against its tag's
+schema (a validly signed message with a body that breaks it is MALFORMED).
 """
 
 from __future__ import annotations
@@ -269,6 +269,13 @@ async def judge(store: Store, pol: WriterPolicy, keys: Mapping[str, KeyInfo | No
                 and not is_canonical_did(chk.kid.split("#", 1)[0]):
             return Judgement(verdicts.FORGED, chk, NON_CANONICAL_DID)  # never looked up
         return Judgement(chk.verdict, chk, chk.reason)
+    # A key revoked by the time the block was confirmed signs for nobody, whoever the policy
+    # lists: decided before the writer policy, as the relay's gate and the proof bundle's
+    # envelope step (which knows no policy) do.
+    info = keys.get(chk.kid)
+    if info is not None and not valid_through_second(info.revoked_at_ms, ms_timestamp):
+        return Judgement(verdicts.REVOKED_KEY, chk,
+                         "key revoked before or within the milestone's second")
     if not policy.allowed(pol, d.tag, chk.iss):
         return Judgement(verdicts.UNAUTHORIZED_WRITER, chk, "issuer not allowed for this tag")
 
@@ -283,10 +290,6 @@ async def judge(store: Store, pol: WriterPolicy, keys: Mapping[str, KeyInfo | No
         if earlier is not None:
             return Judgement(verdicts.REPLAY, chk, f"nonce already used by 0x{earlier.hex()}")
 
-    info = keys.get(chk.kid)
-    if info is not None and not valid_through_second(info.revoked_at_ms, ms_timestamp):
-        return Judgement(verdicts.REVOKED_KEY, chk,
-                         "key revoked before or within the milestone's second")
     if not d.classified.schema_ok:
         # A good signature does not make a bad body acceptable. The check stays on the
         # judgement, so the stored row keeps who signed it (iss, kid, seq).
