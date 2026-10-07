@@ -189,3 +189,12 @@ def test_control_and_scorecard_control_section(key):
         [{"control": "C01", "alerts": []}, {"control": "C01", "alerts": ["SHADOW"]}])
     assert card["controls"] == {"trials": 2, "passed": 1}
     assert "Positive control: 1/2" in scorecard.render_markdown(card)
+
+
+def test_producer_amendment_keeps_every_expectation(key):
+    second = key["amendments"][1]
+    assert str(second["date"]) == "2026-10-07" and second["before_first_run"] is True
+    assert any("chaos-only did:key" in c for c in second["changes"])
+    # The amendment changes who signs, not what is expected.
+    assert {c["id"]: c["expect"] for c in key["classes"]}["A17"] == {
+        "alert": "SHADOW", "severity": "high", "block_verdict": "PRODUCER_SIGNED"}

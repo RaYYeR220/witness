@@ -13,8 +13,9 @@
 # the runner waits after the injection before scoring the trial a miss.
 #
 # Writer policy for the run: chaos/demo-policy.json (trust.score is signed by the
-# trust-manager DID only). The run holds three signing identities: `producer` (the
-# sandbox trust-manager key, allowed on trust.score), `outsider` (a resolvable DID
+# trust-manager DID only) plus the run's producer (amendment 2026-10-07). The run holds
+# three signing identities: `producer` (a chaos-only key allowed on trust.score, since
+# amendment 2026-10-07; first the sandbox trust-manager key), `outsider` (a resolvable DID
 # the policy does not list) and `revoked` (a DID whose signing key was revoked
 # before the run). Envelope attacks (A01-A05, A12, A13, A15) go straight to HORNET,
 # because the relay's own policy gate would refuse them; the SHADOW alert such a
@@ -29,6 +30,12 @@ amendments:
       - "A17 additionally requires block_verdict PRODUCER_SIGNED; added a positive control: a relay-routed genuine block raises no SHADOW."
       - "A07 flips a bit inside the tagged-data payload region only and requires that the block still parses (parses: true)."
       - "per_trial_ie: classes that write about an IE use a fresh IE id and baseline per trial."
+  - date: 2026-10-07
+    before_first_run: true
+    note: "A 2-trials-per-class smoke run of the harness preceded this change; it is not a result and no expectation changes."
+    changes:
+      - "The run's `producer` is a chaos-only did:key signer generated for the run (`witness-chaos keys`), never the live trust-manager DID: two signers sharing one key interleave their seq/prev chains, which put CHAIN_GAP alerts on the live Trust Manager's lineage during the smoke run. The stack runs the eval policy written next to that key: demo-policy.json with the producer DID added to trust.score's allowed list, nothing else changed. Every expectation reads the same for this producer."
+      - "A19 tampers only with a stored message the run's own producer signed, never with another writer's data."
 
 version: 1
 network: testnet
