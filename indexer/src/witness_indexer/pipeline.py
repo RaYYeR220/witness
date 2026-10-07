@@ -146,6 +146,10 @@ class Indexer:
             # A configuration choice, not an outage: only did:key (and pinned) DIDs resolve,
             # every other signer is FORGED ("signing key not resolvable").
             await self._publish("resolver", "disabled")
+        elif self.resolver is not None:
+            # Replace whatever an earlier process left in the status table: until a lookup
+            # fails in this process, the resolver counts as reachable.
+            await self._publish("resolver", "ok")
         log.info("indexing from milestone %d via %s", start, self.source.name)
         async for m in self.source.milestones(start):
             if m.index <= self.last_index:
