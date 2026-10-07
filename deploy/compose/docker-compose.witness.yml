@@ -18,6 +18,10 @@ name: witness
 
 x-service: &service
   restart: unless-stopped
+  # Mounted secrets are 0640, group-owned by the user who ran setup-secrets.sh (it writes this
+  # id to .env); the containers' own users read them through that group. Docker Desktop
+  # ignores host permissions, where the default 0 is harmless.
+  group_add: ["${WITNESS_SECRETS_GID:-0}"]
   read_only: true
   security_opt: ["no-new-privileges:true"]
   cap_drop: [ALL]

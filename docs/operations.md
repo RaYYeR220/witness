@@ -330,9 +330,12 @@ docker compose -f deploy/compose/docker-compose.witness.yml up -d --build
   fault-injection evaluation.
 - **Low memory.** `up --build` builds images in parallel; `stack-up.sh --witness` builds them
   one at a time.
-- **Linux hosts.** Containers read the secrets as uid 10001 (Python services, Trust Manager),
-  1000 (anchor) and 1883 (Mosquitto); files that only their owner can read must be made
-  readable to those users (Docker Desktop does not enforce this).
+- **File permissions.** Containers run as uid 10001 (Python services, Trust Manager), 1000
+  (anchor) and 101 (console). `setup-secrets.sh` makes the files they mount 0640 (directories
+  0750), group-owned by the user who runs it, and writes that group id to `.env` as
+  `WITNESS_SECRETS_GID`; the overlay adds the group to every container (`group_add`). On Linux
+  the IOTA keystore file needs the same: `chgrp "$(id -g)" iota.keystore && chmod 0640 iota.keystore`.
+  Docker Desktop ignores host permissions.
 
 ### Helm
 

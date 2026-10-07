@@ -8,16 +8,21 @@
 # Creates, when missing:
 #   mosquitto/{relay,indexer,observer}.password   broker passwords (random)
 #   tokens/{ingest,report,posture,anchor-admin}.token
-#   relay/sig-1.pem                               relay signing key as PKCS#8 (from sig-1.jwk.json)
 #   relay/search.key                              blind-index key for sealed tags (random)
 # Rewrites:
 #   mosquitto/passwd                              hashed broker passwords (when a password changed)
+#   relay/sig-1.pem                               relay signing key as PKCS#8 (from sig-1.jwk.json)
 #   relay/recipients.json                         public X25519 key of the domain (from deploy/identity)
 #   compose/{relay,indexer,api,anchor}.env        credentials each container gets, nothing more
 #
 # Component signing keys (<component>/sig-1.jwk.json) come from anchor/scripts/bootstrap-identities.ts.
 # Helper containers (the broker image for hashing, python:3.12-slim for the rest) only compute
 # and print; every file is written here, by the invoking user. Only file names are printed.
+#
+# Containers run as their own unprivileged users. They read the files mounted into them through
+# the invoking user's group: those files become 0640 (their directories 0750) and that group id
+# is written to deploy/compose/.env as WITNESS_SECRETS_GID, which the overlay adds to every
+# container (group_add). Everything else in secrets/ stays readable by its owner only.
 set -euo pipefail
 
 here="$(cd "$(dirname "$0")" && pwd)"
@@ -124,14 +129,15 @@ def jwk(component):
 
 
 # relay/sig-1.pem: the relay reads PKCS#8 PEM. PKCS#8 of an Ed25519 seed is a fixed prefix + seed.
+# Derived on every run, so a rotated relay key reaches the relay with the next setup.
 relay = jwk("relay")
-if relay is not None and not exists("relay/sig-1.pem"):
+if relay is not None:
     seed = b64u_decode(relay["d"])
     if len(seed) != 32:
         sys.exit("relay key: an Ed25519 seed is 32 bytes")
     der = bytes.fromhex("302e020100300506032b657004220420") + seed
     emit("relay/sig-1.pem", "-----BEGIN PRIVATE KEY-----\n" + base64.encodebytes(der).decode()
-         + "-----END PRIVATE KEY-----\n")
+         + "-----END PRIVATE KEY-----\n", "wrote")
 
 if not exists("relay/search.key"):
     emit("relay/search.key", base64.urlsafe_b64encode(secrets.token_bytes(32)).decode().rstrip("=") + "\n")
@@ -174,3 +180,27 @@ for service, values in env.items():
 out.close()
 PY
 )" | tar -x -f - -C "$secrets"
+
+# Group access for the containers (see the header).
+gid="$(id -g)"
+for d in "" relay mosquitto domain anchor trust-manager; do
+  if [ -d "$secrets/$d" ]; then chmod 0750 "$secrets/$d"; fi
+done
+for f in relay/sig-1.pem relay/recipients.json relay/search.key mosquitto/passwd \
+         domain/sig-1.jwk.json anchor/sig-1.jwk.json trust-manager/sig-1.jwk.json; do
+  if [ -f "$secrets/$f" ]; then
+    chgrp "$gid" "$secrets/$f" 2>/dev/null || true
+    chmod 0640 "$secrets/$f"
+  fi
+done
+env_file="$here/.env"
+if [ -f "$env_file" ] && grep -q '^WITNESS_SECRETS_GID=' "$env_file"; then
+  if ! grep -q "^WITNESS_SECRETS_GID=$gid\$" "$env_file"; then
+    sed -i "s/^WITNESS_SECRETS_GID=.*/WITNESS_SECRETS_GID=$gid/" "$env_file"
+    echo "updated WITNESS_SECRETS_GID in deploy/compose/.env"
+  fi
+else
+  if [ -s "$env_file" ] && [ -n "$(tail -c 1 "$env_file")" ]; then echo >>"$env_file"; fi
+  printf 'WITNESS_SECRETS_GID=%s\n' "$gid" >>"$env_file"
+  echo "added WITNESS_SECRETS_GID to deploy/compose/.env"
+fi
