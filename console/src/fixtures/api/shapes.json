@@ -262,7 +262,8 @@
    "wfIndex": false,
    "atMs": false,
    "at": false,
-   "links": true
+   "links": true,
+   "claimsIssuer": true
   },
   "ChainView": {
    "links": true,

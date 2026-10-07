@@ -14,8 +14,9 @@ const L = live as unknown as Record<string, any>;
 const FLOW = L.flowIssuer as Flow; // 6 newest messages of the trust manager's chain, recorded from the API
 
 const id = (n: number) => "0x" + n.toString(16).padStart(2, "0").repeat(32);
+// Without the recorded claimsIssuer mark: each test sets it, or leaves it out like an older API.
 const item = (n: number, prev: number | null): FlowItem =>
-  ({ ...FLOW.items[0]!, blockId: id(n), prev: prev === null ? null : id(prev), seq: n }) as FlowItem;
+  ({ ...FLOW.items[0]!, claimsIssuer: undefined, blockId: id(n), prev: prev === null ? null : id(prev), seq: n }) as FlowItem;
 
 const json = (v: unknown) => new Response(JSON.stringify(v), { status: 200, headers: { "content-type": "application/json" } });
 

@@ -1627,7 +1627,8 @@
      "self": "/messages/0x86936833de90ad898c612762eda7de7718f4e41571a96e1702c14f2f3f0f3715",
      "lifecycle": "/messages/0x86936833de90ad898c612762eda7de7718f4e41571a96e1702c14f2f3f0f3715/lifecycle",
      "proof": "/proofs/0x86936833de90ad898c612762eda7de7718f4e41571a96e1702c14f2f3f0f3715"
-    }
+    },
+    "claimsIssuer": false
    },
    {
     "blockId": "0x08920d0e855b807b5cdfe8517f9300743cc09eee5a55c905d668f1714e0396a0",
@@ -1648,7 +1649,8 @@
      "self": "/messages/0x08920d0e855b807b5cdfe8517f9300743cc09eee5a55c905d668f1714e0396a0",
      "lifecycle": "/messages/0x08920d0e855b807b5cdfe8517f9300743cc09eee5a55c905d668f1714e0396a0/lifecycle",
      "proof": "/proofs/0x08920d0e855b807b5cdfe8517f9300743cc09eee5a55c905d668f1714e0396a0"
-    }
+    },
+    "claimsIssuer": false
    },
    {
     "blockId": "0xd10139c54a6db9327906452acd91f1fbefa96c023371b45b7b3211f1e359a4b8",
@@ -1669,7 +1671,8 @@
      "self": "/messages/0xd10139c54a6db9327906452acd91f1fbefa96c023371b45b7b3211f1e359a4b8",
      "lifecycle": "/messages/0xd10139c54a6db9327906452acd91f1fbefa96c023371b45b7b3211f1e359a4b8/lifecycle",
      "proof": "/proofs/0xd10139c54a6db9327906452acd91f1fbefa96c023371b45b7b3211f1e359a4b8"
-    }
+    },
+    "claimsIssuer": false
    },
    {
     "blockId": "0x7e0929de1cb1190483459bde43f7e422fb3afbb47e18ec5ddce97acdab209a11",
@@ -1690,7 +1693,8 @@
      "self": "/messages/0x7e0929de1cb1190483459bde43f7e422fb3afbb47e18ec5ddce97acdab209a11",
      "lifecycle": "/messages/0x7e0929de1cb1190483459bde43f7e422fb3afbb47e18ec5ddce97acdab209a11/lifecycle",
      "proof": "/proofs/0x7e0929de1cb1190483459bde43f7e422fb3afbb47e18ec5ddce97acdab209a11"
-    }
+    },
+    "claimsIssuer": false
    },
    {
     "blockId": "0x1b3e4dc7d94ea444d72af173cb402575a607dd8420cb9c86f7da58edb3c47a6a",
@@ -1711,7 +1715,8 @@
      "self": "/messages/0x1b3e4dc7d94ea444d72af173cb402575a607dd8420cb9c86f7da58edb3c47a6a",
      "lifecycle": "/messages/0x1b3e4dc7d94ea444d72af173cb402575a607dd8420cb9c86f7da58edb3c47a6a/lifecycle",
      "proof": "/proofs/0x1b3e4dc7d94ea444d72af173cb402575a607dd8420cb9c86f7da58edb3c47a6a"
-    }
+    },
+    "claimsIssuer": false
    },
    {
     "blockId": "0xef9989a673bc8c41813c8f7c1f2e43ed2e0cf595782feccf3d6abc7342de4623",
@@ -1732,7 +1737,8 @@
      "self": "/messages/0xef9989a673bc8c41813c8f7c1f2e43ed2e0cf595782feccf3d6abc7342de4623",
      "lifecycle": "/messages/0xef9989a673bc8c41813c8f7c1f2e43ed2e0cf595782feccf3d6abc7342de4623/lifecycle",
      "proof": "/proofs/0xef9989a673bc8c41813c8f7c1f2e43ed2e0cf595782feccf3d6abc7342de4623"
-    }
+    },
+    "claimsIssuer": false
    }
   ],
   "total": 581,
@@ -1804,7 +1810,8 @@
      "self": "/messages/0xbc52ba505dbf1456e1fe0a68e0ae53b5abed2387abdec208d179ff4c752a7b2e",
      "lifecycle": "/messages/0xbc52ba505dbf1456e1fe0a68e0ae53b5abed2387abdec208d179ff4c752a7b2e/lifecycle",
      "proof": "/proofs/0xbc52ba505dbf1456e1fe0a68e0ae53b5abed2387abdec208d179ff4c752a7b2e"
-    }
+    },
+    "claimsIssuer": false
    },
    {
     "blockId": "0x08920d0e855b807b5cdfe8517f9300743cc09eee5a55c905d668f1714e0396a0",
@@ -1825,7 +1832,8 @@
      "self": "/messages/0x08920d0e855b807b5cdfe8517f9300743cc09eee5a55c905d668f1714e0396a0",
      "lifecycle": "/messages/0x08920d0e855b807b5cdfe8517f9300743cc09eee5a55c905d668f1714e0396a0/lifecycle",
      "proof": "/proofs/0x08920d0e855b807b5cdfe8517f9300743cc09eee5a55c905d668f1714e0396a0"
-    }
+    },
+    "claimsIssuer": false
    },
    {
     "blockId": "0x1b3e4dc7d94ea444d72af173cb402575a607dd8420cb9c86f7da58edb3c47a6a",
@@ -1846,7 +1854,8 @@
      "self": "/messages/0x1b3e4dc7d94ea444d72af173cb402575a607dd8420cb9c86f7da58edb3c47a6a",
      "lifecycle": "/messages/0x1b3e4dc7d94ea444d72af173cb402575a607dd8420cb9c86f7da58edb3c47a6a/lifecycle",
      "proof": "/proofs/0x1b3e4dc7d94ea444d72af173cb402575a607dd8420cb9c86f7da58edb3c47a6a"
-    }
+    },
+    "claimsIssuer": false
    }
   ],
   "total": 273,
