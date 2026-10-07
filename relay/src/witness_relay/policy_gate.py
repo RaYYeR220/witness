@@ -1,9 +1,11 @@
 """Fail-closed admission: who may put what on which tag.
 
-Producer envelopes must verify, use an unrevoked key, come from an issuer the writer
-policy allows for the tag, and carry a body that fits the tag's schema (the explorer stores
-a signed message with a broken body as MALFORMED; the relay refuses it with 400 instead of
-posting it). Legacy messages are admitted for relay attestation (or, on pass-through tags,
+Producer envelopes must nest no deeper than the explorer reads (64 levels), verify, use an
+unrevoked key, come from an issuer the writer policy allows for the tag, not reuse a seq or
+nonce the issuer already spent here, and carry a body that fits the tag's schema (the
+explorer stores a signed message with a broken body as MALFORMED; the relay refuses it with
+400 instead of posting it). The checks run in the indexer's order, so a refusal names the
+verdict the explorer would have recorded. Legacy messages are admitted for relay attestation (or, on pass-through tags,
 posted unsigned exactly as the original API did) unless the tag demands signatures without
 a legacy grace and the caller is anonymous.
 
@@ -17,11 +19,11 @@ from __future__ import annotations
 
 import json
 import time
-from collections.abc import Iterable
+from collections.abc import Awaitable, Callable, Iterable
 from dataclasses import dataclass
 from typing import Literal
 
-from witness_core import envelope, policy, schema, verdicts
+from witness_core import envelope, nesting, policy, schema, verdicts
 from witness_core.envelope import KeyInfo
 from witness_core.ids import NON_CANONICAL_DID
 from witness_core.policy import WriterPolicy
@@ -30,6 +32,10 @@ from .auth import ANONYMOUS
 from .keys import KeyResolver, NonCanonicalDid
 
 _ACCEPTED = (verdicts.PRODUCER_SIGNED, verdicts.RELAY_ATTESTED)
+TOO_DEEP = "nesting too deep"
+
+# (iss, seq, nonce) -> why the envelope would replay one this relay already took, or None.
+ReplayCheck = Callable[[str, int, str | None], Awaitable[str | None]]
 
 
 @dataclass(frozen=True)
@@ -64,13 +70,18 @@ class PolicyGate:
         relay_did: str,
         *,
         passthrough_tags: Iterable[str] = (),
+        replay_check: ReplayCheck | None = None,
     ):
         self.policy = writer_policy
         self._resolver = resolver
         self._relay_did = relay_did
         self._passthrough_tags = frozenset(passthrough_tags)
+        self._replay_check = replay_check
 
     async def check_envelope(self, tag: str, env: dict) -> Decision:
+        # Past the explorer's cap nothing is read further: MALFORMED there, refused here.
+        if nesting.containers_too_deep(env):
+            return Decision(False, verdicts.MALFORMED, "producer", reason=TOO_DEEP, status=400)
         # First pass without keys: only an envelope that gets as far as the key lookup
         # (well-formed, tag-bound, kid belonging to iss) triggers a resolution.
         asked: list[str] = []
@@ -111,6 +122,14 @@ class PolicyGate:
             return refuse(verdicts.REPLAY, "relay-issued envelopes cannot be resubmitted")
         if not policy.allowed(self.policy, tag, check.iss):
             return refuse(verdicts.UNAUTHORIZED_WRITER, f"{check.iss} may not write tag {tag!r}")
+        # A seq or nonce already spent, before the body: the indexer's order. The seq is
+        # claimed atomically later (ReceiptStore.reserve), which settles concurrent copies.
+        if self._replay_check is not None:
+            nonce = env.get("nonce")
+            why = await self._replay_check(check.iss, check.seq,
+                                           nonce if isinstance(nonce, str) else None)
+            if why is not None:
+                return refuse(verdicts.REPLAY, why)
         # Same rule as the indexer's (schema.classify of these bytes).
         problem = schema.body_problem(tag, env)
         if problem is not None:

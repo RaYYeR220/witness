@@ -222,7 +222,9 @@ async def _handle(
                 )
             )
         claim = (decision.iss, decision.seq, previous)
-        return await _send(relay, node, base_url, sub, decision, data, claim=claim)
+        nonce = message.get("nonce")
+        return await _send(relay, node, base_url, sub, decision, data, claim=claim,
+                           nonce=nonce if isinstance(nonce, str) else None)
 
     try:
         caller = await relay.auth.caller(request.headers.get("authorization"))
@@ -238,6 +240,8 @@ async def _handle(
         return refuse(decision)
 
     if decision.mode == "passthrough":
+        if nesting.containers_too_deep(message):
+            return _too_deep(sub)
         data = legacy_data(message)
         if block_size(tag, data) > relay.cfg.max_block_bytes:
             return _too_large(relay.cfg)
@@ -253,6 +257,8 @@ async def _handle(
     if too_big:
         sub.iss = decision.iss
         return _too_large(relay.cfg)
+    if "body" in content and nesting.containers_too_deep({"body": content["body"]}):
+        return _too_deep(sub)  # as the envelope the relay would post
 
     async with relay.chain_lock:
         try:
@@ -306,6 +312,7 @@ async def _send(
     *,
     kid: str | None = None,
     claim: tuple[str, int, int] | None = None,
+    nonce: str | None = None,
 ) -> Response:
     try:
         resp = await relay.submit(base_url, sub.tag, data)
@@ -346,12 +353,21 @@ async def _send(
                 node=node,
                 hornet_status=resp.status_code,
                 received_at_ms=sub.received_at_ms,
+                nonce=nonce,
             ),
         )
     return legacy_json(
         {"status_code": resp.status_code, "return_payload": resp.text, "witness": sub.witness()},
         200,
     )
+
+
+def _too_deep(sub: Submission) -> Response:
+    """The explorer reads no message nested past nesting.MAX_MESSAGE_DEPTH (it records it
+    MALFORMED), so the relay does not post one."""
+    sub.verdict = verdicts.MALFORMED
+    return JSONResponse({"error": "message nested too deeply", "verdict": sub.verdict},
+                        status_code=400)
 
 
 def _too_large(cfg: RelayConfig) -> Response:
@@ -399,6 +415,7 @@ def create_app(cfg: RelayConfig, *, forwarders: list[Forwarder] | None = None) -
                 resolver,
                 cfg.relay_did,
                 passthrough_tags=cfg.passthrough_tags,
+                replay_check=store.replay_reason,
             ),
             auth=CallerAuth(
                 cfg.keycloak_jwks_url, http, audience=cfg.jwt_audience, issuer=cfg.jwt_issuer

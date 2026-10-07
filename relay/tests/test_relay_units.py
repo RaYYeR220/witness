@@ -383,3 +383,53 @@ async def test_gate_forges_non_canonical_dids_without_a_lookup():
                     False, verdicts.FORGED, "non-canonical DID")
                 assert d.iss == did
     assert route.call_count == 0
+
+
+OPEN = policy.load({"version": 1, "default": {"allowed": ["*"]}})
+
+
+def _did_key_envelope(tag, body, *, seq=1, key=None):
+    from witness_relay.keys import did_key as make_did_key
+
+    key = key or Ed25519PrivateKey.generate()
+    did = make_did_key(key.public_key().public_bytes_raw())
+    kid = f"{did}#{did.split(':')[-1]}"
+    return envelope.seal(tag, body, iss=did, kid=kid, sign_key=key, seq=seq,
+                         att_mode="producer")
+
+
+async def test_gate_refuses_envelopes_past_the_explorers_nesting_cap():
+    gate = PolicyGate(OPEN, KeyResolver(), "did:key:zRelay")
+    deep: object = "leaf"
+    for _ in range(64):  # body at level 2, so the envelope reaches level 65
+        deep = {"n": deep}
+    d = await gate.check_envelope("t", _did_key_envelope("t", deep))
+    assert (d.allowed, d.verdict, d.reason, d.status) == (
+        False, verdicts.MALFORMED, "nesting too deep", 400)
+    edge: object = "leaf"
+    for _ in range(63):
+        edge = {"n": edge}
+    assert (await gate.check_envelope("t", _did_key_envelope("t", edge))).allowed
+
+
+async def test_gate_names_a_replay_before_a_broken_body_as_the_indexer_does():
+    asked = []
+
+    async def replays(iss, seq, nonce):
+        asked.append((iss, seq, nonce))
+        return "nonce already used by 0xab"
+
+    gate = PolicyGate(OPEN, KeyResolver(), "did:key:zRelay",
+                      replay_check=replays)
+    env = _did_key_envelope("trust.score", {"score": 7})  # breaks the trust.score schema
+    d = await gate.check_envelope("trust.score", env)
+    assert (d.verdict, d.reason) == (verdicts.REPLAY, "nonce already used by 0xab")
+    assert asked == [(env["iss"], 1, env["nonce"])]
+
+    async def fresh(iss, seq, nonce):
+        return None
+
+    gate = PolicyGate(OPEN, KeyResolver(), "did:key:zRelay",
+                      replay_check=fresh)
+    d = await gate.check_envelope("trust.score", env)
+    assert (d.verdict, d.status) == (verdicts.MALFORMED, 400)

@@ -44,6 +44,9 @@ CREATE TABLE IF NOT EXISTS {s}.receipts (
 CREATE INDEX IF NOT EXISTS receipts_tag_idx ON {s}.receipts (tag, received_at_ms DESC);
 CREATE INDEX IF NOT EXISTS receipts_iss_idx ON {s}.receipts (iss, seq DESC);
 CREATE INDEX IF NOT EXISTS receipts_time_idx ON {s}.receipts (received_at_ms DESC);
+ALTER TABLE {s}.receipts ADD COLUMN IF NOT EXISTS nonce text;
+CREATE INDEX IF NOT EXISTS receipts_nonce_idx ON {s}.receipts (iss, nonce)
+    WHERE nonce IS NOT NULL;
 """
 
 
@@ -64,6 +67,7 @@ class Receipt:
     node: str
     hornet_status: int
     received_at_ms: int
+    nonce: str | None = None  # a producer envelope's nonce
 
 
 class ReceiptStore:
@@ -155,6 +159,27 @@ class ReceiptStore:
             )
         return current
 
+    async def replay_reason(self, iss: str, seq: int, nonce: str | None) -> str | None:
+        """Why a producer envelope would replay one already taken: its seq is not newer
+        than the last claimed for `iss`, or its nonce is on a block `iss` already sent
+        through this relay. Read-only; `reserve` still settles concurrent copies."""
+        async with self._pool.connection() as conn:
+            cur = await conn.execute(
+                self._q("SELECT seq FROM {s}.issuer_seq WHERE iss = %s"), (iss,)
+            )
+            row = await cur.fetchone()
+            if row is not None and row[0] >= seq:
+                return f"seq {seq} is not newer than the last from {iss}"
+            if nonce is None:
+                return None
+            cur = await conn.execute(
+                self._q("SELECT block_id FROM {s}.receipts WHERE iss = %s AND nonce = %s "
+                        "LIMIT 1"),
+                (iss, nonce),
+            )
+            row = await cur.fetchone()
+        return None if row is None else f"nonce already used by {row[0]}"
+
     async def release(self, iss: str, seq: int, previous: int) -> bool:
         """Undo a claim of `seq` (compare-and-set: only if nothing newer was claimed since)."""
         async with self._pool.connection() as conn:
@@ -198,8 +223,8 @@ class ReceiptStore:
             await conn.execute(
                 self._q(
                     "INSERT INTO {s}.receipts (block_id, sub_id, tag, iss, kid, seq, verdict, "
-                    "att_sub, node, hornet_status, received_at_ms) "
-                    "VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s) "
+                    "att_sub, node, hornet_status, received_at_ms, nonce) "
+                    "VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s) "
                     "ON CONFLICT (block_id) DO NOTHING"
                 ),
                 (
@@ -214,6 +239,7 @@ class ReceiptStore:
                     receipt.node,
                     receipt.hornet_status,
                     receipt.received_at_ms,
+                    receipt.nonce,
                 ),
             )
 

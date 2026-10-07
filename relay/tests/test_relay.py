@@ -345,6 +345,36 @@ async def test_producer_replay_rejected(make_cfg, hornet, relay, ids):
     assert state["last_block_id"] == newer.json()["witness"]["blockId"]
 
 
+async def test_producer_nonce_reuse_rejected_like_the_indexer(make_cfg, hornet, relay, ids):
+    nonce = bytes(range(16))
+    async with relay(make_cfg()) as client:
+        first = await client.post("/upload", params=UPLOAD, json={
+            "tag": "trust.score", "message": _seal(ids.producer, seq=7, nonce=nonce)})
+        assert first.status_code == 200
+        # Newer seq, same nonce: the indexer would record REPLAY, so it is not posted.
+        again = await client.post("/upload", params=UPLOAD, json={
+            "tag": "trust.score", "message": _seal(ids.producer, seq=8, nonce=nonce)})
+        assert again.status_code == 403
+        assert again.json()["verdict"] == verdicts.REPLAY
+        assert first.json()["witness"]["blockId"] in again.json()["error"]
+        # A replayed seq is named before a broken body, in the indexer's order.
+        broken = await client.post("/upload", params=UPLOAD, json={
+            "tag": "trust.score", "message": _seal(ids.producer, seq=7, body={"score": 7})})
+        assert broken.json()["verdict"] == verdicts.REPLAY
+    assert hornet.route.call_count == 1
+
+
+async def test_legacy_message_past_the_nesting_cap_is_400(make_cfg, hornet, relay):
+    deep: object = "leaf"
+    for _ in range(64):  # 64 levels: 65 inside the relay's envelope
+        deep = {"n": deep}
+    async with relay(make_cfg()) as client:
+        r = await client.post("/upload", params=UPLOAD, json={"tag": "t", "message": deep})
+        assert r.status_code == 400
+        assert r.json()["verdict"] == verdicts.MALFORMED
+    assert hornet.route.call_count == 0
+
+
 async def test_concurrent_same_seq_exactly_one_wins(make_cfg, hornet, relay, ids):
     a = _seal(ids.producer, seq=3, body={"score": 0.1, "id": "D:aabbccddeeff"})
     b = _seal(ids.producer, seq=3, body={"score": 0.9, "id": "D:aabbccddeeff"})

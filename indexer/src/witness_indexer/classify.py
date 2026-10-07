@@ -17,7 +17,7 @@ from collections.abc import Callable, Iterable, Mapping
 from dataclasses import dataclass
 from typing import Any, Protocol, runtime_checkable
 
-from witness_core import canon, envelope, ids, policy, schema, verdicts
+from witness_core import canon, envelope, ids, nesting, policy, schema, verdicts
 from witness_core.bundle import valid_through_second
 from witness_core.envelope import EnvelopeCheck, KeyInfo
 from witness_core.ids import NON_CANONICAL_DID, is_canonical_did
@@ -32,8 +32,9 @@ SIGNED = frozenset({verdicts.PRODUCER_SIGNED, verdicts.RELAY_ATTESTED})
 MAX_BLIND_TOKENS = 64
 MAX_BLIND_TOKEN_LEN = 256
 # Deepest JSON nesting the indexer will canonicalize, verify or store; real aeriOS messages
-# are a handful of levels deep. Deeper payloads keep their raw bytes only.
-MAX_DEPTH = 64
+# are a handful of levels deep. Deeper payloads keep their raw bytes only. The relay
+# refuses the same messages (nesting.MAX_MESSAGE_DEPTH).
+MAX_DEPTH = nesting.MAX_MESSAGE_DEPTH
 TOO_DEEP = "nesting too deep"
 # Longest DID the resolver is ever asked about (the anchor service's own limit). A longer
 # one cannot exist in the registry, so it is unresolvable without asking.
@@ -105,16 +106,7 @@ def storable_json(obj: Any) -> bool:
 def too_deep(obj: Any, limit: int = MAX_DEPTH) -> bool:
     """True when `obj` nests containers more than `limit` levels deep (checked without
     recursion, so any depth is safe to ask about)."""
-    stack = [(obj, 1)]
-    while stack:
-        v, depth = stack.pop()
-        children = v.values() if isinstance(v, dict) else v if isinstance(v, list) else None
-        if children is None:
-            continue
-        if depth > limit:
-            return True
-        stack.extend((c, depth + 1) for c in children if isinstance(c, (dict, list)))
-    return False
+    return nesting.containers_too_deep(obj, limit)
 
 
 def decode_tag(tag: bytes) -> str:

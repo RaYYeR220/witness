@@ -32,6 +32,25 @@ MAX_JCS_DEPTH = 500
 # decode at all (its text nests past MAX_JSON_DEPTH, bad header, no `doc`) or is not an
 # object whose `id` is the DID; the indexer and relay cache 422 like "no such DID".
 MAX_DOC_DEPTH = 64
+# Deepest container nesting of a message the explorer canonicalizes, verifies or stores (the
+# top object or array is level 1); real aeriOS messages are a handful of levels deep. The
+# indexer marks a deeper message MALFORMED and the relay refuses to post one.
+MAX_MESSAGE_DEPTH = 64
+
+
+def containers_too_deep(obj: Any, limit: int = MAX_MESSAGE_DEPTH) -> bool:
+    """True when `obj` nests dicts or lists more than `limit` levels deep, the top one
+    being level 1 (checked without recursion, so any depth is safe to ask about)."""
+    stack = [(obj, 1)]
+    while stack:
+        v, depth = stack.pop()
+        children = v.values() if isinstance(v, dict) else v if isinstance(v, list) else None
+        if children is None:
+            continue
+        if depth > limit:
+            return True
+        stack.extend((c, depth + 1) for c in children if isinstance(c, (dict, list)))
+    return False
 
 
 def text_too_deep(text: str, limit: int = MAX_JSON_DEPTH) -> bool:
