@@ -7,7 +7,7 @@ database and searchable over REST. Submitted blocks are also checked against HOR
 and byte-for-byte the bytes that were sent). Each block is provable from raw bytes up to a
 checkpoint on public IOTA Rebased.
 
-Replay console, nothing to install: <!-- REPLAY-URL -->not published yet<!-- /REPLAY-URL -->
+Replay console, nothing to install: [https://rayyer220.github.io/witness/](https://rayyer220.github.io/witness/)
 · Judges start here: [JUDGES.md](JUDGES.md)
 · Every claim with its evidence: [CLAIMS.md](CLAIMS.md)
 
