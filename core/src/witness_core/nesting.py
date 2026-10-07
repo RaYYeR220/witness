@@ -28,7 +28,9 @@ MAX_JCS_DEPTH = 500
 # Deepest value in a DID resolve reply (`{doc, version, keys}`, the reply itself at depth 0).
 # Real documents are a few levels deep; anyone can publish a did:iota document, so deeper
 # ones are refused as unusable everywhere (anchor resolver 422, indexer, relay) instead of
-# being walked or copied.
+# being walked or copied. The anchor also answers 422 when the stored document does not
+# decode at all (its text nests past MAX_JSON_DEPTH, bad header, no `doc`) or is not an
+# object whose `id` is the DID; the indexer and relay cache 422 like "no such DID".
 MAX_DOC_DEPTH = 64
 
 

@@ -1,7 +1,7 @@
 import { createHash, timingSafeEqual } from "node:crypto";
 import http from "node:http";
 import { ChainReadError, CheckpointNotFound, type CheckpointReader } from "./checkpoint-api.js";
-import { DidNotFoundError, InvalidDidError, resolvedKeys, type PublicIdentity, type ResolvedDid, type ResolvedKey } from "./did.js";
+import { DidNotFoundError, DidUnusableError, InvalidDidError, resolvedKeys, type PublicIdentity, type ResolvedDid, type ResolvedKey } from "./did.js";
 import { parseDid, type DidDocumentJson } from "./didcodec.js";
 import { log } from "./log.js";
 import type { LoopHealth, LoopStatus, TickResult } from "./loop.js";
@@ -89,6 +89,7 @@ export function createAnchorServer(deps: ServerDeps): http.Server {
       } catch (err) {
         if (err instanceof InvalidDidError) return { status: 400, body: { error: err.message } };
         if (err instanceof DidNotFoundError) reply = { status: 404, body: { error: err.message } };
+        else if (err instanceof DidUnusableError) reply = { status: 422, body: { error: err.message } };
         else {
           log.error("DID resolution failed", { did, error: err });
           return { status: 502, body: { error: "DID resolution failed upstream" } };

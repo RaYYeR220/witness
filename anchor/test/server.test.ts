@@ -1,7 +1,7 @@
 import type { AddressInfo } from "node:net";
 import type http from "node:http";
 import { afterEach, describe, expect, it } from "vitest";
-import { DidNotFoundError, InvalidDidError, type PublicIdentity, type ResolvedDid } from "../src/did.js";
+import { DidNotFoundError, DidUnusableError, InvalidDidError, type PublicIdentity, type ResolvedDid } from "../src/did.js";
 import { createAnchorServer, type ServerDeps } from "../src/server.js";
 
 const DID = `did:iota:testnet:0x${"cd".repeat(32)}`;
@@ -92,6 +92,21 @@ describe("GET /resolve/:did", () => {
       const { status, body } = await s.get(`/resolve/${DID}`);
       expect(status).toBe(422);
       expect(body).toEqual({ error: "DID document unusable: nested deeper than 64 levels" });
+    }
+    expect(s.calls).toEqual([DID]);
+  });
+
+  it("answers an undecodable or foreign document as unusable (422), cached like a 404", async () => {
+    const s = await start({
+      resolve: async (did) => {
+        s.calls.push(did);
+        throw new DidUnusableError(`${did}: document unusable: its id is not this DID`);
+      },
+    });
+    for (let i = 0; i < 2; i++) {
+      const { status, body } = await s.get(`/resolve/${DID}`);
+      expect(status).toBe(422);
+      expect(body).toEqual({ error: `${DID}: document unusable: its id is not this DID` });
     }
     expect(s.calls).toEqual([DID]);
   });

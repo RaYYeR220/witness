@@ -6,6 +6,7 @@ import type { ControllerToken, IdentityClient, IotaDocument, OnChainIdentity } f
 import { assertSuccess, forWasm, type AnchorWallet } from "./client.js";
 import { explorerLink, type AnchorConfig, type NetworkName } from "./config.js";
 import {
+  DidDecodeError,
   InvalidDidError,
   collectMethods,
   decodeStateMetadata,
@@ -33,6 +34,20 @@ export class DidNotFoundError extends Error {
   constructor(message: string) {
     super(message);
     this.name = "DidNotFoundError";
+  }
+}
+
+/**
+ * The DID exists but its current document cannot be used: it does not decode (bad marker,
+ * version or encoding, not JSON, nested past the text cap, no `doc`), or the document is not an
+ * object whose `id` is this DID. Anyone can publish a did:iota document, so this is an answer,
+ * not an outage: served as 422 and cached like "no such DID", so a signer naming it is refused
+ * for good instead of being retried.
+ */
+export class DidUnusableError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = "DidUnusableError";
   }
 }
 
@@ -95,8 +110,9 @@ function msToIso(ms: string | undefined): string | null {
 }
 
 function documentAt(fields: IdentityFields, did: string): { doc: DidDocumentJson | null; deactivated: boolean } {
+  if (fields.deleted) return { doc: null, deactivated: true };
   const decoded = decodeStateMetadata(fields.did_doc?.fields?.controlled_value);
-  if (decoded === null || fields.deleted) return { doc: null, deactivated: true };
+  if (decoded === null) return { doc: null, deactivated: true };
   const doc = withRealDid(decoded.doc, did) as DidDocumentJson;
   const meta = decoded.meta as { deactivated?: unknown } | null;
   return { doc, deactivated: meta?.deactivated === true };
@@ -171,7 +187,20 @@ export async function resolveDid(
   if (current.data.type !== expectedType) throw new DidNotFoundError(`${did} is not an IOTA Identity object`);
   const fields = identityFields(current.data);
   if (!fields) throw new DidNotFoundError(`${did} has no readable content`);
-  const now = documentAt(fields, did);
+  let now: { doc: DidDocumentJson | null; deactivated: boolean };
+  try {
+    now = documentAt(fields, did);
+  } catch (err) {
+    if (err instanceof DidDecodeError) throw new DidUnusableError(`${did}: document unusable: ${err.message}`);
+    throw err;
+  }
+  if (now.doc !== null) {
+    const doc: unknown = now.doc;
+    if (typeof doc !== "object" || doc === null || Array.isArray(doc)) {
+      throw new DidUnusableError(`${did}: document unusable: not a JSON object`);
+    }
+    if ((doc as { id?: unknown }).id !== did) throw new DidUnusableError(`${did}: document unusable: its id is not this DID`);
+  }
   const currentMethods = validMethods(now);
   const currentVersion = BigInt(current.data.version);
 

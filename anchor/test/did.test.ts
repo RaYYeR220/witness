@@ -5,6 +5,7 @@ import { describe, expect, it } from "vitest";
 import { NETWORKS } from "../src/config.js";
 import {
   DidNotFoundError,
+  DidUnusableError,
   InvalidDidError,
   loadIdentityRegistry,
   methodFragment,
@@ -43,6 +44,16 @@ interface Version {
   doc: Record<string, unknown> | null;
   meta?: Record<string, unknown>;
   created?: boolean;
+  /** Stored bytes as-is, instead of packing `doc`. */
+  raw?: number[];
+}
+
+/** Packs any JSON text with a valid header. */
+function packText(text: string): number[] {
+  const json = Buffer.from(text);
+  const len = Buffer.alloc(2);
+  len.writeUInt16LE(json.length);
+  return [...Buffer.concat([Buffer.from("DID"), Buffer.from([1, 0]), len, json])];
 }
 
 function identityObject(v: Version, updatedMs: number) {
@@ -56,7 +67,7 @@ function identityObject(v: Version, updatedMs: number) {
       dataType: "moveObject" as const,
       type: `${PKG}::identity::Identity`,
       hasPublicTransfer: false,
-      fields: { created: "1000", updated: String(updatedMs), deleted: false, did_doc: { fields: { controlled_value: pack(v.doc, v.meta) } } },
+      fields: { created: "1000", updated: String(updatedMs), deleted: false, did_doc: { fields: { controlled_value: v.raw ?? pack(v.doc, v.meta) } } },
     },
   };
 }
@@ -244,6 +255,37 @@ describe("resolveDid", () => {
     await expect(resolveDid(rpc, CFG, `did:iota:${OBJ}`)).rejects.toBeInstanceOf(InvalidDidError);
     await expect(resolveDid(rpc, CFG, "did:key:z6Mk")).rejects.toBeInstanceOf(InvalidDidError);
     expect(calls.getObject).toBe(0);
+  });
+
+  it("answers a current document that does not decode or is not this DID's as unusable", async () => {
+    const hostile: Record<string, number[]> = {
+      "bad marker": [...Buffer.from("XYZ  {}")],
+      "bad version": packText("{}").map((b, i) => (i === 3 ? 9 : b)),
+      "no doc field": packText(JSON.stringify({ meta: {} })),
+      "too deep": packText(`{"doc":${"[".repeat(3000)}${"]".repeat(3000)}}`),
+      "doc is an array": packText(JSON.stringify({ doc: [sigMethod], meta: {} })),
+      "doc is a string": packText(JSON.stringify({ doc: "did:0:0", meta: {} })),
+      "doc without id": packText(JSON.stringify({ doc: { verificationMethod: [sigMethod] }, meta: {} })),
+      "doc of another DID": pack({ id: `did:iota:testnet:0x${"ab".repeat(32)}`, verificationMethod: [sigMethod] })!,
+    };
+    for (const [name, raw] of Object.entries(hostile)) {
+      const err = await resolveDid(fakeRpc([{ ...created, raw }]).rpc, CFG, DID).catch((e: unknown) => e);
+      expect(err, name).toBeInstanceOf(DidUnusableError);
+    }
+  });
+
+  it("still resolves a deleted identity whose bytes no longer decode as deactivated", async () => {
+    const { rpc } = fakeRpc([{ ...created, raw: [1, 2, 3] }]);
+    const del = rpc as unknown as { getObject: () => Promise<{ data: { content: { fields: { deleted: boolean } } } }> };
+    const real = del.getObject.bind(rpc);
+    del.getObject = async () => {
+      const o = await real();
+      o.data.content.fields.deleted = true;
+      return o;
+    };
+    const r = await resolveDid(rpc, CFG, DID);
+    expect(r.meta.deactivated).toBe(true);
+    expect(r.doc).toEqual({ id: DID });
   });
 
   it("reports unknown objects and foreign object types as not found", async () => {
