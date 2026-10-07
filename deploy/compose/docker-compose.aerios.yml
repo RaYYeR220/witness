@@ -2,6 +2,10 @@ name: witness-aerios
 # aeriOS side of the local stack: Orion-LD, Mongo, Trust Manager, plus the
 # Postgres and Mosquitto that Witness itself uses. All services join iota-net so
 # Trust Manager can reach the messages relay and HORNET.
+#
+# Host ports are published on the loopback interfaces only, IPv4 and IPv6 (`localhost`
+# resolves to ::1 first on some hosts). Mosquitto needs secrets/mosquitto/passwd: run
+# deploy/compose/setup-secrets.sh first (stack-up.sh does).
 services:
   mongo-db:
     image: mongo:4.4
@@ -9,6 +13,7 @@ services:
     restart: unless-stopped
     ports:
       - "127.0.0.1:27017:27017"
+      - "[::1]:27017:27017"
     networks: [iota-net]
 
   orion-ld:
@@ -18,6 +23,7 @@ services:
     depends_on: [mongo-db]
     ports:
       - "127.0.0.1:1026:1026"
+      - "[::1]:1026:1026"
     command: -dbhost mongo-db -logLevel INFO -forwarding
     networks: [iota-net]
 
@@ -31,6 +37,8 @@ services:
       - ./seed-orion.sh:/seed-orion.sh:ro
     entrypoint: ["sh", "/seed-orion.sh"]
 
+  # The stock Trust Manager (unsigned trust.score through the legacy messages relay). The
+  # Witness overlay replaces it with trust-manager-witness; stack-up.sh --witness stops this one.
   trustmanager:
     image: eclipseaerios/trust-manager:latest
     container_name: trustmanager
@@ -40,6 +48,7 @@ services:
       - init-orion
     ports:
       - "127.0.0.1:3100:3000"
+      - "[::1]:3100:3000"
     volumes:
       - ./manager.ini:/manager/configs/manager.ini:ro
     networks: [iota-net]
@@ -52,18 +61,56 @@ services:
       POSTGRES_PASSWORD: witness
     ports:
       - "127.0.0.1:5432:5432"
+      - "[::1]:5432:5432"
+    healthcheck:
+      test: ["CMD", "pg_isready", "-U", "postgres"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 20s
     networks: [iota-net]
 
   mosquitto:
     image: eclipse-mosquitto:2
     container_name: witness-mosquitto
     restart: unless-stopped
+    # The broker wants its password file and ACL owned by its own user and not world
+    # readable; bind mounts from Windows hosts are neither, so copy them into a tmpfs first.
+    entrypoint:
+      - /bin/sh
+      - -c
+      - >-
+        install -o mosquitto -g mosquitto -m 0600 /run/witness/mosquitto/passwd /mosquitto/auth/passwd &&
+        install -o mosquitto -g mosquitto -m 0600 /mosquitto/config/mosquitto.acl /mosquitto/auth/acl &&
+        exec /docker-entrypoint.sh /usr/sbin/mosquitto -c /mosquitto/config/mosquitto.conf
+    tmpfs:
+      - /mosquitto/auth:uid=1883,gid=1883,mode=0700,size=1m
     ports:
       - "127.0.0.1:1883:1883"
+      - "[::1]:1883:1883"
       - "127.0.0.1:9001:9001"
+      - "[::1]:9001:9001"
     volumes:
       - ./mosquitto.conf:/mosquitto/config/mosquitto.conf:ro
+      - ./mosquitto.acl:/mosquitto/config/mosquitto.acl:ro
+      - type: bind
+        source: ${WITNESS_SECRETS_DIR:-../../secrets}/mosquitto/passwd
+        target: /run/witness/mosquitto/passwd
+        read_only: true
+        bind:
+          create_host_path: false
+      - mosquitto-data:/mosquitto/data
+    healthcheck:
+      # Port check only: a login would need a password in the healthcheck.
+      test: ["CMD-SHELL", "nc -z 127.0.0.1 1883"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
     networks: [iota-net]
+
+volumes:
+  mosquitto-data:
 
 networks:
   iota-net:

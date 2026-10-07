@@ -1,0 +1,16 @@
+# Topic ACL of the Witness / aeriOS broker (users from secrets/mosquitto/passwd).
+# Nothing is granted to anonymous clients; allow_anonymous is off as well.
+
+# witness-relay (the Messages API): publishes every submission record.
+user relay
+topic write aerios/iota/submissions/#
+
+# witness-indexer: consumes the submission records, publishes incident alerts.
+user indexer
+topic read aerios/iota/submissions/#
+topic write witness/alerts/#
+
+# Read-only account for people and dashboards (mosquitto_sub -u observer ...).
+user observer
+topic read aerios/iota/submissions/#
+topic read witness/alerts/#
