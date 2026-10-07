@@ -240,8 +240,8 @@ const incidentTo = (id: number) => ({ name: "integrity", query: { ...route.query
   color: var(--fail);
 }
 .st[data-tone="closed"] {
-  border-color: rgba(var(--rgb-aurora), 0.45);
-  color: var(--pass);
+  border-color: var(--hair-strong);
+  color: var(--fog-200);
 }
 .row1 .num {
   margin-left: auto;

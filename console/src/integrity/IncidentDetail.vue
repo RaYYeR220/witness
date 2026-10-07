@@ -8,7 +8,7 @@ import SeverityTag from "@/console/SeverityTag.vue";
 import { RULES } from "@/console/severity";
 import VerdictMark from "@/console/VerdictMark.vue";
 
-import { alertReason, eventSummary, keyLabel, roleLabel, statusLine, TRUST, trustOf, type TrustLevel } from "./model";
+import { alertReason, eventSummary, keyLabel, roleLabel, statusLine, TRUST, trustLine, trustOf, type TrustLevel } from "./model";
 
 /**
  * One incident: why it opened, how it stands or closed, and its timeline,
@@ -80,7 +80,14 @@ watch(() => props.id, () => void load(), { immediate: true });
 const status = computed(() => (head.value ? statusLine(head.value) : null));
 /** The event that opened it: the trigger, else the first event. */
 const opener = computed(() => events.value.find((e) => e.role === "trigger") ?? events.value[0] ?? null);
-const FAMILY: Record<TrustLevel, "signed" | "unsigned" | "rejected" | "unknown"> = { proven: "signed", relayed: "unsigned", untrusted: "rejected", unknown: "unknown" };
+/** Marks without green: the engine's levels are claims, not checks made here. */
+const FAMILY: Record<TrustLevel, "unsigned" | "rejected" | "unknown"> = {
+  proven: "unsigned",
+  relayed: "unknown",
+  untrusted: "rejected",
+  revoked: "rejected",
+  unknown: "unknown",
+};
 </script>
 
 <template>
@@ -102,7 +109,7 @@ const FAMILY: Record<TrustLevel, "signed" | "unsigned" | "rejected" | "unknown">
           <dt>Why it opened</dt>
           <dd>
             <template v-if="opener">
-              {{ eventSummary(opener) }}, {{ TRUST[trustOf(opener)].label.toLowerCase() }}, at {{ utc(opener.atMs) }}<template v-if="isBlockId(opener.blockId)"
+              {{ eventSummary(opener) }} ({{ trustLine(opener).toLowerCase() }}), at {{ utc(opener.atMs) }}<template v-if="isBlockId(opener.blockId)"
                 >, block
                 <RouterLink class="x-link mono" :to="{ name: 'verify', params: { blockId: opener.blockId } }">{{ shortHex(opener.blockId) }}</RouterLink></template
               >.
@@ -145,7 +152,7 @@ const FAMILY: Record<TrustLevel, "signed" | "unsigned" | "rejected" | "unknown">
             <div class="ev-body">
               <p class="ev-top">
                 <span class="ev-role">{{ roleLabel(e.role) }}</span>
-                <span class="ev-trust" :data-trust="trustOf(e)">{{ TRUST[trustOf(e)].label }}</span>
+                <span class="ev-trust" :data-trust="trustOf(e)">{{ trustLine(e) }}</span>
                 <time class="ev-at">{{ utc(e.atMs) }}</time>
               </p>
               <p class="ev-what">
@@ -221,8 +228,8 @@ const FAMILY: Record<TrustLevel, "signed" | "unsigned" | "rejected" | "unknown">
   color: var(--fail);
 }
 .inc-status[data-tone="closed"] {
-  border-color: rgba(var(--rgb-aurora), 0.45);
-  color: var(--pass);
+  border-color: var(--hair-strong);
+  color: var(--fog-200);
 }
 .inc-title {
   margin: 10px 0 0;
@@ -299,10 +306,11 @@ const FAMILY: Record<TrustLevel, "signed" | "unsigned" | "rejected" | "unknown">
   color: var(--fog-200);
 }
 .ev-trust[data-trust="proven"] {
-  border-color: rgba(var(--rgb-aurora), 0.45);
-  color: var(--pass);
+  border-color: rgba(var(--rgb-fog-200), 0.45);
+  color: var(--fog-50);
 }
-.ev-trust[data-trust="untrusted"] {
+.ev-trust[data-trust="untrusted"],
+.ev-trust[data-trust="revoked"] {
   border-color: rgba(var(--rgb-nova), 0.5);
   color: var(--fail);
 }

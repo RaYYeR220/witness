@@ -9,7 +9,7 @@ import { mountScreen, until } from "@/test/mount";
 import IntegrityView from "@/views/IntegrityView.vue";
 
 import IncidentDetail from "./IncidentDetail.vue";
-import { statusLine, trustOf } from "./model";
+import { statusLine, trustLine, trustOf } from "./model";
 
 /* eslint-disable @typescript-eslint/no-explicit-any */
 const L = live as unknown as Record<string, any>;
@@ -50,6 +50,15 @@ describe("incident model", () => {
     expect(trustOf({ detail: null })).toBe("unknown");
   });
 
+  it("says a revoked event is evidence only, whatever level it had", () => {
+    const shadowed = (L.incidentClosedOrNot as Detail).events[0]!; // recorded: trust proven, revoked "shadow", was "trigger"
+    expect((shadowed.detail as { trust: string }).trust).toBe("proven");
+    expect(trustOf(shadowed)).toBe("revoked");
+    expect(trustLine(shadowed)).toBe("Revoked (shadow): evidence only, was trigger");
+    expect(trustLine({ detail: { trust: "proven" } })).toBe("Proven, per the engine");
+    expect(trustOf({ detail: { trust: "proven", revoked: "<b>x</b>" } })).toBe("proven"); // not a word: ignored
+  });
+
   it("says why an incident closed", () => {
     const base = L.incidents.items[0];
     expect(statusLine({ ...base, status: "open" }).label).toBe("Open");
@@ -82,13 +91,16 @@ describe("IncidentDetail", () => {
     await w.findAll("button.more").at(-1)!.trigger("click");
     await until(() => w.findAll(".al li").length === FULL.alerts.length);
     expect(w.findAll("button.more")).toHaveLength(0);
+    // the engine's levels are its word: never green
+    expect(w.find('.ev-trust[data-trust="proven"]').text()).toBe("Proven, per the engine");
+    expect(w.find(".tl .vm[data-f='signed']").exists()).toBe(false);
     expect(asked).toEqual([
       "/api/incidents/3?limit=2",
       `/api/incidents/3?limit=2&eventsAfter=${encodeURIComponent(P1.nextEventsCursor!)}`,
       `/api/incidents/3?limit=2&alertsAfter=${P1.nextAlertsAfter}`,
     ]);
     // why it opened: the trigger event, with a link to verify it
-    expect(w.find(".inc-facts").text()).toContain("CONTENT_MISMATCH alert, proven");
+    expect(w.find(".inc-facts").text()).toContain("CONTENT_MISMATCH alert (proven, per the engine)");
     expect(w.find(`.inc-facts a[href="/m/${P1.events[0]!.blockId}"]`).exists()).toBe(true);
     // a block the explorer has no message for is not a Verify link
     const orphan = FULL.events.find((e) => !e.indexed)!;
