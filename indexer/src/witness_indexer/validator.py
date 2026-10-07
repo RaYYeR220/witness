@@ -21,7 +21,9 @@ cannot run because no usable copy of the received content is stored is not retri
 
 `reverify_all` repeats (d) later for every block whose content ever matched, against the
 copies held in the parallel database. If those no longer match the Tangle, the database was
-altered: DB_TAMPER.
+altered: DB_TAMPER. `reverify_pass` is the scheduled form (the indexer runs it every
+`--reverify-every-s`): one pass over every candidate, resuming after the block the last
+pass reached, so every stored copy is compared again within one interval plus one pass.
 """
 
 from __future__ import annotations
@@ -70,7 +72,10 @@ class ValidatorConfig:
     initial_backoff_s: float = 0.5
     max_backoff_s: float = 8.0
     timeout_s: float = 60.0
-    reverify_batch: int = 200
+    reverify_batch: int = 200  # candidates read from the database per query
+    # Blocks whose Tangle content a pass keeps in memory (a digest each), so later passes
+    # compare stored copies without asking the node again; 0 turns that off.
+    tangle_cache_size: int = 100_000
     max_concurrent: int = 32
     retry_initial_s: float = 5.0
     retry_max_s: float = 300.0
@@ -83,6 +88,29 @@ def _hex(b: bytes) -> str:
 
 def _now_ms() -> int:
     return int(time.time() * 1000)
+
+
+def _iso(ms: int) -> str:
+    return time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime(ms / 1000))
+
+
+@dataclass(frozen=True)
+class PassResult:
+    """One scheduled re-verification pass."""
+
+    checked: int
+    alerts: list[Alert]
+    complete: bool  # False when the node stopped answering mid-pass
+    error: str | None = None
+
+
+@dataclass(frozen=True)
+class _TangleCopy:
+    """What the node served for a block id that hashed to it. Immutable, so a later pass can
+    compare stored copies with it without fetching the block again."""
+
+    tag: str | None  # None when the tag is not UTF-8 (stored tags are then not compared)
+    data_digest: bytes
 
 
 # -- content comparison ----------------------------------------------------------------------
@@ -269,6 +297,8 @@ class Validator:
         self._timers: set[asyncio.Task] = set()
         self._task: asyncio.Task | None = None
         self._stopping = False
+        self._tangle: dict[bytes, _TangleCopy] = {}
+        self._pass_after: bytes | None = None  # last block a scheduled pass judged
 
     # -- worker ----------------------------------------------------------------------------
 
@@ -600,7 +630,9 @@ class Validator:
 
     async def reverify_all(self, limit: int | None = None) -> list[Alert]:
         """Re-fetch the blocks the explorer holds and compare them with every copy of their
-        content stored now.
+        content stored now. A block an earlier pass fetched is compared with the digest of
+        its Tangle content kept in memory instead, and fetched again only when a stored copy
+        differs (for the evidence) or its content was removed.
 
         Candidates come from four tables (MATCH content checks, submissions, messages and
         CONTENT_VERIFIED lifecycle rows), so deleting one kind of row does not hide a block.
@@ -645,10 +677,80 @@ class Validator:
                 break
         return found
 
+    async def reverify_pass(self) -> PassResult:
+        """One scheduled pass of `reverify_all` over every candidate, in block id order,
+        starting after the block the previous pass judged last and wrapping around, so a
+        pass the node cuts short resumes where it stopped instead of starting over.
+        Candidates are read `reverify_batch` at a time. The stored copies of a block this
+        validator already fetched are compared with the Tangle content it kept in memory;
+        only a difference (or a block not fetched yet) goes to the node."""
+        start = self._pass_after
+        found: list[Alert] = []
+        checked = 0
+        # From after `start` to the end, then from the beginning through `start`.
+        phases = [(None, None)] if start is None else [(start, None), (None, start)]
+        for after, until in phases:
+            while True:
+                rows = await self.store.reverify_candidates(after, self.cfg.reverify_batch)
+                for row in rows:
+                    bid = bytes(row["block_id"])
+                    if until is not None and bid > until:
+                        return PassResult(checked, found, True)
+                    try:
+                        alert = await self._reverify_row(row)
+                    except HornetUnavailable as e:
+                        log.warning("re-verification pass stopped after %d blocks: %s",
+                                    checked, e)
+                        return PassResult(checked, found, False, str(e)[:200])
+                    self._pass_after = after = bid
+                    checked += 1
+                    if alert is not None:
+                        found.append(alert)
+                if len(rows) < self.cfg.reverify_batch:
+                    break
+        return PassResult(checked, found, True)
+
+    async def scheduled_reverify(self) -> PassResult:
+        """`reverify_pass`, with its outcome published as the `reverify` service status."""
+        try:
+            result = await self.reverify_pass()
+        except Exception as e:
+            await self._status("error", f"{type(e).__name__}: {e}"[:500])
+            raise
+        at = _iso(self._now_ms())
+        if result.complete:
+            await self._status("ok", f"last pass at {at}: {result.checked} blocks, "
+                                     f"{len(result.alerts)} new DB_TAMPER")
+        else:
+            await self._status("retrying (node unavailable)",
+                               f"pass at {at} stopped after {result.checked} blocks: "
+                               f"{result.error}")
+        return result
+
+    async def _status(self, status: str, detail: str) -> None:
+        try:
+            await self.store.set_service_status("reverify", status, detail=detail)
+        except Exception as e:  # noqa: BLE001 - the database may be what is down
+            log.debug("could not record reverify status %r: %s", status, e)
+
     async def _reverify_row(self, row: dict) -> Alert | None:
         bid = bytes(row["block_id"])
+        copy = self._tangle.get(bid)
+        if copy is not None and _matches_copy(row, copy):
+            return None  # every stored copy still equals what the node served
         async with self._block_lock(bid):
             return await self._reverify_block(bid, row)
+
+    def _remember(self, bid: bytes, payload: TaggedData) -> None:
+        if self.cfg.tangle_cache_size <= 0:
+            return
+        if bid not in self._tangle and len(self._tangle) >= self.cfg.tangle_cache_size:
+            del self._tangle[next(iter(self._tangle))]  # oldest first
+        try:
+            tag: str | None = payload.tag.decode("utf-8")
+        except UnicodeDecodeError:
+            tag = None
+        self._tangle[bid] = _TangleCopy(tag, blake2b256(payload.data))
 
     async def _reverify_block(self, bid: bytes, row: dict) -> Alert | None:
         if self.is_in_flight(bid):
@@ -672,6 +774,7 @@ class Validator:
             return None
         if not isinstance(payload, TaggedData):
             return None
+        self._remember(bid, payload)
         if verified and not _has_stored_content(row):
             reason = "content removed"
             fields = [{"field": "content", "expected": _hex(payload.data), "actual": None}]
@@ -703,6 +806,31 @@ def _has_stored_content(row: dict) -> bool:
     sub = row["has_submission"] and (row["sub_tag"] is not None or row["data_hex"] is not None)
     msg = row["has_message"] and (row["msg_tag"] is not None or row["msg_data"] is not None)
     return bool(sub or msg)
+
+
+def _matches_copy(row: dict, copy: _TangleCopy) -> bool:
+    """True when `_stored_differences` would find nothing and no verified content is gone,
+    decided from the kept digest alone. Anything else goes to the node for evidence."""
+    if row["verified_once"] and not _has_stored_content(row):
+        return False
+
+    def same(tag: str | None, data: bytes | None) -> bool:
+        if copy.tag is not None and tag != copy.tag:
+            return False
+        return data is not None and blake2b256(data) == copy.data_digest
+
+    if row["has_submission"]:
+        try:
+            sub = from_hex(row["data_hex"]) if row["data_hex"] is not None else None
+        except ValueError:
+            return False
+        if not same(row["sub_tag"], sub):
+            return False
+    if row["has_message"]:
+        msg = None if row["msg_data"] is None else bytes(row["msg_data"])
+        if not same(row["msg_tag"], msg):
+            return False
+    return True
 
 
 def _stored_differences(row: dict, payload: TaggedData) -> list[dict]:

@@ -216,6 +216,60 @@ def test_incident_engine_wiring(monkeypatch):
     assert CorrelatedRules(rules, eng).rules is rules
 
 
+def test_parse_args_reverify_defaults():
+    a = cli.parse_args(["--db", "postgresql://x", "--allow-any-writer", "--validate"])
+    assert a.reverify_every_s == 60.0
+    a = cli.parse_args(["--db", "postgresql://x", "--allow-any-writer", "--validate",
+                        "--reverify-every-s", "0"])
+    assert a.reverify_every_s == 0.0
+
+
+@pytest.mark.skipif(not os.environ.get("WITNESS_TEST_PG"), reason="WITNESS_TEST_PG is unset")
+@pytest.mark.parametrize(("every", "expected"), [
+    ("0.05", "retrying (node unavailable)"),  # scheduled; the node below is not there
+    ("0", "disabled"),
+])
+async def test_amain_schedules_reverification(monkeypatch, every, expected):
+    chain = FakeChain()
+    chain.add([("trust.score", b'{"id":"D:aabbccddeeff","score":0.5}')])
+    src = FakeSource(chain, tail=True)
+
+    async def fake_open_source(args):
+        return src
+
+    monkeypatch.setattr(cli, "open_source", fake_open_source)
+    schema = f"t_{uuid.uuid4().hex[:12]}"
+    # Port 9 (discard): nothing answers, so a pass stops at its first block.
+    args = cli.parse_args(["--db", os.environ["WITNESS_TEST_PG"], "--schema", schema,
+                           "--allow-any-writer", "--resolver", "", "--orion", "",
+                           "--rest", "http://127.0.0.1:9", "--validate",
+                           "--reverify-every-s", every])
+    store = await Store.open(os.environ["WITNESS_TEST_PG"], schema=schema)
+    stop = asyncio.Event()
+    task = asyncio.create_task(cli.amain(args, stop=stop))
+    try:
+        async def reported() -> None:
+            while True:
+                try:
+                    st = await store.stats()
+                    if st["cursor"] == 1 and st.get("reverify") == expected:
+                        return
+                except psycopg.errors.UndefinedTable:
+                    pass
+                if task.done():
+                    task.result()
+                await asyncio.sleep(0.05)
+
+        await asyncio.wait_for(reported(), 15)
+        stop.set()
+        assert await asyncio.wait_for(task, 15) == 0
+    finally:
+        stop.set()
+        await asyncio.gather(task, return_exceptions=True)
+        await store.drop_schema()
+        await store.close()
+
+
 def test_parse_args_rules_defaults():
     a = cli.parse_args(["--db", "postgresql://x", "--allow-any-writer"])
     assert (a.resolver, a.orion, a.periodic_s, a.rescan_s, a.rescan_batch) == (

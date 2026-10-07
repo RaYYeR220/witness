@@ -7,8 +7,10 @@
 With `--source inx` the node is read over INX; if INX does not answer at startup, the indexer
 says so and polls the REST API instead (the choice is made once; a later INX outage is
 retried on INX). `--mqtt` consumes the Messages API's submission records, `--validate`
-checks every submitted block against the node (solid, confirmed, same bytes). A writer
-policy is required; `--allow-any-writer` is the explicit opt-out for development.
+checks every submitted block against the node (solid, confirmed, same bytes) and, every
+`--reverify-every-s` seconds, compares every stored copy of a checked or indexed block with
+the Tangle again (DB_TAMPER when the database was altered). A writer policy is required;
+`--allow-any-writer` is the explicit opt-out for development.
 
 Signing keys are resolved through the anchor service (`--resolver`, did:key needs nothing),
 and the integrity rules run on every stored message, every `--periodic-s` seconds
@@ -100,6 +102,9 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
                         "mqtt://user:password@127.0.0.1:1883 (default: $WITNESS_MQTT)")
     p.add_argument("--validate", action="store_true",
                    help="validate submitted blocks against the node's REST API")
+    p.add_argument("--reverify-every-s", type=float, default=60.0,
+                   help="with --validate: seconds between re-verification passes of the "
+                        "stored copies against the Tangle (DB_TAMPER); 0 turns them off")
     p.add_argument("--incidents", action=argparse.BooleanOptionalAction, default=True,
                    help="correlate trust events into incidents (default: on)")
     p.add_argument("--alerts-mqtt", default=os.environ.get("WITNESS_ALERTS_MQTT"),
@@ -234,6 +239,13 @@ async def amain(args: argparse.Namespace, *, stop: asyncio.Event | None = None) 
             if resume is not None:
                 log.info("re-queued %d unfinished validations", await resume())
             services.append(("validator", validator.run, validator.stop))
+            if args.reverify_every_s > 0:
+                reverify = Every("re-verify", args.reverify_every_s,
+                                 validator.scheduled_reverify,
+                                 initial_delay_s=args.reverify_every_s)
+                services.append(("re-verify", reverify.run, reverify.stop))
+            else:
+                await store.set_service_status("reverify", "disabled")
         if args.mqtt:
             from .ingest import MqttIngest
 

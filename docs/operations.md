@@ -148,7 +148,15 @@ only: the `indexer` login may read `aerios/iota/submissions/#` and write `witnes
   or `--allow-any-writer` for development, which logs a warning. Signers missing
   from the policy get `UNAUTHORIZED_WRITER`.
 - `--mqtt` stores the Messages API's submission records; `--validate` checks each
-  submitted block against the node.
+  submitted block against the node, and every `--reverify-every-s` (60 s; 0 turns it
+  off) re-verifies the parallel database: one pass over every block it checked or
+  indexed, comparing each stored copy (submission and message) with the Tangle. A copy
+  that no longer matches raises `DB_TAMPER` (critical, once per block and stored
+  content). Candidates are read `reverify_batch` (200) at a time, a pass the node cuts
+  short resumes at the block it stopped on, and blocks already fetched are compared with
+  the digest of their Tangle content kept in memory, so a pass only asks the node about
+  new blocks and copies that differ. Every stored copy is compared again within one
+  interval plus one pass.
 - Signing keys are resolved by the anchor service (`--resolver`, default
   `http://127.0.0.1:7300`; `did:key` needs no registry). The integrity rules run on
   every stored message, every `--periodic-s` (30 s: drift against Orion `--orion`,
@@ -225,6 +233,7 @@ under `counts`):
 | `indexer` | `ok`; `retrying (<inx\|rest\|database> unavailable)`; `retrying (resolver unreachable)`; `retrying milestone N (<reason>, attempt k)`; `stuck at N (<reason>)` after 5 failed attempts on the same milestone (e.g. `cone root mismatch`); `network changed` when the node serves a different Tangle than the database holds |
 | `resolver` | `unreachable` while signing keys cannot be resolved (no verdicts are written meanwhile; after 5 failures on the same key `indexer` shows `stuck at N (resolver: <kid>)`), `ok` once it recovers, `disabled` without `--resolver`. Written by the indexer only; the rules' own lookups report as `resolver(rules)` |
 | `policy` | `file`, `allow-any`, or `none` (library default: every signed writer is unauthorized) |
+| `reverify` | `ok` with `last pass at <UTC time>: N blocks, M new DB_TAMPER`; `retrying (node unavailable)` when the node stopped answering mid-pass (the next pass resumes there); `error` when a pass failed otherwise (e.g. the database); `disabled` with `--reverify-every-s 0`. Only with `--validate` |
 | `rules`, `orion`, `anchor`, `shadow`, `ledger` | reported by the rules engine (see `indexer/src/witness_indexer/rules.py`) |
 | `incident-engine` | `ok`; `error` for 10 minutes after a correlation step failed (the detail says which step; indexing goes on); `disabled` with `--no-incidents` |
 | `incident-orion` | `ok`; `unreachable` when the incident engine could not refresh Orion's IEs and components (refused, slow, larger than 2 MiB or 50 000 entities); it keeps the last answer, and without one attack alerts only join open incidents |

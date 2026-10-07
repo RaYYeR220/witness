@@ -1,6 +1,7 @@
 import asyncio
 import json
 import os
+import re
 import time
 import uuid
 from pathlib import Path
@@ -13,7 +14,7 @@ from witness_core.ids import blake2b256
 from witness_indexer.hornet_rest import RAW_MEDIA_TYPE, HornetRest
 from witness_indexer.ingest import handle_record
 from witness_indexer.store import MessageRow
-from witness_indexer.validator import Validator, ValidatorConfig, json_diff
+from witness_indexer.validator import PassResult, Validator, ValidatorConfig, json_diff
 
 BASE = "http://hornet.test"
 PARENTS = [b"\x11" * 32, b"\x22" * 32]
@@ -1035,3 +1036,94 @@ async def test_live_validate_recorded_upload(store):
     finally:
         await v.stop()
         await hornet.close()
+
+
+# -- scheduled re-verification ---------------------------------------------------------------
+
+
+def tamper_sql(bid):
+    """What the eval's A19 injection runs: flip the low bit of the first stored byte."""
+    sql = ("UPDATE messages SET data = set_byte(data, 0, get_byte(data, 0) # 1) "
+           "WHERE block_id = %s RETURNING 1")
+    return sql, (bid,)
+
+
+@respx.mock
+async def test_scheduled_pass_catches_a_db_update(env):
+    store, v, _ = env
+    blocks = sorted([await verified_block(store, v, n) for n in ("a", "b", "c")])
+    first = await v.scheduled_reverify()
+    assert (first.checked, first.alerts, first.complete) == (3, [], True)
+    status = (await store.service_status())["reverify"]
+    assert status["status"] == "ok"
+    assert re.fullmatch(r"last pass at \d{4}-\d\d-\d\dT\d\d:\d\d:\d\dZ: 3 blocks, "
+                        r"0 new DB_TAMPER", status["detail"])
+
+    victim = blocks[1][0]
+    await store._fetch(*tamper_sql(victim))
+    second = await v.scheduled_reverify()
+    [alert] = second.alerts
+    assert (alert.rule, alert.severity, alert.block_id) == ("DB_TAMPER", "critical", victim)
+    assert [f["field"] for f in alert.evidence["fields"]] == ["messages.data"]
+    assert (await store.service_status())["reverify"]["detail"].endswith(
+        ": 3 blocks, 1 new DB_TAMPER")
+    # Deduplicated as before: the same tampering is reported once, however many passes.
+    assert (await v.scheduled_reverify()).alerts == []
+    assert len(await store.alerts({"rule": "DB_TAMPER"})) == 1
+
+
+@respx.mock
+async def test_scheduled_pass_asks_the_node_only_for_what_changed(env):
+    store, v, _ = env
+    blocks = sorted([await verified_block(store, v, n) for n in ("a", "b", "c")])
+    await v.reverify_pass()  # fetches each block once and keeps its Tangle content
+    routes = [route for _, _, route in blocks]
+    before = [r.call_count for r in routes]
+    assert (await v.reverify_pass()).checked == 3
+    assert [r.call_count for r in routes] == before  # unchanged copies: no node traffic
+
+    await tamper_submission(store, blocks[2][0], "0x" + blocks[2][1].replace(
+        b"0.5", b"0.9").hex())
+    [alert] = (await v.reverify_pass()).alerts
+    assert alert.block_id == blocks[2][0]
+    assert [r.call_count - b for r, b in zip(routes, before, strict=True)] == [0, 0, 1]
+
+
+@respx.mock
+async def test_scheduled_pass_resumes_where_the_node_cut_it_short(env):
+    store, v, _ = env
+    v.cfg = ValidatorConfig(reverify_batch=2, tangle_cache_size=0)  # always ask the node
+    blocks = sorted([await verified_block(store, v, n) for n in ("a", "b", "c", "d")])
+    order: list[bytes] = []
+    real = v._reverify_block
+
+    async def spy(bid, row):
+        order.append(bid)
+        return await real(bid, row)
+
+    v._reverify_block = spy
+    blocks[2][2].mock(return_value=UNAVAILABLE)
+    cut = await v.scheduled_reverify()
+    assert (cut.checked, cut.complete) == (2, False)
+    status = (await store.service_status())["reverify"]
+    assert status["status"] == "retrying (node unavailable)"
+    assert "stopped after 2 blocks" in status["detail"]
+
+    blocks[2][2].mock(return_value=binary(make_block({"score": 0.5, "id": "MyDomain:c"})[0]))
+    order.clear()
+    full = await v.scheduled_reverify()
+    assert (full.checked, full.complete) == (4, True)
+    # Round robin: the next pass starts at the block the last one could not judge.
+    ids = [b[0] for b in blocks]
+    assert order == [ids[2], ids[3], ids[0], ids[1]]
+    assert (await store.service_status())["reverify"]["status"] == "ok"
+    order.clear()
+    await v.reverify_pass()
+    assert order == [ids[2], ids[3], ids[0], ids[1]]
+
+
+@respx.mock
+async def test_scheduled_pass_with_nothing_to_check(env):
+    _, v, _ = env
+    assert await v.reverify_pass() == PassResult(0, [], True)
+    assert (await v.scheduled_reverify()).complete
