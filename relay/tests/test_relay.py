@@ -522,6 +522,14 @@ async def test_signed_body_that_breaks_the_schema_refused(
         assert hornet.route.call_count == 0
         await eventually(lambda: recorder.records)
         assert recorder.records[0]["relay"]["verdict"] == verdicts.MALFORMED
+        null_body = envelope.seal("trust.score", None, iss=ids.producer.did,
+                                  kid=ids.producer.kid, sign_key=ids.producer.key, seq=3,
+                                  att_mode="producer")
+        refused = await client.post(
+            "/upload", params=UPLOAD, json={"tag": "trust.score", "message": null_body}
+        )
+        assert refused.status_code == 400
+        assert refused.json()["error"] == "body is not a JSON object"
         fixed = _seal(ids.producer, seq=3)
         ok = await client.post("/upload", params=UPLOAD, json={"tag": "trust.score", "message": fixed})
         assert ok.status_code == 200

@@ -303,6 +303,22 @@ def test_witness_anchor_full_shape(change):
     assert schema.classify("witness.anchor", _j(body)).schema_ok is False
 
 
+def test_body_problem_agrees_with_classify():
+    ok = {"w": 1, "body": {"id": "MyDomain:fa163e5e25ef", "score": 0.4}}
+    cases = [
+        ("trust.score", ok, None),
+        ("trust.score", {"w": 1, "body": {"id": "x", "score": 7}},
+         "body breaks the trust.score schema"),
+        ("some.tag", {"w": 1, "body": {"anything": 1}}, None),
+        ("some.tag", {"w": 1, "body": None}, "body is not a JSON object"),
+        ("audit.report", {"w": 1, "enc": {"ciphertext": "AA"}}, None),
+    ]
+    for tag, env, problem in cases:
+        assert schema.body_problem(tag, env) == problem, (tag, env)
+        env = {**env, "sig": "x"}
+        assert schema.classify(tag, json.dumps(env).encode()).schema_ok is (problem is None)
+
+
 def test_classify_real_vector_blocks(vectors):
     expected = {
         "0x972a878cf06f2cf6b7d4a1443dbb5f12fdda376fa7537a82dad8e7257a477967": (

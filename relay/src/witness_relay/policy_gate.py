@@ -21,7 +21,7 @@ from collections.abc import Iterable
 from dataclasses import dataclass
 from typing import Literal
 
-from witness_core import canon, envelope, policy, schema, verdicts
+from witness_core import envelope, policy, schema, verdicts
 from witness_core.envelope import KeyInfo
 from witness_core.ids import NON_CANONICAL_DID
 from witness_core.policy import WriterPolicy
@@ -111,9 +111,10 @@ class PolicyGate:
             return refuse(verdicts.REPLAY, "relay-issued envelopes cannot be resubmitted")
         if not policy.allowed(self.policy, tag, check.iss):
             return refuse(verdicts.UNAUTHORIZED_WRITER, f"{check.iss} may not write tag {tag!r}")
-        # The indexer judges the block bytes, which for an envelope are its canonical JSON.
-        if not schema.classify(tag, canon.jcs(env)).schema_ok:
-            return refuse(verdicts.MALFORMED, f"body breaks the {tag} schema", 400)
+        # Same rule as the indexer's (schema.classify of these bytes).
+        problem = schema.body_problem(tag, env)
+        if problem is not None:
+            return refuse(verdicts.MALFORMED, problem, 400)
         return Decision(True, check.verdict, "producer", check.iss, check.kid, check.seq)
 
     def check_legacy(self, tag: str, caller: str) -> Decision:

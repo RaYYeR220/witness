@@ -61,7 +61,7 @@ from collections.abc import Awaitable, Callable, Iterable
 from dataclasses import dataclass
 from typing import Any, ClassVar
 
-from witness_core import checkpoint, envelope, merkle, nesting
+from witness_core import checkpoint, envelope, merkle, nesting, schema
 from witness_core import verdicts as V
 from witness_core.bundle import snapshot_keys
 from witness_core.envelope import KeyInfo
@@ -502,8 +502,9 @@ class RulesEngine:
             reason = TOO_DEEP if _over_cap(row.data) else "data is not JSON"
         elif envelope.is_envelope(obj):
             check = envelope.verify(obj, row.tag or "", lambda _kid: None)
-            reason = (check.reason if check.verdict == V.MALFORMED
-                      else f"envelope body does not match the {row.kind} schema")
+            problem = schema.body_problem(row.tag or "", obj) or (
+                f"body does not match the {row.kind} schema")
+            reason = check.reason if check.verdict == V.MALFORMED else f"envelope {problem}"
         else:
             reason = f"body does not match the {row.kind} schema"
         evidence: dict[str, Any] = {"tag": row.tag, "kind": row.kind, "reason": reason}

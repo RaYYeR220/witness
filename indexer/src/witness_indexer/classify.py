@@ -293,12 +293,9 @@ async def judge(store: Store, pol: WriterPolicy, keys: Mapping[str, KeyInfo | No
     if not d.classified.schema_ok:
         # A good signature does not make a bad body acceptable. The check stays on the
         # judgement, so the stored row keeps who signed it (iss, kid, seq).
-        return Judgement(verdicts.MALFORMED, chk, schema_reason(d.kind))
+        problem = schema.body_problem(d.tag, env) or f"body breaks the {d.tag} schema"
+        return Judgement(verdicts.MALFORMED, chk, f"signed, but the {problem}")
     return Judgement(chk.verdict, chk)
-
-
-def schema_reason(kind: str) -> str:
-    return f"signed, but the body breaks the {kind} schema"
 
 
 def message_row(d: Decoded, j: Judgement, *, block_id: bytes, data: bytes, ms_index: int,

@@ -415,10 +415,24 @@ async def test_signed_body_that_breaks_the_schema_is_malformed(store: Store):
     assert set(alerts) == {chain.block_id(1, n) for n in range(3)}
     assert alerts[chain.block_id(1, 0)] == {
         "tag": "trust.score", "kind": "trust.score",
-        "reason": "envelope body does not match the trust.score schema",
+        "reason": "envelope body breaks the trust.score schema",
         "signature": {"verified": True, "iss": did_key(ALICE), "kid": kid_of(ALICE), "seq": 1,
                       "mode": "producer"}}
     assert alerts[chain.block_id(1, 2)]["signature"]["mode"] == "relay"
+
+
+async def test_a_null_body_is_malformed_on_every_tag(store: Store):
+    """The envelope format allows `body: null`, but no tag's body may be anything but a JSON
+    object, schema or not."""
+    chain = FakeChain()
+    chain.add([("some.tag", signed(ALICE, "some.tag", None, 1)),
+               ("trust.score", signed(ALICE, "trust.score", None, 2))])
+    await indexer(FakeSource(chain), store, policy=ALLOW_ALL).sync()
+    assert [(await msg(store, chain.block_id(1, n)))["verdict"] for n in (0, 1)] == [
+        "MALFORMED", "MALFORMED"]
+    reasons = [e["payload"]["reason"] for e in await store.events_after(0, 100)
+               if e["type"] == "message"]
+    assert reasons == ["signed, but the body is not a JSON object"] * 2
 
 
 async def test_a_malformed_message_does_not_spend_its_seq(store: Store):

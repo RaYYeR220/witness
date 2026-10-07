@@ -185,6 +185,21 @@ def _check(kind: str, obj: Any) -> tuple[bool, str | None]:
     return check(obj)
 
 
+def body_problem(tag: str, env: dict) -> str | None:
+    """Why a witness/v1 envelope's content does not fit `tag`'s schema, or None when it does
+    (what `classify` reports as schema_ok). A sealed body cannot be inspected and fits; an
+    open body must be a JSON object, on every tag (`body: null` is none)."""
+    if "enc" in env:
+        if "body" in env or not isinstance(env["enc"], dict):
+            return "sealed content is malformed"
+        return None
+    body = env.get("body")
+    if not isinstance(body, dict):
+        return "body is not a JSON object"
+    kind = KINDS.get(tag, UNKNOWN)
+    return None if _check(kind, body)[0] else f"body breaks the {tag} schema"
+
+
 def _opt_str(v: Any) -> str | None:
     return v if isinstance(v, str) else None
 

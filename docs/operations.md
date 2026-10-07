@@ -248,10 +248,14 @@ under `counts`):
 
 Messages nested more than 64 levels deep keep their raw bytes only (no JSON copy);
 a witness envelope that deep is `MALFORMED` ("nesting too deep"). So is a validly
-signed envelope whose body breaks its tag's schema (the row keeps iss, kid and seq; the
-`MALFORMED` alert carries the verified signature); the relay refuses such an envelope
-with 400 instead of posting it. A sealed body cannot be inspected and is not judged on
-its schema. An issuer's
+signed envelope whose body breaks its tag's schema (the row keeps iss, kid and seq and
+does not spend the seq; the `MALFORMED` alert carries the verified signature). A tag
+without a schema takes any JSON object as body; `body: null` is not one, on any tag. A
+sealed body cannot be inspected and is not judged on its schema. The relay refuses such a
+producer envelope with 400 instead of posting it; a legacy message it attests is not
+checked there (the explorer marks it `MALFORMED` once indexed). The proof bundle's
+envelope step (step 4) checks signature and key only, so it passes for such a block while
+the bundle's `envelope.verdict`, the explorer's, says `MALFORMED`. An issuer's
 `seq` may arrive out of order (white-flag order is not issue order); a message is
 `REPLAY` only if another block already used the same `seq` or nonce for that
 issuer.
