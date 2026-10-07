@@ -127,8 +127,11 @@ api:
   nodeRoute: witness/v1
   # Host HORNET proxies to (default: this chart's API service).
   routeHost: ""
-  # Empty: the chart-wide database Secret.
+  # Empty: the chart-wide database Secret. For a read-mostly login of its own, create the role
+  # witness_api (indexer migration 0005_api_role.sql grants it), point this at its DSN and set
+  # migrate to false: the indexer then owns the schema.
   database: {existingSecret: "", key: ""}
+  migrate: true
   # Optional bearer token for POST /messages/{id}/verify, from secrets.env (WITNESS_VERIFY_TOKEN).
   secrets:
     # Env Secret: WITNESS_INGEST_TOKEN, WITNESS_REPORT_TOKEN, WITNESS_POSTURE_TOKEN

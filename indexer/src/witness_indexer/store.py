@@ -159,7 +159,12 @@ class Store:
     @classmethod
     async def open(cls, dsn: str, *, schema: str = "witness") -> Store:
         async with await psycopg.AsyncConnection.connect(dsn, autocommit=True) as c:
-            await c.execute(sql.SQL("CREATE SCHEMA IF NOT EXISTS {}").format(sql.Identifier(schema)))
+            # CREATE SCHEMA IF NOT EXISTS needs CREATE on the database even when the schema
+            # exists, which a read-mostly login (the API's witness_api) does not have.
+            cur = await c.execute("SELECT 1 FROM pg_namespace WHERE nspname = %s", (schema,))
+            if await cur.fetchone() is None:
+                await c.execute(sql.SQL("CREATE SCHEMA IF NOT EXISTS {}").format(
+                    sql.Identifier(schema)))
         search_path = sql.SQL("SET search_path TO {}, public").format(sql.Identifier(schema))
 
         async def configure(conn: psycopg.AsyncConnection) -> None:

@@ -92,7 +92,8 @@ The same API is mounted on the node at `/api/witness/v1`.
 def create_app(settings: Settings, *, store: ExplorerStore | None = None,
                routers: Iterable[APIRouter] = ()) -> FastAPI:
     """Build the API. Pass `store` to share an open store (it is then neither migrated nor
-    closed here); otherwise one is opened on `settings.db` at startup."""
+    closed here); otherwise one is opened on `settings.db` at startup and migrated unless
+    `settings.migrate` is off."""
 
     @asynccontextmanager
     async def lifespan(app: FastAPI) -> AsyncIterator[None]:
@@ -101,7 +102,7 @@ def create_app(settings: Settings, *, store: ExplorerStore | None = None,
             settings.db, schema=settings.schema)
         http = hornet = svc = None
         try:
-            if own_store:
+            if own_store and settings.migrate:
                 await st.migrate()
             policy = routes_identity.load_policy(settings.policy_path)
             http = httpx.AsyncClient(timeout=settings.upstream_timeout_s,

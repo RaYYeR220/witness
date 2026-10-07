@@ -40,6 +40,8 @@ spec:
             {{- include "witness.databaseEnv" (dict "ctx" . "name" "WITNESS_DB" "values" .Values.api) | nindent 12 }}
             - name: WITNESS_SCHEMA
               value: witness
+            - name: WITNESS_MIGRATE
+              value: {{ ternary "1" "0" .Values.api.migrate | quote }}
             - name: WITNESS_HOST
               value: "0.0.0.0"
             - name: WITNESS_PORT

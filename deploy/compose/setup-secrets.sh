@@ -10,6 +10,7 @@
 #                                                 set, else the one an existing witness-postgres
 #                                                 container was created with, else random
 #   postgres/relay.password                       the relay's own database login (random)
+#   postgres/api.password                         the API's own read-mostly login (random)
 #   mosquitto/{relay,indexer,observer}.password   broker passwords (random)
 #   tokens/{ingest,report,posture,anchor-admin}.token
 #   relay/search.key                              blind-index key for sealed tags (random)
@@ -17,7 +18,7 @@
 #   mosquitto/passwd                              hashed broker passwords (when a password changed)
 #   relay/sig-1.pem                               relay signing key as PKCS#8 (from sig-1.jwk.json)
 #   relay/recipients.json                         public X25519 key of the domain (from deploy/identity)
-#   postgres/{explorer,relay}.dsn                 database URLs (for Kubernetes Secrets)
+#   postgres/{explorer,relay,api}.dsn             database URLs (for Kubernetes Secrets)
 #   compose/{relay,indexer,api,anchor,db-init}.env  credentials each container gets, nothing more
 #
 # Component signing keys (<component>/sig-1.jwk.json) come from anchor/scripts/bootstrap-identities.ts.
@@ -63,6 +64,7 @@ keep_random() {
 for user in relay indexer observer; do keep_random "$secrets/mosquitto/$user.password"; done
 for token in ingest report posture anchor-admin; do keep_random "$secrets/tokens/$token.token"; done
 keep_random "$secrets/postgres/relay.password"
+keep_random "$secrets/postgres/api.password"
 
 # The database owner's password is fixed when the database is first created. A base stack
 # created before this file existed was created with POSTGRES_PASSWORD in its environment:
@@ -186,11 +188,15 @@ def dsn(user, password):
 
 pg_owner = read("postgres/postgres.password")
 pg_relay = read("postgres/relay.password")
-# The explorer (indexer, API) uses the database owner; the relay has a login of its own that
-# owns only the relay schema (deploy/compose/db-init.sql creates it).
+pg_api = read("postgres/api.password")
+# The indexer uses the database owner and migrates the explorer's schema. The relay has a
+# login of its own that owns only the relay schema; the API one that reads the explorer's
+# schema and writes only what it records (deploy/compose/db-init.sql creates both).
 explorer_dsn, relay_dsn = dsn("postgres", pg_owner), dsn("witness_relay", pg_relay)
+api_dsn = dsn("witness_api", pg_api)
 emit("postgres/explorer.dsn", explorer_dsn, "wrote")
 emit("postgres/relay.dsn", relay_dsn, "wrote")
+emit("postgres/api.dsn", api_dsn, "wrote")
 env = {
     "relay": {
         "RELAY_DB_URL": relay_dsn,
@@ -202,7 +208,7 @@ env = {
         "WITNESS_MQTT": mqtt.format(user="indexer", password=read("mosquitto/indexer.password")),
     },
     "api": {
-        "WITNESS_DB": explorer_dsn,
+        "WITNESS_DB": api_dsn,
         "WITNESS_INGEST_TOKEN": read("tokens/ingest.token"),
         "WITNESS_REPORT_TOKEN": read("tokens/report.token"),
         "WITNESS_POSTURE_TOKEN": read("tokens/posture.token"),
@@ -217,6 +223,7 @@ env = {
         "PGUSER": "postgres",
         "PGPASSWORD": pg_owner,
         "RELAY_DB_PASSWORD": pg_relay,
+        "API_DB_PASSWORD": pg_api,
     },
 }
 if relay is not None:

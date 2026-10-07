@@ -4,8 +4,14 @@
 -- witness_relay: the relay's own login. It owns the relay schema (receipts, issuer sequence
 -- numbers) and nothing else: no CREATE on the database, no access to the explorer's schema.
 -- Its password comes from RELAY_DB_PASSWORD (secrets/postgres/relay.password).
+--
+-- witness_api: the API's own login. It reads the explorer's schema (witness) and writes only
+-- what the API records (indexer migration 0005_api_role.sql has the list); the indexer owns
+-- the schema and migrates it. Its password comes from API_DB_PASSWORD
+-- (secrets/postgres/api.password); without one the API keeps the owner's login.
 \set ON_ERROR_STOP on
 \getenv relay_password RELAY_DB_PASSWORD
+\getenv api_password API_DB_PASSWORD
 
 SELECT 'CREATE ROLE witness_relay'
 WHERE NOT EXISTS (SELECT FROM pg_roles WHERE rolname = 'witness_relay') \gexec
@@ -39,3 +45,19 @@ BEGIN
   END LOOP;
 END
 $$;
+
+\if :{?api_password}
+SELECT 'CREATE ROLE witness_api'
+WHERE NOT EXISTS (SELECT FROM pg_roles WHERE rolname = 'witness_api') \gexec
+
+SELECT format('ALTER ROLE witness_api WITH LOGIN NOSUPERUSER NOCREATEDB NOCREATEROLE '
+              'NOREPLICATION NOBYPASSRLS PASSWORD %L', :'api_password') \gexec
+
+-- The explorer's schema, owned by the database owner (the indexer's login), so the API can be
+-- granted it before the indexer first migrates. Tables the indexer creates later are granted
+-- by its migration 0005; on a database migrated before that, the same grants run here.
+CREATE SCHEMA IF NOT EXISTS witness;
+SET search_path TO witness;
+\i /etc/witness/api-grants.sql
+RESET search_path;
+\endif

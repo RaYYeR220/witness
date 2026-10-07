@@ -45,6 +45,7 @@ services:
       - ${WITNESS_SECRETS_DIR:-../../secrets}/compose/db-init.env
     volumes:
       - ./db-init.sql:/etc/witness/db-init.sql:ro
+      - ../../indexer/src/witness_indexer/migrations/0005_api_role.sql:/etc/witness/api-grants.sql:ro
     entrypoint:
       - /bin/sh
       - -c
@@ -103,8 +104,10 @@ services:
     env_file:
       - ${WITNESS_SECRETS_DIR:-../../secrets}/compose/api.env
     environment:
-      # WITNESS_DB comes from api.env.
+      # WITNESS_DB comes from api.env: the API's own read-mostly login (witness_api), which
+      # cannot migrate; the indexer does.
       WITNESS_SCHEMA: witness
+      WITNESS_MIGRATE: "0"
       WITNESS_HOST: 0.0.0.0
       WITNESS_PORT: "7200"
       # What a verifier pins (GET /config/verifier).
@@ -139,6 +142,9 @@ services:
     ports:
       - "127.0.0.1:${WITNESS_API_PORT:-7200}:7200"
       - "[::1]:${WITNESS_API_PORT:-7200}:7200"
+    depends_on:
+      # Creates the API's login and its grants.
+      witness-db-init: {condition: service_completed_successfully}
 
   witness-anchor:
     <<: *service

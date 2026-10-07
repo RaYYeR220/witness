@@ -16,6 +16,9 @@ _FALSE = {"0", "false", "no", "off", ""}
 class Settings:
     db: str
     schema: str = "witness"
+    # Apply the explorer's schema migrations at startup. Off when the API logs in as its own
+    # read-mostly role (witness_api, no DDL): the indexer migrates.
+    migrate: bool = True
     # What a verifier pins: the private Tangle's network label, its coordinator keys and
     # signature threshold, the IOTA Rebased network and Audit Trail holding the anchors.
     network: str = "private_tangle1"
@@ -129,6 +132,7 @@ class Settings:
         return cls(
             db=db,
             schema=get("WITNESS_SCHEMA") or "witness",
+            migrate=flag("WITNESS_MIGRATE", True),
             network=get("WITNESS_NETWORK") or "private_tangle1",
             coordinator_keys=keys,
             threshold=int(number("WITNESS_THRESHOLD", max(len(keys), 1), int)),

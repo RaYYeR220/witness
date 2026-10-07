@@ -36,6 +36,11 @@ def test_from_env_rejects_bad_values(env, message):
         Settings.from_env(env)
 
 
+def test_migrations_can_be_left_to_the_indexer():
+    assert Settings.from_env({"WITNESS_DB": "postgresql://x"}).migrate is True
+    assert Settings.from_env({"WITNESS_DB": "postgresql://x", "WITNESS_MIGRATE": "0"}).migrate         is False
+
+
 def test_validation_belongs_to_the_indexer_by_default():
     s = Settings.from_env({"WITNESS_DB": "postgresql://x"})
     assert s.validate is False
