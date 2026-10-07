@@ -5,13 +5,13 @@
  * IOTA Rebased live, so it needs the network; without it the run is PARTIAL
  * and says so).
  */
-import { existsSync, readFileSync } from "node:fs";
+import { existsSync, readdirSync, readFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 
 import { expect, test, type Page } from "@playwright/test";
 
-import { axeCheck, ladderResult, SCREENS } from "./helpers";
+import { axeCheck, ladderResult, noSideScroll, SCREENS } from "./helpers";
 
 const SNAPSHOT = join(dirname(fileURLToPath(import.meta.url)), ".snapshot");
 const has = existsSync(join(SNAPSHOT, "manifest.json"));
@@ -19,25 +19,24 @@ const read = (name: string) => JSON.parse(readFileSync(join(SNAPSHOT, name), "ut
 
 test.skip(!has, "no replay snapshot: run once with the stack up (e2e/prepare-replay.mjs records one)");
 
-/** An anchored message of the snapshot that has its proof recorded. */
+/** An anchored, producer-signed trust score of the snapshot with its proof recorded (any recorded message, not only the list). */
 function anchoredMessage(): string {
   const last = Math.max(0, ...read("anchors.json").items.filter((a: { status: string }) => a.status === "anchored").map((a: { toMilestone: number }) => a.toMilestone));
-  const m = read("messages.json").items.find(
-    (x: { msIndex: number | null; blockId: string; tag: string; verdict: string; iss: string | null }) =>
-      x.tag === "trust.score" &&
-      x.verdict === "PRODUCER_SIGNED" &&
-      x.iss?.startsWith("did:iota:") && // a did:key writer (the chaos runs) has no DID document to resolve
-      x.msIndex !== null &&
-      x.msIndex <= last &&
-      existsSync(join(SNAPSHOT, "bundles", `${x.blockId}.json`)),
-  );
-  if (!m) test.skip(true, "the snapshot holds no anchored message with a proof");
-  return m.blockId;
+  const ids = readdirSync(join(SNAPSHOT, "messages")).map((f) => f.replace(/\.json$/, ""));
+  for (const id of ids) {
+    if (!existsSync(join(SNAPSHOT, "bundles", `${id}.json`))) continue;
+    const x = read(`messages/${id}.json`);
+    // a did:key writer (the chaos runs) has no DID document to resolve
+    if (x.tag === "trust.score" && x.verdict === "PRODUCER_SIGNED" && x.iss?.startsWith("did:iota:") && x.msIndex !== null && x.msIndex <= last) return id;
+  }
+  test.skip(true, "the snapshot holds no anchored message with a proof");
+  return "";
 }
 
-function anyMessage(): string {
+/** Any message of the snapshot with its proof recorded, or null. */
+function anyMessage(): string | null {
   const m = read("messages.json").items.find((x: { blockId: string }) => existsSync(join(SNAPSHOT, "bundles", `${x.blockId}.json`)));
-  return m.blockId;
+  return m?.blockId ?? null;
 }
 
 /** Records every request that would need an API. */
@@ -73,16 +72,41 @@ test("Verify computes the five checks in the browser from a recorded proof", asy
   expect(hits).toEqual([]);
 });
 
-test("every explorer screen renders from the snapshot, with no critical axe violation", async ({ page }) => {
+test("every explorer screen renders from the snapshot, with no critical axe violation and no sideways scroll at 390 px", async ({ page }) => {
   const hits = watchApi(page);
   const ie = read("ie.json").items[0]?.ieId ?? "MyDomain:fa163e5e25ef";
-  for (const s of SCREENS(ie, anyMessage())) {
+  const id = anyMessage();
+  test.skip(!id, "the snapshot holds no message with a proof");
+  const screens = SCREENS(ie, id!);
+  for (const s of screens) {
     await page.goto(s.path);
     await expect(page.locator(s.ready).first(), `${s.name} renders`).toBeVisible({ timeout: 30_000 });
     const { critical, serious } = await axeCheck(page);
     expect(critical, `${s.name}: critical axe violations`).toEqual([]);
     if (serious.length) test.info().annotations.push({ type: `axe serious on ${s.name}`, description: serious.join("; ") });
   }
+  await page.setViewportSize({ width: 390, height: 844 });
+  for (const s of screens) {
+    await page.goto(s.path);
+    await expect(page.locator(s.ready).first(), `${s.name} renders at 390 px`).toBeVisible({ timeout: 30_000 });
+    await noSideScroll(page, s.name);
+  }
+  expect(hits).toEqual([]);
+});
+
+test("Reports renders the snapshot's reports, and never embeds a report page", async ({ page }) => {
+  const hits = watchApi(page);
+  const reports = read("reports.json").items;
+  await page.goto("/reports");
+  if (!reports.length) {
+    await expect(page.locator(".empty")).toContainText("No report yet");
+  } else {
+    await expect(page.locator(".list li")).toHaveCount(reports.length);
+    await expect(page.locator(".detail .anch")).not.toHaveAttribute("data-a", "checking", { timeout: 60_000 });
+    const html = page.locator('a[target="_blank"]', { hasText: "HTML rendering" });
+    await expect(html).toHaveAttribute("href", /\/replay\/reports\/0x[0-9a-f]{64}\.html$/);
+  }
+  await expect(page.locator("iframe")).toHaveCount(0);
   expect(hits).toEqual([]);
 });
 

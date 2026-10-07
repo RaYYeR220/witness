@@ -27,8 +27,9 @@
  *   scorecard.json           the evaluation scorecard given with --scorecard, if any
  *
  * Blocks the lineage and incident screens point at (the newest entries of
- * each lineage, every incident event) are recorded like the message page, up
- * to --blocks in all, so Verify works from those screens too.
+ * each lineage, every incident event), and a few trust scores from anchored
+ * windows, are recorded like the message page, up to --blocks in all, so
+ * Verify works from those screens too and shows all five checks.
  *
  * Run: node scripts/record-replay.mjs [--api http://127.0.0.1:7200]
  *        [--resolver http://127.0.0.1:7300] [--out public/replay] [--limit 60]
@@ -147,11 +148,17 @@ async function main() {
     if (m.iss) dids.add(m.iss);
   }
   write("verifier-config.json", await fetchText(`${api}/config/verifier`));
-  write("anchors.json", await fetchText(`${api}/anchors?limit=100`));
+  const anchors = JSON.parse(await fetchText(`${api}/anchors?limit=100`));
+  write("anchors.json", json(anchors));
 
   // The explorer screens: lineage, integrity, identity, posture, reports.
   const getJson = async (path) => JSON.parse(await fetchText(`${api}${path}`));
   const wanted = []; // blocks those screens link to, most useful first
+  // a few trust scores from anchored windows, so Verify can show all five checks green
+  for (const a of anchors.items.filter((x) => x.status === "anchored").slice(0, 4)) {
+    const inWindow = await getJson(`/messages?tag=trust.score&ms_from=${a.fromMilestone}&ms_to=${a.toMilestone}&limit=3`);
+    for (const m of inWindow.items) wanted.push(m.blockId);
+  }
   const ies = await getJson("/ie");
   write("ie.json", json(ies));
   for (const ie of ies.items.slice(0, 40)) {

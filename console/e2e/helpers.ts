@@ -35,6 +35,12 @@ export async function ladderResult(page: Page, timeout = 60_000): Promise<{ over
   return { overall: (await overall.getAttribute("data-o")) ?? "", steps };
 }
 
+/** Asserts the page does not scroll sideways at a phone's width. */
+export async function noSideScroll(page: Page, name: string, width = 390): Promise<void> {
+  const sw = await page.evaluate(() => document.documentElement.scrollWidth);
+  expect(sw, `${name} scrolls sideways at ${width} px`).toBeLessThanOrEqual(width);
+}
+
 /** The console's screens, with a selector that shows each one has rendered its data. */
 export const SCREENS = (ie: string, blockId: string) => [
   { name: "live", path: "/live", ready: ".rows li" },

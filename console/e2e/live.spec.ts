@@ -7,7 +7,7 @@
  */
 import { expect, test } from "@playwright/test";
 
-import { axeCheck, ladderResult, SCREENS } from "./helpers";
+import { axeCheck, ladderResult, noSideScroll, SCREENS } from "./helpers";
 
 const API = process.env.WITNESS_E2E_API ?? "http://127.0.0.1:7200";
 
@@ -45,11 +45,29 @@ async function anchoredMessage(): Promise<string | null> {
   return null;
 }
 
-test("Live shows trust scores within 10 s, and one opens in Verify with checks 1 to 4 green", async ({ page }) => {
+test("Live shows trust scores within 10 s, then a new one as it lands, which opens in Verify with checks 1 to 4 green", async ({ page }) => {
+  test.setTimeout(180_000);
   await page.goto("/live");
-  const row = page.locator(".rows .msg", { hasText: "did:iota:" }).filter({ hasText: "trust.score" }).first();
-  await expect(row).toBeVisible({ timeout: 10_000 });
-  await row.click();
+  const rows = page.locator(".rows .msg");
+  await expect(rows.filter({ hasText: "trust.score" }).first()).toBeVisible({ timeout: 10_000 });
+  // a row newer than everything on the page at load: one the stream brought in
+  const newestAtLoad = await rows.evaluateAll((els) => Math.max(0, ...els.map((e) => Date.parse(e.querySelector("time")?.getAttribute("datetime") ?? "") || 0)));
+  const started = Date.now();
+  const handle = await page.waitForFunction(
+    (after) =>
+      [...document.querySelectorAll(".rows .msg")].find(
+        (e) =>
+          (e.textContent ?? "").includes("trust.score") &&
+          (e.textContent ?? "").includes("did:iota:") &&
+          (Date.parse(e.querySelector("time")?.getAttribute("datetime") ?? "") || 0) > after,
+      ) ?? null,
+    newestAtLoad,
+    { timeout: 150_000, polling: 500 },
+  );
+  test.info().annotations.push({ type: "new row after", description: `${Math.round((Date.now() - started) / 1000)} s (trust scores land about once a minute)` });
+  const href = await handle.evaluate((e) => (e as HTMLAnchorElement).getAttribute("href"));
+  await (handle.asElement() as import("@playwright/test").ElementHandle<HTMLElement>).click();
+  await expect(page).toHaveURL(new RegExp(`${href}$`));
   await expect(page).toHaveURL(/\/m\/0x[0-9a-f]{64}$/);
   const { overall, steps } = await ladderResult(page);
   expect(steps.slice(0, 4)).toEqual(["pass", "pass", "pass", "pass"]);
@@ -78,7 +96,28 @@ test("Anchors: the browser re-reads the newest checkpoint from IOTA Rebased and 
   await expect(first.locator(".st")).toHaveText("Anchored, per the explorer");
   await first.locator(".re .btn").click();
   await expect(first.locator(".res .verdict")).toHaveAttribute("data-v", "true", { timeout: 45_000 });
-  await expect(first.locator(".st")).toHaveText("Checked on IOTA Rebased in your browser");
+  // the explorer's status keeps its own words; the browser's result is its own chip
+  await expect(first.locator(".st")).toHaveText("Anchored, per the explorer");
+  await expect(first.locator(".chk")).toHaveText("Checked on IOTA Rebased in your browser");
+  await expect(first).toHaveAttribute("data-check", "agrees");
+});
+
+test("Reports: an anchored report is checked in the browser, signer included", async ({ page }) => {
+  test.skip(!(await hasExplorer(page)), "this console build has no explorer screens");
+  const report = (await api("/reports?limit=1")).items[0];
+  test.skip(!report, "no audit report on this stack yet");
+  await page.goto(`/reports?report=${report.reportHash}`);
+  const state = page.locator(".detail .anch");
+  await expect(state).not.toHaveAttribute("data-a", "checking", { timeout: 60_000 });
+  if (report.anchored) {
+    await expect(state).toHaveAttribute("data-a", "verified");
+    await expect(page.locator('.x-note[data-tone="ok"]')).toContainText("(checked in your browser)");
+    await expect(page.locator(".hashes .x-cmp")).toHaveCount(2);
+    for (const c of await page.locator(".hashes .x-cmp").all()) await expect(c).toHaveAttribute("data-c", "same");
+  } else {
+    await expect(state).toHaveAttribute("data-a", "not-anchored");
+  }
+  await expect(page.locator("iframe")).toHaveCount(0);
 });
 
 test("Lineage draws the ledger series and says what Orion answered", async ({ page }) => {
@@ -92,7 +131,7 @@ test("Lineage draws the ledger series and says what Orion answered", async ({ pa
   else await expect(page.locator(".drift-badge")).toHaveCount(0);
 });
 
-test("every screen has no critical axe violation", async ({ page }) => {
+test("every screen has no critical axe violation, and none scrolls sideways at 390 px", async ({ page }) => {
   const explorer = await hasExplorer(page);
   const ie = (await api("/ie")).items[0]?.ieId ?? "MyDomain:fa163e5e25ef";
   const id = (await anchoredMessage()) ?? (await api("/messages?limit=1")).items[0].blockId;
@@ -103,5 +142,11 @@ test("every screen has no critical axe violation", async ({ page }) => {
     const { critical, serious } = await axeCheck(page);
     expect(critical, `${s.name}: critical axe violations`).toEqual([]);
     if (serious.length) test.info().annotations.push({ type: `axe serious on ${s.name}`, description: serious.join("; ") });
+  }
+  await page.setViewportSize({ width: 390, height: 844 });
+  for (const s of screens) {
+    await page.goto(s.path);
+    await expect(page.locator(s.ready).first(), `${s.name} renders at 390 px`).toBeVisible({ timeout: 60_000 });
+    await noSideScroll(page, s.name);
   }
 });
