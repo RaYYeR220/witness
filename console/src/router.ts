@@ -3,9 +3,7 @@ import { createRouter, createWebHistory, type RouteRecordRaw } from "vue-router"
 import { SCREENS } from "@/screens";
 import LandingView from "@/views/LandingView.vue";
 
-const ComingSoon = () => import("@/views/ComingSoon.vue");
-
-/** Screens that are built; the rest show their placeholder until their task lands. */
+/** The view of each screen in screens.ts. */
 const VIEWS: Record<string, RouteRecordRaw["component"]> = {
   live: () => import("@/views/LiveView.vue"),
   search: () => import("@/views/SearchView.vue"),
@@ -14,12 +12,14 @@ const VIEWS: Record<string, RouteRecordRaw["component"]> = {
   integrity: () => import("@/views/IntegrityView.vue"),
   identity: () => import("@/views/IdentityView.vue"),
   anchors: () => import("@/views/AnchorsView.vue"),
+  posture: () => import("@/views/PostureView.vue"),
+  reports: () => import("@/views/ReportsView.vue"),
 };
 
 const routes: RouteRecordRaw[] = [
   { path: "/", name: "landing", component: LandingView, meta: { title: "Witness" } },
   ...SCREENS.map(
-    (s) => ({ path: s.path, name: s.name, component: VIEWS[s.name] ?? ComingSoon, meta: { title: s.title, blurb: s.blurb } }) as RouteRecordRaw,
+    (s) => ({ path: s.path, name: s.name, component: VIEWS[s.name]!, meta: { title: s.title, blurb: s.blurb } }) as RouteRecordRaw,
   ),
   // incidents live on Integrity
   { path: "/incidents", redirect: { name: "integrity" } },
