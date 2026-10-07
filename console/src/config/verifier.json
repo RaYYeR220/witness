@@ -17,7 +17,7 @@
   ],
   "threshold": 2,
   "rebasedNetwork": "testnet",
-  "trailId": "0xacb73c8f648cdb335e6644af7e52746c6a8d166e4ffced17826c7861ffbf3540",
+  "trailId": "0x0715cfc56779f78cea48a3afb75dd44d7b9694008286acdb27a16f2c6e3ab313",
   "rebasedRpc": "https://api.testnet.iota.cafe",
   "auditTrailPackage": "0x51368931f28620c7f65b4ae2c5167b42390e69729357a6347be378755b46e7df",
   "anchorWriter": "0xd40892daf5c81e3d67ffe9806575970b973ecf6625eb8a88562afae0d8c940c8"
