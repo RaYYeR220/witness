@@ -105,7 +105,8 @@ def test_restore_command_refuses_a_remote_database(tmp_path, monkeypatch):
 async def test_an_interrupted_run_still_restores(tmp_path, monkeypatch):
     cfg = R.RunConfig(api="http://127.0.0.1:7200", relay="http://127.0.0.1:5557",
                       orion="http://127.0.0.1:1026", hornet="http://127.0.0.1:14265",
-                      out=str(tmp_path / "out"), trap=False, allow_nonlocal=True)
+                      out=str(tmp_path / "out"), trap=False, allow_nonlocal=True,
+                      controls=False)
     r = R.Runner(cfg)
     calls = []
 
@@ -139,7 +140,8 @@ async def test_an_interrupted_run_still_restores(tmp_path, monkeypatch):
 async def test_a_failing_restore_is_recorded_with_every_row_left(tmp_path, monkeypatch):
     cfg = R.RunConfig(api="http://127.0.0.1:7200", relay="http://127.0.0.1:5557",
                       orion="http://127.0.0.1:1026", hornet="http://127.0.0.1:14265",
-                      out=str(tmp_path / "out"), trap=False, allow_nonlocal=True)
+                      out=str(tmp_path / "out"), trap=False, allow_nonlocal=True,
+                      controls=False)
     r = R.Runner(cfg)
 
     async def nothing(*a, **k):

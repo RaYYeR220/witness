@@ -1,5 +1,10 @@
+import asyncio
+import asyncio.base_events
+import asyncio.proactor_events
+import asyncio.selector_events
 import json
 import socket
+import threading
 from pathlib import Path
 
 import pytest
@@ -88,3 +93,96 @@ def key():
 
     return yaml.safe_load(
         Path(attacks.__file__).with_name("answer_key.yaml").read_text(encoding="utf-8"))
+
+
+# ------------------------------------------------------------------------- no-network guard
+
+_guard = threading.local()
+
+
+def _blocked(where: str, target: object, attempts: list[str]) -> None:
+    attempts.append(f"{where} -> {target!r}")
+    raise AssertionError(f"network access attempted outside a live test: {where} {target!r}")
+
+
+@pytest.fixture(autouse=True)
+def _never_reach_a_stack(request, monkeypatch):
+    """Every chaos test runs with real networking cut off, unless marked `live`.
+
+    The runner talks to a real aeriOS stack on loopback (Orion :1026, relay :5557, API
+    :7200, HORNET, MQTT, Postgres). A test that forgets to stub one path must fail here
+    instead of injecting traffic into whatever stack happens to run on this machine.
+    Blocked: socket connects (sync clients, paho-mqtt), asyncio connects (httpx/anyio,
+    aiomqtt, also the Windows proactor path that bypasses socket.connect) and psycopg
+    connects (libpq opens its own sockets). In-process mocks (respx, MockTransport,
+    fakes) never reach these layers and keep working. The attempt is also recorded and
+    re-raised at teardown, so code that swallows exceptions cannot hide it.
+    """
+    if request.node.get_closest_marker("live"):
+        yield
+        return
+    attempts: list[str] = []
+    real_connect = socket.socket.connect
+    real_connect_ex = socket.socket.connect_ex
+    real_socketpair = socket.socketpair
+
+    def allowed(sock) -> bool:
+        return getattr(_guard, "socketpair", False) or sock.family not in (
+            socket.AF_INET, socket.AF_INET6)
+
+    def connect(self, address):
+        if not allowed(self):
+            _blocked("socket.connect", address, attempts)
+        return real_connect(self, address)
+
+    def connect_ex(self, address):
+        if not allowed(self):
+            _blocked("socket.connect_ex", address, attempts)
+        return real_connect_ex(self, address)
+
+    def socketpair(*a, **k):
+        # On Windows socketpair() is a loopback connect; asyncio needs it for every loop.
+        _guard.socketpair = True
+        try:
+            return real_socketpair(*a, **k)
+        finally:
+            _guard.socketpair = False
+
+    def create_connection(address, *a, **k):
+        _blocked("socket.create_connection", address, attempts)
+
+    async def loop_create_connection(self, protocol_factory, host=None, port=None, *a, **k):
+        _blocked("loop.create_connection", (host, port), attempts)
+
+    async def loop_sock_connect(self, sock, address):
+        _blocked("loop.sock_connect", address, attempts)
+
+    monkeypatch.setattr(socket.socket, "connect", connect)
+    monkeypatch.setattr(socket.socket, "connect_ex", connect_ex)
+    monkeypatch.setattr(socket, "socketpair", socketpair)
+    monkeypatch.setattr(socket, "create_connection", create_connection)
+    monkeypatch.setattr(asyncio.base_events.BaseEventLoop, "create_connection",
+                        loop_create_connection)
+    monkeypatch.setattr(asyncio.selector_events.BaseSelectorEventLoop, "sock_connect",
+                        loop_sock_connect)
+    monkeypatch.setattr(asyncio.proactor_events.BaseProactorEventLoop, "sock_connect",
+                        loop_sock_connect)
+    try:
+        import psycopg
+    except ImportError:  # pragma: no cover - psycopg is a chaos dependency
+        psycopg = None
+    if psycopg is not None:
+        def pg_connect(*a, **k):
+            _blocked("psycopg.connect", a[1:] or k.get("conninfo"), attempts)
+
+        async def pg_connect_async(*a, **k):
+            _blocked("psycopg.AsyncConnection.connect", a[1:] or k.get("conninfo"),
+                     attempts)
+
+        monkeypatch.setattr(psycopg.Connection, "connect", classmethod(pg_connect))
+        monkeypatch.setattr(psycopg, "connect", lambda *a, **k: pg_connect(None, *a, **k))
+        monkeypatch.setattr(psycopg.AsyncConnection, "connect",
+                            classmethod(pg_connect_async))
+    yield attempts
+    if attempts:
+        pytest.fail("network access attempted outside a live test: " + "; ".join(attempts))
