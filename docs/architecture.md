@@ -119,8 +119,9 @@ attacks marked with an eval class are part of the [fault-injection evaluation](e
 | A thief of the anchor's gas key | add trail records; with the admin capability, shorten the delete lock and delete records | records by another writer fail ⑤; checking that sequence numbers are contiguous and `prev` links hold is listed in [anchor/SECURITY.md](../anchor/SECURITY.md) and not done by the ladder |
 
 Confidentiality is a separate concern: by default every payload on the Tangle is public and
-replicated to every peer. Tags listed in `RELAY_ENCRYPT_TAGS` are sealed by the relay (JWE to
-the domain's X25519 key) with blind index tokens for lookup; see
+replicated to every peer. On the tags listed in `RELAY_ENCRYPT_TAGS` (in our deployment
+`audit.report`), the relay seals legacy (unsigned) writes (JWE to the domain's X25519 key) with
+blind index tokens for lookup; producer-signed envelopes and every other tag stay in clear; see
 [envelope-spec.md](envelope-spec.md#5-sealed-bodies-blind-indexes-commitments).
 
 ## Verdicts, lifecycle, alerts
@@ -136,10 +137,10 @@ the domain's X25519 key) with blind index tokens for lookup; see
 | Rule | Severity | Raised when |
 |---|---|---|
 | R1 `FORGED`, R2 `UNAUTHORIZED_WRITER`, R3 `REPLAY`, R9 `MALFORMED`, R10 `REVOKED_KEY` | critical, high, high, low, high | the verdict says so |
-| R4 `UNSIGNED` | medium | unsigned message on a tag whose policy requires signatures |
+| R4 `UNSIGNED` | medium | on a tag with `require_signature` and `legacy_grace` false, an unsigned message raises `UNSIGNED` and the relay refuses unsigned uploads from callers without a Keycloak identity |
 | R5 `DRIFT` | medium | Orion's `trustScore` differs from the latest ledger score beyond epsilon for longer than the grace period |
 | R6 `UNKNOWN_IE` | low | message about an IE Orion does not list |
-| R7 `ANOMALY` | medium | score jump beyond the threshold with no trusted security event shortly before |
+| R7 `ANOMALY` | medium | score jump beyond the threshold with no corroborating security event about the IE shortly before; only a self-orchestrator or self-security message that is producer signed or relay attested, or unsigned but received through the Messages API and not flagged `SHADOW`, can corroborate |
 | R8 `STALE` | low | no ledger score for an IE within a multiple of the score interval |
 | R11 `ANCHOR_MISMATCH` | critical | stored milestone ids of an anchored window no longer hash to the on-chain `msRoot`, or the mirror disagrees with the chain |
 | R12 `CLOCK_SKEW` | low | the signer's `iat` far from the milestone timestamp |

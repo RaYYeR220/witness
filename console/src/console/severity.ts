@@ -22,7 +22,7 @@ export const RULES: Record<string, string> = {
   MALFORMED: "Breaks the envelope format, is validly signed but its body breaks its tag's schema, or is not a JSON object on a known aeriOS tag.",
   UNSIGNED: "An unsigned message on a tag whose writer policy requires signatures.",
   UNKNOWN_IE: "A message about an Infrastructure Element Orion does not know.",
-  ANOMALY: "A trust score jump with no trustworthy security event for the IE shortly before it.",
+  ANOMALY: "A trust score jump with no corroborating security event about the IE shortly before it.",
   CLOCK_SKEW: "The signer's issue time is far from the milestone's.",
   CHAIN_GAP: "The envelope's prev is not the issuer's last seen block.",
   CHAIN_FORK: "Two messages of one issuer continue from the same prev.",
