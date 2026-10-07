@@ -283,11 +283,11 @@ function select(blockId: string) {
   height: 24px;
   padding: 0 11px;
   border-radius: var(--r-pill);
-  border: 1px solid rgba(var(--rgb-aurora), 0.5);
+  border: 1px solid var(--hair-strong);
   font-size: 12.5px;
   font-weight: 500;
   letter-spacing: 0.03em;
-  color: var(--pass);
+  color: var(--fog-200);
 }
 .drift-badge::before {
   content: "";

@@ -258,9 +258,10 @@ const tone = (v: string) => (GOOD.has(v) ? "ok" : BAD.has(v) ? "bad" : "other");
   border-radius: 50%;
   border: 1.2px dashed var(--fog-400);
 }
+/* the API's own word about its components: not green */
 .svcs li[data-tone="ok"] .dot {
   border: 0;
-  background: var(--pass);
+  background: var(--fog-200);
 }
 .svcs li[data-tone="bad"] .dot {
   border: 1.4px solid var(--fail);
