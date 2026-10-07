@@ -176,6 +176,7 @@
   },
   "Stats": {
    "counts": true,
+   "services": false,
    "validator": true,
    "nodeRoute": true,
    "streamSubscribers": true

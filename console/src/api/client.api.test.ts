@@ -139,15 +139,12 @@ const READS = {
   ReportResult: { report: 1 } satisfies Record<Exclude<keyof ReportResult, keyof ReportSummary>, 1>,
 };
 
-/** `services` came with the deploy task's /stats fix; the running API has it, the models on this branch not yet. */
-const STATS_EXTRA = ["services"] as const;
-
 describe("API contract", () => {
   it("every field the console's types read exists in the API model", () => {
     const missing: string[] = [];
     for (const [model, keys] of Object.entries(READS)) {
       for (const k of Object.keys(keys)) {
-        if (!(k in (MODELS[model] ?? {})) && !(model === "Stats" && (STATS_EXTRA as readonly string[]).includes(k))) missing.push(`${model}.${k}`);
+        if (!(k in (MODELS[model] ?? {}))) missing.push(`${model}.${k}`);
       }
     }
     expect(missing).toEqual([]);
@@ -183,7 +180,7 @@ describe("API contract", () => {
       ...[L.posture, E.posture].flatMap((x) => [...misfit("Posture", x), ...each("Finding", x.findings)]),
       ...[L.reports, E.reports].flatMap((x) => [...misfit("ReportList", x), ...each("ReportSummary", x.items)]),
       ...misfit("ReportResult", E.report),
-      ...misfit("Stats", L.stats, STATS_EXTRA),
+      ...misfit("Stats", L.stats),
     ];
     expect(problems).toEqual([]);
   });

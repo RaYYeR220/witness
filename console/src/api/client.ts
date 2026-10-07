@@ -389,7 +389,7 @@ export interface Posture {
   findings: Finding[];
 }
 
-/** `GET /stats`. `services` (component statuses) is absent on APIs older than the deploy task. */
+/** `GET /stats`. `services` holds component statuses (absent on older APIs). */
 export interface Stats {
   counts: Record<string, number>;
   services?: Record<string, string>;
