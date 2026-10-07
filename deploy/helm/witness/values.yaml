@@ -202,6 +202,9 @@ anchor:
   # Milestones per checkpoint window (one trail record each): 720 is about an hour.
   every: 720
   startIndex: 1
+  # How long a /resolve reply is cached. Keep it under the indexer's 3 s live freshness, or a
+  # message signed just after a key revocation can be recorded as PRODUCER_SIGNED.
+  resolveCacheMs: 2000
   secrets:
     # Env Secret: ANCHOR_ADMIN_TOKEN (secrets/compose/anchor.env).
     env: witness-anchor-env

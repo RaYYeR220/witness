@@ -79,6 +79,8 @@ spec:
               value: {{ .Values.anchor.startIndex | quote }}
             - name: ANCHOR_IDENTITY
               value: anchor
+            - name: ANCHOR_RESOLVE_CACHE_MS
+              value: {{ .Values.anchor.resolveCacheMs | quote }}
           ports:
             - name: http
               containerPort: 7300

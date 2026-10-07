@@ -168,6 +168,9 @@ services:
       ANCHOR_EVERY: ${WITNESS_ANCHOR_EVERY:-720}
       ANCHOR_START_INDEX: ${WITNESS_ANCHOR_START_INDEX:-1}
       ANCHOR_IDENTITY: anchor
+      # Kept under the indexer's 3 s live freshness: a cached /resolve reply older than that
+      # can miss a revocation the indexer must see before it records PRODUCER_SIGNED.
+      ANCHOR_RESOLVE_CACHE_MS: ${WITNESS_ANCHOR_RESOLVE_CACHE_MS:-2000}
     volumes:
       - ${WITNESS_POLICY_FILE:-../policy.json}:/etc/witness/policy.json:ro
       - type: bind
