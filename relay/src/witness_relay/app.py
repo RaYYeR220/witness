@@ -182,7 +182,7 @@ async def _handle(
 
     def refuse(d: Decision) -> Response:
         log.info("refused upload to %r: %s (%s)", tag, d.verdict, d.reason)
-        return JSONResponse({"error": d.reason, "verdict": d.verdict}, status_code=403)
+        return JSONResponse({"error": d.reason, "verdict": d.verdict}, status_code=d.status)
 
     if envelope.is_envelope(message):
         try:

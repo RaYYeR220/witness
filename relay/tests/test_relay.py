@@ -346,8 +346,8 @@ async def test_producer_replay_rejected(make_cfg, hornet, relay, ids):
 
 
 async def test_concurrent_same_seq_exactly_one_wins(make_cfg, hornet, relay, ids):
-    a = _seal(ids.producer, seq=3, body={"score": 0.1, "id": "D:a"})
-    b = _seal(ids.producer, seq=3, body={"score": 0.9, "id": "D:a"})
+    a = _seal(ids.producer, seq=3, body={"score": 0.1, "id": "D:aabbccddeeff"})
+    b = _seal(ids.producer, seq=3, body={"score": 0.9, "id": "D:aabbccddeeff"})
     async with relay(make_cfg()) as client:
         results = await asyncio.gather(
             *(
@@ -453,6 +453,30 @@ async def test_plaintext_envelope_on_encrypt_tag_refused(make_cfg, hornet, relay
             "/upload", params=UPLOAD, json={"tag": "trust.score", "message": sealed}
         )
         assert ok.status_code == 200
+
+
+async def test_signed_body_that_breaks_the_schema_refused(
+    make_cfg, hornet, relay, ids, recorder, eventually
+):
+    """The explorer stores a validly signed message whose body breaks its tag's schema as
+    MALFORMED; the relay refuses it up front (400) and spends no seq on it."""
+    broken = _seal(ids.producer, body={"id": "not-an-ie-id", "score": 7}, seq=3)
+    async with relay(make_cfg(), forwarders=[recorder]) as client:
+        refused = await client.post(
+            "/upload", params=UPLOAD, json={"tag": "trust.score", "message": broken}
+        )
+        assert refused.status_code == 400
+        assert refused.json() == {
+            "error": "body breaks the trust.score schema",
+            "verdict": verdicts.MALFORMED,
+        }
+        assert hornet.route.call_count == 0
+        await eventually(lambda: recorder.records)
+        assert recorder.records[0]["relay"]["verdict"] == verdicts.MALFORMED
+        fixed = _seal(ids.producer, seq=3)
+        ok = await client.post("/upload", params=UPLOAD, json={"tag": "trust.score", "message": fixed})
+        assert ok.status_code == 200
+        assert ok.json()["witness"]["verdict"] == verdicts.PRODUCER_SIGNED
 
 
 async def test_passthrough_tag_is_byte_exact_legacy(

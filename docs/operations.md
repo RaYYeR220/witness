@@ -231,7 +231,11 @@ under `counts`):
 | `alerts-mqtt` | `ok`; `unreachable` while the alert broker refuses or times out (alerts wait, nothing is lost); `error` if the events log cannot be read; `disabled` without a broker |
 
 Messages nested more than 64 levels deep keep their raw bytes only (no JSON copy);
-a witness envelope that deep is `MALFORMED` ("nesting too deep"). An issuer's
+a witness envelope that deep is `MALFORMED` ("nesting too deep"). So is a validly
+signed envelope whose body breaks its tag's schema (the row keeps iss, kid and seq; the
+`MALFORMED` alert carries the verified signature); the relay refuses such an envelope
+with 400 instead of posting it. A sealed body cannot be inspected and is not judged on
+its schema. An issuer's
 `seq` may arrive out of order (white-flag order is not issue order); a message is
 `REPLAY` only if another block already used the same `seq` or nonce for that
 issuer.

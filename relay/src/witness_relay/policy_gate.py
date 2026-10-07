@@ -1,10 +1,11 @@
 """Fail-closed admission: who may put what on which tag.
 
 Producer envelopes must verify, use an unrevoked key, come from an issuer the writer
-policy allows for the tag, and carry ciphertext on tags the relay encrypts. Legacy
-messages are admitted for relay attestation (or, on pass-through tags, posted unsigned
-exactly as the original API did) unless the tag demands signatures without a legacy
-grace and the caller is anonymous.
+policy allows for the tag, and carry a body that fits the tag's schema (the explorer stores
+a signed message with a broken body as MALFORMED; the relay refuses it with 400 instead of
+posting it). Legacy messages are admitted for relay attestation (or, on pass-through tags,
+posted unsigned exactly as the original API did) unless the tag demands signatures without
+a legacy grace and the caller is anonymous.
 """
 
 from __future__ import annotations
@@ -15,7 +16,7 @@ from collections.abc import Iterable
 from dataclasses import dataclass
 from typing import Literal
 
-from witness_core import envelope, policy, verdicts
+from witness_core import canon, envelope, policy, schema, verdicts
 from witness_core.envelope import KeyInfo
 from witness_core.ids import NON_CANONICAL_DID
 from witness_core.policy import WriterPolicy
@@ -36,6 +37,7 @@ class Decision:
     seq: int | None = None
     caller: str | None = None
     reason: str | None = None
+    status: int = 403  # HTTP status of a refusal
 
 
 def load_policy(path: str) -> WriterPolicy:
@@ -85,9 +87,16 @@ class PolicyGate:
                                 check.seq, reason=NON_CANONICAL_DID)
             check = envelope.verify(env, tag, lambda k: info if k == kid else None)
 
-        def refuse(verdict: str, reason: str) -> Decision:
+        def refuse(verdict: str, reason: str, status: int = 403) -> Decision:
             return Decision(
-                False, verdict, "producer", check.iss, check.kid, check.seq, reason=reason
+                False,
+                verdict,
+                "producer",
+                check.iss,
+                check.kid,
+                check.seq,
+                reason=reason,
+                status=status,
             )
 
         if check.verdict not in _ACCEPTED:
@@ -101,6 +110,9 @@ class PolicyGate:
             return refuse(verdicts.UNAUTHORIZED_WRITER, f"{check.iss} may not write tag {tag!r}")
         if tag in self._encrypt_tags and "enc" not in env:
             return refuse(verdicts.MALFORMED, f"tag {tag!r} requires encryption")
+        # The indexer judges the block bytes, which for an envelope are its canonical JSON.
+        if not schema.classify(tag, canon.jcs(env)).schema_ok:
+            return refuse(verdicts.MALFORMED, f"body breaks the {tag} schema", 400)
         return Decision(True, check.verdict, "producer", check.iss, check.kid, check.seq)
 
     def check_legacy(self, tag: str, caller: str) -> Decision:

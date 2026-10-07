@@ -6,7 +6,8 @@ the trust score. `resolve_keys` looks up every signing key a milestone needs, be
 database transaction is opened. `judge` gives the single verdict, in this order: envelope
 structure and signature, writer policy, replay (an issuer's seq or nonce already used by
 another block), key revocation at the milestone's time (second precision: a revocation
-anywhere inside the milestone's second revokes).
+anywhere inside the milestone's second revokes), and last the body against its tag's schema
+(a validly signed message with a body that breaks it is MALFORMED).
 """
 
 from __future__ import annotations
@@ -286,7 +287,15 @@ async def judge(store: Store, pol: WriterPolicy, keys: Mapping[str, KeyInfo | No
     if info is not None and not valid_through_second(info.revoked_at_ms, ms_timestamp):
         return Judgement(verdicts.REVOKED_KEY, chk,
                          "key revoked before or within the milestone's second")
+    if not d.classified.schema_ok:
+        # A good signature does not make a bad body acceptable. The check stays on the
+        # judgement, so the stored row keeps who signed it (iss, kid, seq).
+        return Judgement(verdicts.MALFORMED, chk, schema_reason(d.kind))
     return Judgement(chk.verdict, chk)
+
+
+def schema_reason(kind: str) -> str:
+    return f"signed, but the body breaks the {kind} schema"
 
 
 def message_row(d: Decoded, j: Judgement, *, block_id: bytes, data: bytes, ms_index: int,

@@ -506,7 +506,14 @@ class RulesEngine:
                       else f"envelope body does not match the {row.kind} schema")
         else:
             reason = f"body does not match the {row.kind} schema"
-        evidence = {"tag": row.tag, "kind": row.kind, "reason": reason}
+        evidence: dict[str, Any] = {"tag": row.tag, "kind": row.kind, "reason": reason}
+        if row.iss is not None:
+            # Only a verified signature puts an issuer on the row (classify.judge): the
+            # envelope itself is sound and signed, its body is what breaks the schema.
+            att = obj.get("att") if isinstance(obj, dict) else None
+            evidence["signature"] = {
+                "verified": True, "iss": row.iss, "kid": row.kid, "seq": row.seq,
+                "mode": att.get("mode") if isinstance(att, dict) else None}
         return self._alert("MALFORMED", row, evidence, now)
 
     async def _revoked(self, row: MessageRow, now: int) -> Alert:

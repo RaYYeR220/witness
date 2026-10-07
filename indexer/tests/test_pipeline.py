@@ -379,6 +379,48 @@ async def test_key_revoked_inside_the_milestone_second_is_revoked(store: Store):
         "PRODUCER_SIGNED", "REVOKED_KEY", "REVOKED_KEY", "REVOKED_KEY"]
 
 
+async def test_signed_body_that_breaks_the_schema_is_malformed(store: Store):
+    """A valid signature does not rescue a body that breaks its tag's schema: the message is
+    MALFORMED, and the row still says who signed it. A sealed body cannot be inspected and
+    stays signed; a tag without a schema accepts any object."""
+    ie = "D:aabbccddeeff"
+    chain = FakeChain()
+    chain.add([
+        ("trust.score", signed(ALICE, "trust.score", {"id": "not-an-ie-id", "score": 7}, 1)),
+        ("trust.score", signed(ALICE, "trust.score", score(ie, 1.5), 2)),
+        ("audit.report", signed(RELAY, "audit.report", {"reportId": "r1"}, 1, mode="relay")),
+        ("audit.report", signed(RELAY, "audit.report", None, 2, mode="relay",
+                                enc={"protected": "x", "ciphertext": "y"})),
+        ("trust.score", signed(ALICE, "trust.score", score(ie, 0.5), 4)),
+        ("some.tag", signed(ALICE, "some.tag", {"anything": True}, 5)),
+    ])
+    rules = RulesEngine(store, None, DidResolver(None), ALLOW_ALL)
+    await indexer(FakeSource(chain), store, policy=ALLOW_ALL, rules=rules).sync()
+
+    rows = [await msg(store, chain.block_id(1, n)) for n in range(6)]
+    assert [r["verdict"] for r in rows] == [
+        "MALFORMED", "MALFORMED", "MALFORMED", "RELAY_ATTESTED", "PRODUCER_SIGNED",
+        "PRODUCER_SIGNED"]
+    assert [(r["iss"], r["kid"], r["seq"]) for r in rows[:3]] == [
+        (did_key(ALICE), kid_of(ALICE), 1), (did_key(ALICE), kid_of(ALICE), 2),
+        (did_key(RELAY), kid_of(RELAY), 1)]
+    # A broken body is no trust score, even when its IE id is fine.
+    assert rows[1]["ie_id"] == ie
+    scored = await store._fetch("SELECT block_id FROM ie_scores WHERE ie_id = %s", (ie,))
+    assert [bytes(r["block_id"]) for r in scored] == [chain.block_id(1, 4)]
+
+    events = [e["payload"] for e in await store.events_after(0, 100) if e["type"] == "message"]
+    assert events[0]["reason"] == "signed, but the body breaks the trust.score schema"
+    alerts = {bytes(a["block_id"]): a["evidence"] for a in await store.alerts({"rule": "MALFORMED"})}
+    assert set(alerts) == {chain.block_id(1, n) for n in range(3)}
+    assert alerts[chain.block_id(1, 0)] == {
+        "tag": "trust.score", "kind": "trust.score",
+        "reason": "envelope body does not match the trust.score schema",
+        "signature": {"verified": True, "iss": did_key(ALICE), "kid": kid_of(ALICE), "seq": 1,
+                      "mode": "producer"}}
+    assert alerts[chain.block_id(1, 2)]["signature"]["mode"] == "relay"
+
+
 async def test_out_of_order_seqs_are_not_replays(store: Store):
     ie = "D:aabbccddeeff"
     chain = FakeChain()
@@ -488,8 +530,9 @@ async def test_hostile_nesting_is_indexed(store: Store):
         ("trust.score", deep_env),
         ("LLO-K8s", b"[" * 2990 + b"]" * 2990),
         ("deep.legacy", json.dumps(nested(100)).encode()),
-        ("trust.score", signed(ALICE, "trust.score", nested(63), 2)),  # 64 levels in all
-        ("trust.score", signed(ALICE, "trust.score", nested(64), 3)),  # 65 levels
+        # A tag without a schema, so only the nesting decides.
+        ("deep.signed", signed(ALICE, "deep.signed", nested(63), 2)),  # 64 levels in all
+        ("deep.signed", signed(ALICE, "deep.signed", nested(64), 3)),  # 65 levels
     ]
     chain = FakeChain()
     chain.add(payloads)
@@ -591,8 +634,9 @@ async def test_non_json_payloads_indexed(store: Store):
         ("deep", b"[" * 5000 + b"]" * 5000),
         ("nan", b'{"score": NaN}'),
         ("overflow", b'{"x": 1e999}'),
-        ("trust.score", signed(ALICE, "trust.score", {"id": "D:aabbccddeeff",
-                                                      "score": "\u0000"}, 1)),
+        # Signed, on a tag without a schema: the body is fine, only unstorable.
+        ("nul.signed", signed(ALICE, "nul.signed", {"id": "D:aabbccddeeff",
+                                                    "score": "\u0000"}, 1)),
     ]
     chain = FakeChain()
     chain.add(payloads)
