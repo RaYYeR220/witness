@@ -117,7 +117,7 @@ function select(blockId: string) {
     <template v-else-if="lineage && orion">
       <div class="wl-now">
         <div class="wl-cell">
-          <p class="wl-lab">The ledger vouches for</p>
+          <p class="wl-lab">Latest score the ledger vouches for, per the explorer</p>
           <p v-if="ledger" class="wl-big">{{ score2(ledger.score) }}</p>
           <p v-else class="wl-state">No score yet</p>
           <p v-if="ledger" class="wl-sub">
@@ -148,9 +148,9 @@ function select(blockId: string) {
         <p v-if="!points.length" class="wl-quiet">No message about this IE carries a score.</p>
         <LineageChart v-else :points="points" :orion="orion" :overlays="overlays" :latest-block-id="ledger?.blockId ?? null" :label="chartLabel" @select="select" />
         <ul class="wl-legend" aria-label="Legend">
-          <li><VerdictMark family="signed" />Signed score</li>
-          <li><VerdictMark family="unsigned" />Unsigned legacy</li>
-          <li><VerdictMark family="rejected" />Rejected (not on the line)</li>
+          <li><VerdictMark family="signed" />Signed, as recorded</li>
+          <li><VerdictMark family="unsigned" />Unsigned legacy, as recorded</li>
+          <li><VerdictMark family="rejected" />Rejected, as recorded (not on the line)</li>
           <li v-if="orion.value !== null"><span class="lg-orion" aria-hidden="true"></span>Orion now</li>
           <li><span class="lg-band" aria-hidden="true"></span>Incident</li>
           <li><span class="lg-dia" aria-hidden="true"></span>Alert</li>
