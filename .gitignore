@@ -36,3 +36,9 @@ BRIEF.md
 PLAN.md
 DESIGN.md
 POSITIONING.md
+
+# console e2e: recorded snapshot, builds and reports
+console/e2e/.snapshot/
+console/e2e/.dist-*/
+console/test-results/
+console/playwright-report/
