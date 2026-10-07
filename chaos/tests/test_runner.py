@@ -558,7 +558,7 @@ async def test_identity_check_refuses_live_dids_and_unlisted_producers(tmp_path)
     await r.aclose()
 
 
-async def test_a19_only_picks_rows_of_the_run_producer(monkeypatch):
+async def test_a19_only_picks_rows_of_the_run_producer(monkeypatch, tmp_path):
     import sys
     import types
 
@@ -566,7 +566,7 @@ async def test_a19_only_picks_rows_of_the_run_producer(monkeypatch):
 
     class Cur:
         async def fetchone(self):
-            return (bytes.fromhex("cd" * 32),)
+            return (bytes.fromhex("cd" * 32), b"original bytes")
 
     class Conn:
         async def __aenter__(self):
@@ -588,8 +588,11 @@ async def test_a19_only_picks_rows_of_the_run_producer(monkeypatch):
         AsyncConnection=AsyncConnection))
     prod = A.Identity("did:key:zRun", "did:key:zRun#zRun", Ed25519PrivateKey.generate())
     ctx = A.AttackContext(live=True, db_dsn="postgresql://x", producer=prod,
-                          tampered=[bytes.fromhex("ab" * 32)])
+                          tampered=[bytes.fromhex("ab" * 32)], tamper_log=tmp_path / "t.jsonl")
     rec = await A.a19_db_tamper(ctx)
+    # the original bytes are kept, in memory and on disk, before the row is rewritten
+    assert ctx.originals[bytes.fromhex("cd" * 32)] == b"original bytes"
+    assert A.read_tamper_log(tmp_path / "t.jsonl") == {bytes.fromhex("cd" * 32): b"original bytes"}
     assert seen[0] == (A.VICTIM_SQL, ("trust.score", "did:key:zRun",
                                       [bytes.fromhex("ab" * 32)]))
     assert seen[1] == (A.TAMPER_SQL, (bytes.fromhex("cd" * 32),))

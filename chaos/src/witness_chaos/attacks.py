@@ -9,13 +9,16 @@ refuse to send anything unless `ctx.live is True`, which only the runner sets.
 
 from __future__ import annotations
 
+import hashlib
 import json
+import os
 import random
 import time
 import uuid
 from collections.abc import Awaitable, Callable
 from dataclasses import dataclass, field
 from importlib import resources
+from pathlib import Path
 from typing import Any
 from urllib.parse import unquote, urlsplit
 
@@ -25,7 +28,7 @@ from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
 from cryptography.hazmat.primitives.asymmetric.x25519 import X25519PrivateKey
 from witness_core import bundle, canon, codec, envelope, sealed
 from witness_core.bundle import VerifierConfig
-from witness_core.ids import blake2b256, to_hex
+from witness_core.ids import blake2b256, from_hex, to_hex
 
 from . import forge
 
@@ -98,8 +101,12 @@ class AttackContext:
     # second; the runner waits there until the explorer has indexed it, since two blocks
     # in one milestone are otherwise processed in white-flag order, not sending order.
     wait_indexed: Callable[[str], Awaitable[None]] | None = None
-    # Block ids A19 rewrote in this run (the runner restores them at the end).
+    # Block ids A19 rewrote in this run, with the bytes they held before (the runner puts
+    # them back at the end). Each one is also appended to `tamper_log` before the rewrite,
+    # so an interrupted run can still be restored with `witness-chaos restore`.
     tampered: list[bytes] = field(default_factory=list)
+    originals: dict[bytes, bytes] = field(default_factory=dict)
+    tamper_log: Path | None = None
     _seq: dict[str, int] = field(default_factory=dict, repr=False)
 
     def next_seq(self, iss: str) -> int:
@@ -320,13 +327,58 @@ def orion_patch(ctx: AttackContext, ie_id: str, ledger_score: float) -> tuple[st
 
 # The victim is a confirmed message the run's own producer signed (never another writer's
 # data), and never one an earlier trial already rewrote: flipping it again would restore it.
+# A block that already carries an alert is skipped too, so an old alert cannot be mistaken
+# for this trial's detection.
 VICTIM_SQL = (
-    "SELECT block_id FROM messages WHERE tag = %s AND iss = %s AND data IS NOT NULL "
-    "AND confirmed_at_ms IS NOT NULL AND NOT (block_id = ANY(%s)) ORDER BY random() LIMIT 1"
+    "SELECT block_id, data FROM messages m WHERE tag = %s AND iss = %s AND data IS NOT NULL "
+    "AND confirmed_at_ms IS NOT NULL AND NOT (block_id = ANY(%s)) "
+    "AND NOT EXISTS (SELECT 1 FROM alerts a WHERE a.block_id = m.block_id) "
+    "ORDER BY random() LIMIT 1"
 )
 TAMPER_SQL = (
     "UPDATE messages SET data = set_byte(data, 0, get_byte(data, 0) # 1) WHERE block_id = %s"
 )
+RESTORE_SQL = "UPDATE messages SET data = %s WHERE block_id = %s"
+READ_DATA_SQL = "SELECT data FROM messages WHERE block_id = %s"
+
+
+def log_original(path: Path, block_id: bytes, data: bytes) -> None:
+    """Append the bytes a row held before A19 rewrote it, durably, before the rewrite."""
+    entry = {"block": to_hex(block_id), "sha256": hashlib.sha256(data).hexdigest(),
+             "original": data.hex()}
+    with path.open("a", encoding="utf-8") as f:
+        f.write(json.dumps(entry) + "\n")
+        f.flush()
+        os.fsync(f.fileno())
+
+
+def read_tamper_log(path: Path) -> dict[bytes, bytes]:
+    """Block id -> original bytes, from a log written by `log_original` (first entry wins)."""
+    out: dict[bytes, bytes] = {}
+    if not path.exists():
+        return out
+    for line in path.read_text(encoding="utf-8").splitlines():
+        if not line.strip():
+            continue
+        entry = json.loads(line)
+        data = bytes.fromhex(entry["original"])
+        if hashlib.sha256(data).hexdigest() != entry["sha256"]:
+            raise ValueError(f"tamper log entry for {entry['block']} does not match its hash")
+        out.setdefault(from_hex(entry["block"]), data)
+    return out
+
+
+async def restore_rows(conn: Any, originals: dict[bytes, bytes]) -> list[dict[str, Any]]:
+    """Put each row's original bytes back and read them again. Returns one
+    {block, ok} per row; ok is False when the row now holds anything else."""
+    results = []
+    for bid, data in originals.items():
+        await conn.execute(RESTORE_SQL, (data, bid))
+        cur = await conn.execute(READ_DATA_SQL, (bid,))
+        row = await cur.fetchone()
+        ok = row is not None and bytes(row[0]) == data
+        results.append({"block": to_hex(bid), "ok": ok})
+    return results
 
 
 # ------------------------------------------------------------------ live helpers
@@ -612,9 +664,13 @@ async def a19_db_tamper(ctx: AttackContext) -> InjectionRecord:
         row = await cur.fetchone()
         if row is None:
             raise RuntimeError(f"no confirmed trust.score row signed by {iss} to tamper with")
+        bid, original = bytes(row[0]), bytes(row[1])
+        if ctx.tamper_log is not None:
+            log_original(ctx.tamper_log, bid, original)
+        ctx.originals.setdefault(bid, original)
+        ctx.tampered.append(bid)
         at = ctx.clock_ms()
-        await conn.execute(TAMPER_SQL, (row[0],))
-    ctx.tampered.append(bytes(row[0]))
+        await conn.execute(TAMPER_SQL, (bid,))
     return _record(ctx, "A19", to_hex(bytes(row[0])), None,
                    {"sql": TAMPER_SQL, "victimIss": iss}, at)
 

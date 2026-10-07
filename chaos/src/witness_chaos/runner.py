@@ -148,6 +148,9 @@ class RunConfig:
         return d
 
 
+TAMPER_LOG = "tampered.jsonl"
+
+
 def is_loopback_host(host: str | None) -> bool:
     """`localhost` or a loopback address (127.0.0.0/8, ::1)."""
     if not host:
@@ -790,7 +793,8 @@ class Runner:
             db_dsn=dsn, producer=producer, outsider=outsider, revoked=revoked,
             attacker_key=seeded_key(cfg.seed, "attacker"), search_key=search_key,
             http=self.http, rng=rng, clock_ms=self.clock_ms, live=True,
-            on_trial=self._on_trial, wait_indexed=self._wait_indexed)
+            on_trial=self._on_trial, wait_indexed=self._wait_indexed,
+            tamper_log=self.out / TAMPER_LOG)
         self.meta["identities"] = {"producer": producer.iss, "outsider": outsider.iss,
                                    "revoked": None if revoked is None else revoked.iss}
         return ctx
@@ -1140,21 +1144,19 @@ class Runner:
                 self.trials.append(tr)
                 emit(tr.row or {})
 
-    async def restore_tampered(self) -> list[str]:
-        """Undo A19 once the run is over: the bit flip is its own inverse. The alerts it
-        raised stay."""
+    async def restore_tampered(self) -> list[dict[str, Any]]:
+        """Undo A19 once the run is over: write back the bytes each row held before it was
+        rewritten and read them again. The alerts it raised stay."""
         ctx = self.ctx
-        if ctx is None or not ctx.tampered or not ctx.db_dsn:
+        if ctx is None or not ctx.originals or not ctx.db_dsn:
             return []
         import psycopg
 
-        done = []
         async with await psycopg.AsyncConnection.connect(ctx.db_dsn, autocommit=True) as conn:
-            for bid in ctx.tampered:
-                await conn.execute(attacks.TAMPER_SQL, (bid,))
-                done.append(to_hex(bid))
+            restored = await attacks.restore_rows(conn, dict(ctx.originals))
+        ctx.originals.clear()
         ctx.tampered.clear()
-        return done
+        return restored
 
     async def late_sweep(self) -> dict[str, dict[str, int]]:
         """Alerts on injected blocks (and trial IEs) that arrived after their trial ended:
@@ -1211,15 +1213,21 @@ class Runner:
                 self.controls.append(row)
 
         try:
-            for c in self.classes():
-                await self.run_class(c, emit=emit)
-            if cfg.controls:
-                for ctl in self.key.get("controls", []):
-                    await self.run_class(ctl, control=True, emit=emit)
+            try:
+                for c in self.classes():
+                    await self.run_class(c, emit=emit)
+                if cfg.controls:
+                    for ctl in self.key.get("controls", []):
+                        await self.run_class(ctl, control=True, emit=emit)
+            finally:
+                trials_log.close()
+            late = await self.late_sweep()
         finally:
-            trials_log.close()
-        late = await self.late_sweep()
-        self.meta["restored"] = await self.restore_tampered()
+            # Whatever happened above, the rows A19 rewrote get their bytes back.
+            restored = await self.restore_tampered()
+            self.meta["restored"] = restored
+            self.meta["restoreFailed"] = [r["block"] for r in restored if not r["ok"]]
+            self._write_meta()
         self._rewrite_trials()
         self.meta["finishedAtMs"] = self.clock_ms()
         self.meta["bundles"] = self.bundle_info
@@ -1228,8 +1236,10 @@ class Runner:
         return card
 
     def scorecard(self, trap: dict | None, late: dict | None = None) -> dict:
-        return write_scorecard(self.out, self.key, self.results, trap, self.controls,
+        card = write_scorecard(self.out, self.key, self.results, trap, self.controls,
                                self.not_run, self.meta, late or {})
+        card["restoreFailed"] = list(self.meta.get("restoreFailed") or [])
+        return card
 
     def _write_meta(self) -> None:
         (self.out / "run.json").write_text(json.dumps(self.meta, indent=2, default=str),
@@ -1385,6 +1395,11 @@ def _parser() -> argparse.ArgumentParser:
             r.add_argument("--drift-keepalive-s", type=float, default=45.0)
     s = sub.add_parser("score", help="rebuild the scorecard from a results directory")
     s.add_argument("out")
+    rs = sub.add_parser("restore", help="put back the rows an interrupted run's A19 rewrote")
+    rs.add_argument("out", help="the run's results directory (holds tampered.jsonl)")
+    rs.add_argument("--db-dsn", default=os.environ.get("WITNESS_EVAL_DB"))
+    rs.add_argument("--db-schema", default="witness")
+    rs.add_argument("--allow-nonlocal", action="store_true")
     k = sub.add_parser("keys", help="create the run's own producer key and eval policy")
     k.add_argument("--out", default="secrets/chaos")
     k.add_argument("--base-policy", default=str(Path(__file__).resolve().parents[2]
@@ -1460,6 +1475,8 @@ def main(argv: list[str] | None = None) -> int:
         card = rescore(Path(a.out))
         print(card["headline"])
         return 0 if card["valid"] else 1
+    if a.cmd == "restore":
+        return restore_command(Path(a.out), a.db_dsn, a.db_schema, a.allow_nonlocal)
     if a.cmd == "keys":
         try:
             made = write_keys(a.out, a.base_policy, force=a.force)
@@ -1480,9 +1497,45 @@ def main(argv: list[str] | None = None) -> int:
         print(f"witness-chaos: preflight failed: {exc}", file=sys.stderr)
         return 2
     print(card["headline"])
+    if card.get("restoreFailed"):
+        print("witness-chaos: some rewritten rows could not be restored: "
+              + ", ".join(card["restoreFailed"]), file=sys.stderr)
+        return 1
     if a.cmd == "run" and not card["valid"]:
         return 1  # the positive control failed or did not run: no number may be quoted
     return 0
+
+
+def restore_command(out: Path, dsn: str | None, schema: str, allow_nonlocal: bool) -> int:
+    """Replay a run's tamper log: each row gets its original bytes back. Safe to repeat."""
+    if not dsn:
+        print("witness-chaos: --db-dsn (or WITNESS_EVAL_DB) is required", file=sys.stderr)
+        return 2
+    from psycopg.conninfo import conninfo_to_dict, make_conninfo
+
+    host = conninfo_to_dict(dsn).get("host")
+    if not allow_nonlocal and not all(is_loopback_host(h) for h in str(host or "").split(",")
+                                      if h and not h.startswith("/")):
+        print("witness-chaos: --db-dsn host is not local (use --allow-nonlocal)",
+              file=sys.stderr)
+        return 2
+    originals = attacks.read_tamper_log(out / TAMPER_LOG)
+    if not originals:
+        print("witness-chaos: nothing to restore")
+        return 0
+
+    async def go() -> list[dict[str, Any]]:
+        import psycopg
+
+        conninfo = make_conninfo(dsn, options=f"-c search_path={schema}")
+        async with await psycopg.AsyncConnection.connect(conninfo, autocommit=True) as conn:
+            return await attacks.restore_rows(conn, originals)
+
+    factory = asyncio.SelectorEventLoop if sys.platform == "win32" else None
+    with asyncio.Runner(loop_factory=factory) as r:
+        results = r.run(go())
+    print(json.dumps(results, indent=2))
+    return 0 if all(x["ok"] for x in results) else 1
 
 
 if __name__ == "__main__":
