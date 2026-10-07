@@ -27,16 +27,16 @@ def node_route_status(svc: Svc) -> m.NodeRouteStatus:
                              error=node.error)
 
 
-async def _counts(svc: Svc) -> dict[str, int]:
-    """Row counts, cached for `stats_cache_s`: counting every table is not free and status
-    pages poll."""
+async def _store_stats(svc: Svc) -> dict[str, int | str]:
+    """Row counts and the status each indexer component last published, cached for
+    `stats_cache_s`: counting every table is not free and status pages poll."""
     now = time.monotonic()
     cached = svc.stats_cache
     if cached is not None and now - cached[0] < svc.settings.stats_cache_s:
         return cached[1]
-    counts = {k: int(v) for k, v in (await svc.store.stats()).items()}
-    svc.stats_cache = (now, counts)
-    return counts
+    raw = dict(await svc.store.stats())
+    svc.stats_cache = (now, raw)
+    return raw
 
 
 @router.get("/healthz", response_model=m.Health, summary="Liveness and database check",
@@ -60,9 +60,11 @@ async def healthz(svc: Svc) -> m.Health | JSONResponse:
                         "cursor (last milestone indexed), validation backlog, node mount and "
                         "open streams.")
 async def stats(svc: Svc) -> m.Stats:
-    counts = await _counts(svc)
+    raw = await _store_stats(svc)
+    counts = {k: int(v) for k, v in raw.items() if isinstance(v, int)}
+    services = {k: str(v) for k, v in raw.items() if not isinstance(v, int)}
     validator = m.ValidatorStatus(configured=svc.validator is not None,
                                   running=svc.validating,
                                   pending=svc.validator.pending if svc.validator else 0)
-    return m.Stats(counts=counts, validator=validator, node_route=node_route_status(svc),
-                   stream_subscribers=svc.hub.subscribers)
+    return m.Stats(counts=counts, services=services, validator=validator,
+                   node_route=node_route_status(svc), stream_subscribers=svc.hub.subscribers)

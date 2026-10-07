@@ -469,9 +469,14 @@ async def test_milestones_range(client, store, vectors):
 
 async def test_stats_and_health(client, store, vectors):
     await seed_chain(store, vectors)
+    # The indexer publishes component statuses next to the counts; they are text, not counts.
+    await store.set_service_status("indexer", "ok")
+    await store.set_service_status("orion", "unreachable")
     stats = (await client.get("/stats")).json()
     assert stats["counts"]["messages"] == 10 and stats["counts"]["milestones"] == 4
     assert stats["counts"]["cursor"] == 0
+    assert stats["services"] == {"indexer": "ok", "orion": "unreachable"}
+    assert "orion" not in stats["counts"]
     assert stats["validator"]["running"] is False
     assert stats["nodeRoute"] == {"enabled": False, "route": None, "registered": False,
                                   "error": None}

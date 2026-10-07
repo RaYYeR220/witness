@@ -482,6 +482,9 @@ class ValidatorStatus(ApiModel):
 
 class Stats(ApiModel):
     counts: dict[str, int]
+    # Last status each indexer component published, e.g. {"indexer": "ok", "orion":
+    # "unreachable"} (see docs/operations.md).
+    services: dict[str, str] = {}
     validator: ValidatorStatus
     node_route: NodeRouteStatus
     stream_subscribers: int
