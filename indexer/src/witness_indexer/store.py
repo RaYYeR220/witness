@@ -752,14 +752,19 @@ class Store:
             f"{cond} ORDER BY ms_index DESC, COALESCE(wf_index, 0) DESC, block_id DESC LIMIT 1",
             args)
 
-    async def latest_scores(self, verdicts: list[str]) -> list[dict]:
-        """Per IE, its latest confirmed trust.score: ie_id, block_id, score, ts, ms_index."""
+    async def latest_scores(self, verdicts: list[str],
+                            exclude_rules: list[str] | None = None) -> list[dict]:
+        """Per IE, its latest confirmed trust.score: ie_id, block_id, score, ts, ms_index.
+        With `exclude_rules`, a score whose block carries one of those alerts is skipped
+        (the IE's latest score without one counts instead)."""
         return await self._fetch(
             "SELECT DISTINCT ON (ie_id) ie_id, block_id, (json->>'score')::float8 AS score, ts, "
-            "ms_index FROM messages WHERE kind = 'trust.score' AND ie_id IS NOT NULL "
+            "ms_index FROM messages m WHERE kind = 'trust.score' AND ie_id IS NOT NULL "
             f"AND verdict = ANY(%s::text[]) AND ms_index IS NOT NULL AND {_SCORE_OK} "
+            "AND NOT EXISTS (SELECT 1 FROM alerts a WHERE a.block_id = m.block_id "
+            "AND a.rule = ANY(%s::text[])) "
             "ORDER BY ie_id, ms_index DESC, COALESCE(wf_index, 0) DESC, block_id DESC",
-            (verdicts,))
+            (verdicts, list(exclude_rules or [])))
 
     async def security_events(self, ie_id: str, tags: list[str], verdicts: list[str],
                               from_ts: int, to_ts: int, limit: int = 20) -> list[dict]:

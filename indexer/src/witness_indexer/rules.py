@@ -106,6 +106,10 @@ SEVERITY: dict[str, str] = {
 PROVEN = (V.PRODUCER_SIGNED, V.RELAY_ATTESTED)
 SCORE_KIND = "trust.score"
 ORCHESTRATOR_KIND = "self-orchestrator"
+# Alerts that take a block out of evidence: nothing came through the Messages API for it, or
+# it was unsigned where the policy demands a signature. The incident engine, the API's
+# lineage drift and R5 all skip scores carrying one.
+DISTRUST_RULES = frozenset({"SHADOW", "UNSIGNED"})
 # An IE missing from the cached Orion list triggers a refresh, at most this often.
 ORION_MISS_REFRESH_S = 5.0
 # Evidence limits: text is cut, deep or long structures are summarised.
@@ -710,7 +714,9 @@ class RulesEngine:
         if ies is None:
             # Nothing observed: no alert, but an outage neither starts nor ends a divergence.
             return []
-        ledger = {r["ie_id"]: r for r in await self.store.latest_scores(self._score_verdicts())}
+        # The score the ledger vouches for, as the API's lineage computes drift.
+        latest = await self.store.latest_scores(self._score_verdicts(), sorted(DISTRUST_RULES))
+        ledger = {r["ie_id"]: r for r in latest}
         out: list[Alert] = []
         diverging: set[str] = set()
         for ie in ies:

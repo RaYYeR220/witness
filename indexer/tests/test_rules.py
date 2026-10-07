@@ -337,6 +337,20 @@ async def test_r5_drift_grace(make_engine, orion):
     assert [a.rule for a in await engine.periodic(now_ms=start + 372_000)] == ["DRIFT"]
 
 
+async def test_r5_ignores_a_score_taken_out_of_evidence(make_engine, orion, store):
+    engine = make_engine(score_interval_s=3600)
+    w = Writer()
+    assert await ingest(engine, w.score(0.8, **at(0))) == []
+    shadowed = w.score(0.6, **at(1))
+    assert await ingest(engine, shadowed) == []
+    await store.put_alert(Alert("SHADOW", "high", shadowed.block_id, IE, {}, 1))
+    orion.scores[IE] = 0.6  # agrees with the shadowed score only
+    start = (T0 + 10) * 1000
+    assert await engine.periodic(now_ms=start) == []
+    [a] = await engine.periodic(now_ms=start + 151_000)
+    assert a.rule == "DRIFT" and a.evidence["ledgerScore"] == 0.8
+
+
 async def test_drift_suppressed_when_orion_down(make_engine, orion, store):
     engine = make_engine(score_interval_s=3600)
     assert await ingest(engine, Writer().score(0.8, **at(0))) == []

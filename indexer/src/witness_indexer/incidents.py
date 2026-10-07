@@ -122,8 +122,8 @@ from witness_core.policy import WriterPolicy
 
 from . import events
 from .orion import OrionClient, ie_id_of
+from .rules import DISTRUST_RULES, _clean_text, is_error_code
 from .rules import _clean as _clean_value
-from .rules import _clean_text, is_error_code
 from .store import Alert, MessageRow, Store
 
 __all__ = ["AlertPublisher", "CorrelatedRules", "IncidentConfig", "IncidentEngine",
@@ -173,7 +173,6 @@ RELAYED = "relayed"
 UNTRUSTED = "untrusted"
 WITNESSED = "witnessed"  # how an attack or integrity alert moves an incident
 # Alerts that take a block's content out of evidence whatever its verdict.
-DISTRUST_RULES = frozenset({"SHADOW", "UNSIGNED"})
 TITLE_MAX = 160
 ID_MAX = 120
 EPS = 1e-9
