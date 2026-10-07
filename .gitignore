@@ -24,6 +24,11 @@ data/
 # third-party checkouts fetched by scripts
 vendor/
 
+# chaos eval runs (witness-chaos run --out results/...): scratch, except the curated final
+# run, which is committed on purpose as the evidence docs/eval.md cites
+results/*
+!results/eval-final/
+
 # local tooling and scratch
 .idea/
 .vscode/
