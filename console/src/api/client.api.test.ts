@@ -158,7 +158,8 @@ const READS = {
     wfIndex: 1,
     atMs: 1,
     links: 1,
-  } satisfies Record<keyof FlowItem, 1>,
+    // claimsIssuer is optional: an API without it still works (flows/model.ts reads the verdict)
+  } satisfies Record<Exclude<keyof FlowItem, "claimsIssuer">, 1>,
   ChainView: { links: 1, gaps: 1, forks: 1 } satisfies Record<keyof ChainView, 1>,
 };
 
