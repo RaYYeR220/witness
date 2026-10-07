@@ -54,19 +54,14 @@ spec:
             {{- include "witness.databaseEnv" (dict "ctx" . "name" "WITNESS_DB") | nindent 12 }}
             - name: WITNESS_REBASED_NETWORK
               value: {{ .Values.rebased.network | quote }}
-          # No HTTP port: healthy while the database answers and the newest milestone is recent.
+          # No HTTP port. Ready while the database answers and the newest indexed milestone is
+          # recent. No liveness probe: a stalled node or database would fail it too, and a restart
+          # fixes neither; the container exits (and restarts) when the indexer process does.
           readinessProbe:
             exec:
               command: ["python", "/usr/local/lib/witness/indexer_health.py"]
             periodSeconds: 30
             timeoutSeconds: 10
-          livenessProbe:
-            exec:
-              command: ["python", "/usr/local/lib/witness/indexer_health.py"]
-            initialDelaySeconds: 300
-            periodSeconds: 60
-            timeoutSeconds: 10
-            failureThreshold: 5
           volumeMounts:
             - name: policy
               mountPath: /etc/witness

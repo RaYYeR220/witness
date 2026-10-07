@@ -80,12 +80,12 @@ spec:
             - name: http
               containerPort: 7300
               protocol: TCP
-          # /healthz answers 503 while the anchoring loop is degraded: the pod leaves the
-          # service's endpoints, a restart would not fix the node or the chain, so liveness
-          # only checks the port.
+          # Ready and alive while the server answers. /healthz (503 while the anchoring loop is
+          # degraded) is for monitoring only: the resolver the relay and the indexer depend on
+          # keeps working then, and a restart would not fix the node or the chain.
           readinessProbe:
-            httpGet: {path: /healthz, port: http}
-            periodSeconds: 30
+            httpGet: {path: /identities, port: http}
+            periodSeconds: 15
           livenessProbe:
             tcpSocket: {port: http}
             initialDelaySeconds: 30

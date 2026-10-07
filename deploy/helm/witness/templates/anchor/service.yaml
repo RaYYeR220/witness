@@ -8,8 +8,6 @@ metadata:
     {{- include "witness.labels" $c | nindent 4 }}
 spec:
   type: {{ .Values.anchor.service.type }}
-  # The resolver keeps answering while the loop is degraded (readiness fails then).
-  publishNotReadyAddresses: true
   ports:
     - name: http
       port: {{ .Values.anchor.service.port }}
