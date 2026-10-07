@@ -23,6 +23,7 @@ ALICE = Ed25519PrivateKey.from_private_bytes(b"\x01" * 32)
 
 def test_parse_args_defaults(monkeypatch):
     monkeypatch.setenv("WITNESS_DB", "postgresql://u@h/db")
+    monkeypatch.delenv("WITNESS_MQTT", raising=False)
     a = cli.parse_args(["--policy", "p.json"])
     assert (a.source, a.inx, a.rest, a.db, a.schema) == (
         "inx", "127.0.0.1:9029", "http://127.0.0.1:14265", "postgresql://u@h/db", "witness")
@@ -46,6 +47,17 @@ def test_parse_args_full():
                         "--policy", "p.json", "--mqtt", "mqtt://127.0.0.1:1883", "--validate"])
     assert (a.source, a.schema, a.policy, a.mqtt, a.validate) == (
         "rest", "s", "p.json", "mqtt://127.0.0.1:1883", True)
+
+
+def test_parse_args_broker_from_environment(monkeypatch):
+    # Containers pass the broker (with its credentials) in the environment, not on argv.
+    monkeypatch.setenv("WITNESS_MQTT", "mqtt://indexer:pw@broker:1883")
+    a = cli.parse_args(["--db", "postgresql://x", "--allow-any-writer"])
+    assert a.mqtt == "mqtt://indexer:pw@broker:1883"
+    a = cli.parse_args(["--db", "postgresql://x", "--allow-any-writer", "--mqtt", "mqtt://h:1"])
+    assert a.mqtt == "mqtt://h:1"
+    monkeypatch.setenv("WITNESS_MQTT", "")
+    assert cli.parse_args(["--db", "postgresql://x", "--allow-any-writer"]).mqtt is None
 
 
 def test_writer_policy(tmp_path, caplog):

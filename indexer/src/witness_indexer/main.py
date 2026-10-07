@@ -95,8 +95,9 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
                    help="seconds between re-scans of indexed cones against the Tangle")
     p.add_argument("--rescan-batch", type=int, default=200,
                    help="milestones re-read from the node per re-scan")
-    p.add_argument("--mqtt", help="consume submission records from this broker, "
-                                  "e.g. mqtt://127.0.0.1:1883")
+    p.add_argument("--mqtt", default=os.environ.get("WITNESS_MQTT") or None,
+                   help="consume submission records from this broker, e.g. "
+                        "mqtt://user:password@127.0.0.1:1883 (default: $WITNESS_MQTT)")
     p.add_argument("--validate", action="store_true",
                    help="validate submitted blocks against the node's REST API")
     p.add_argument("--incidents", action=argparse.BooleanOptionalAction, default=True,
