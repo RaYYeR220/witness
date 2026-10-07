@@ -14,6 +14,9 @@ if [ -z "${WITNESS_VENDOR_DIR:-}" ] && [ -f "$here/.env" ]; then
   WITNESS_VENDOR_DIR="$(sed -n 's/^WITNESS_VENDOR_DIR=//p' "$here/.env" | tail -n 1 | tr -d '\r')"
 fi
 vendor="${WITNESS_VENDOR_DIR:-$root/vendor}"
+if [ -z "${RELAY_PORT:-}" ] && [ -f "$here/.env" ]; then
+  RELAY_PORT="$(sed -n 's/^RELAY_PORT=//p' "$here/.env" | tail -n 1 | tr -d '\r')"
+fi
 tangle="$vendor/iota-tangle/docker/main"
 reset=0
 witness=0
@@ -61,7 +64,10 @@ else
 fi
 
 echo "== HORNET + coordinator + dashboard"
-docker compose -f hornet-main.yaml -f "$here/hornet-loopback.yml" up -d
+# Started if stopped, never recreated: a running node is left alone even when its compose
+# configuration changed (HORNET refuses to start after an unclean stop). To apply a new
+# configuration: stop it gracefully, then run this compose command without --no-recreate.
+docker compose -f hornet-main.yaml -f "$here/hornet-loopback.yml" up -d --no-recreate
 
 echo "== messages relay"
 docker compose -f "$here/messages-api.yml" up -d
