@@ -49,10 +49,8 @@ export {
   RELAY_ATTESTED,
   REPLAY,
   REVOKED_KEY,
-  SEVERITY,
   UNAUTHORIZED_WRITER,
   UNSIGNED_LEGACY,
-  type Severity,
   type Verdict,
 } from "./verdicts.js";
 export {

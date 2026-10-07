@@ -1,4 +1,4 @@
-/** Envelope verdicts and their severities (Python `verdicts`). */
+/** Envelope verdicts (Python `verdicts`). Alert severities belong to the explorer's rules. */
 
 export const PRODUCER_SIGNED = "PRODUCER_SIGNED";
 export const RELAY_ATTESTED = "RELAY_ATTESTED";
@@ -18,16 +18,3 @@ export type Verdict =
   | typeof REPLAY
   | typeof REVOKED_KEY
   | typeof MALFORMED;
-
-export type Severity = "ok" | "info" | "high" | "medium" | "critical";
-
-export const SEVERITY: Readonly<Record<Verdict, Severity>> = {
-  PRODUCER_SIGNED: "ok",
-  RELAY_ATTESTED: "ok",
-  UNSIGNED_LEGACY: "info",
-  FORGED: "critical",
-  UNAUTHORIZED_WRITER: "critical",
-  REPLAY: "high",
-  REVOKED_KEY: "high",
-  MALFORMED: "medium",
-};
