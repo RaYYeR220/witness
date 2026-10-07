@@ -13,6 +13,7 @@ const VIEWS: Record<string, RouteRecordRaw["component"]> = {
   lineage: () => import("@/views/LineageView.vue"),
   integrity: () => import("@/views/IntegrityView.vue"),
   identity: () => import("@/views/IdentityView.vue"),
+  anchors: () => import("@/views/AnchorsView.vue"),
 };
 
 const routes: RouteRecordRaw[] = [
