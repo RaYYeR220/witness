@@ -1212,3 +1212,17 @@ async def test_a_block_verified_after_its_orphan_alert_is_judged(env):
     await tamper_submission(store, bid, "0x" + data.replace(b"0.5", b"0.9").hex())
     [alert] = await v.reverify_all()
     assert (alert.rule, alert.block_id) == ("DB_TAMPER", bid)
+
+
+@respx.mock
+async def test_a_full_tangle_cache_keeps_what_it_holds(env):
+    store, v, _ = env
+    v.cfg = ValidatorConfig(reverify_batch=2, tangle_cache_size=2)
+    blocks = sorted([await verified_block(store, v, n) for n in ("a", "b", "c")])
+    await v.reverify_pass()
+    routes = [route for _, _, route in blocks]
+    before = [r.call_count for r in routes]
+    await v.reverify_pass()
+    await v.reverify_pass()
+    # The first two stay cached; only the one that did not fit is fetched each pass.
+    assert [r.call_count - b for r, b in zip(routes, before, strict=True)] == [0, 0, 2]

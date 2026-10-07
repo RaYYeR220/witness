@@ -160,9 +160,10 @@ only: the `indexer` login may read `aerios/iota/submissions/#` and write `witnes
   copy is still compared; a block verified and then tampered with stays fully checked.
   Candidates are read `reverify_batch` (200) at a time, a pass the node cuts
   short resumes at the block it stopped on, and blocks already fetched are compared with
-  the digest of their Tangle content kept in memory, so a pass only asks the node about
-  new blocks and copies that differ. Every stored copy is compared again within one
-  interval plus one pass.
+  the digest of their Tangle content kept in memory (up to 100 000 blocks; past that,
+  the blocks that did not fit are fetched from the node on every pass), so a pass only
+  asks the node about new blocks and copies that differ. Every stored copy is compared
+  again within one interval plus one pass.
 - Signing keys are resolved by the anchor service (`--resolver`, default
   `http://127.0.0.1:7300`; `did:key` needs no registry). The integrity rules run on
   every stored message, every `--periodic-s` (30 s: drift against Orion `--orion`,

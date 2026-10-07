@@ -78,7 +78,8 @@ class ValidatorConfig:
     timeout_s: float = 60.0
     reverify_batch: int = 200  # candidates read from the database per query
     # Blocks whose Tangle content a pass keeps in memory (a digest each), so later passes
-    # compare stored copies without asking the node again; 0 turns that off.
+    # compare stored copies without asking the node again. Once full, nothing is evicted:
+    # blocks beyond it are fetched from the node on every pass. 0 turns it off.
     tangle_cache_size: int = 100_000
     max_concurrent: int = 32
     retry_initial_s: float = 5.0
@@ -760,7 +761,9 @@ class Validator:
         if self.cfg.tangle_cache_size <= 0:
             return
         if bid not in self._tangle and len(self._tangle) >= self.cfg.tangle_cache_size:
-            del self._tangle[next(iter(self._tangle))]  # oldest first
+            # Full: keep what is there. Evicting would make a pass over more blocks than
+            # fit fetch every one of them, each pass pushing out what the next one needs.
+            return
         try:
             tag: str | None = payload.tag.decode("utf-8")
         except UnicodeDecodeError:
