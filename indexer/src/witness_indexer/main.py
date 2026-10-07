@@ -116,8 +116,14 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
                    help="an incident without events for this long closes (closed:quiet)")
     p.add_argument("--incident-drop", type=float, default=0.2,
                    help="trust score drop that opens an incident")
+    p.add_argument("--stale-after-s", type=int, default=120,
+                   help="R8 STALE: an IE with no trust score on the ledger for this long is "
+                        "stale; at least twice the Trust Manager's scoreInterval (default: "
+                        "120, for scoreInterval = 1 minute)")
     p.add_argument("--log-level", default="INFO")
     args = p.parse_args(argv)
+    if args.stale_after_s <= 0:
+        p.error("--stale-after-s must be positive")
     if not args.db:
         p.error("--db (or WITNESS_DB) is required")
     if args.anchor_did is None:
@@ -157,7 +163,8 @@ def build_rules(args: argparse.Namespace, store: Store, pol: WriterPolicy
         log.warning("no --resolver: DID resolution disabled; only did:key signers can be "
                     "verified, any other DID is reported FORGED (resolver: disabled)")
     orion = OrionClient(args.orion) if args.orion else None
-    return RulesEngine(store, orion, resolver, pol, RulesConfig()), resolver, orion
+    cfg = RulesConfig(stale_after_s=args.stale_after_s)
+    return RulesEngine(store, orion, resolver, pol, cfg), resolver, orion
 
 
 def build_incidents(args: argparse.Namespace, store: Store, orion: OrionClient | None,

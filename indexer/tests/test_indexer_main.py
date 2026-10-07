@@ -173,6 +173,13 @@ def test_build_rules_wiring(caplog):
     assert resolver.base_url == "http://anchor.test:7300"
     assert orion.base_url == "http://orion.test"
     assert rules.anchor is not None  # R11 reads checkpoints from the same anchor service
+    assert rules.cfg.stale_after_s == 120  # R8: twice the Trust Manager's 1-minute cadence
+    rules, _, _ = cli.build_rules(cli.parse_args(
+        ["--db", "postgresql://x", "--allow-any-writer", "--stale-after-s", "900"]),
+        store, ALLOW_ALL)
+    assert rules.cfg.stale_after_s == 900
+    with pytest.raises(SystemExit):
+        cli.parse_args(["--db", "postgresql://x", "--allow-any-writer", "--stale-after-s", "0"])
 
     with caplog.at_level(logging.WARNING):
         rules, resolver, orion = cli.build_rules(

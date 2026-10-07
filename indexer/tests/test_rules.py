@@ -372,6 +372,15 @@ async def test_r8_stale_once_per_window(engine):
     assert [a.rule for a in await engine.periodic(now_ms=(T0 + 600 + 121) * 1000)] == ["STALE"]
 
 
+async def test_r8_threshold_follows_stale_after_s(make_engine):
+    engine = make_engine(stale_after_s=7200)  # a deployment scoring every hour
+    w = Writer()
+    assert await ingest(engine, w.score(0.8, **at(0))) == []
+    assert await engine.periodic(now_ms=(T0 + 3600) * 1000) == []
+    [a] = await engine.periodic(now_ms=(T0 + 7201) * 1000)
+    assert a.rule == "STALE" and a.evidence["thresholdS"] == 7200
+
+
 async def _anchor_fixture(store: Store, respx_mock, *, rewrite: bool = False,
                           mirror_hash: bytes | None = None):
     ids = [blake2b256(bytes([i])) for i in range(10, 14)]

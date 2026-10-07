@@ -161,6 +161,9 @@ indexer:
   imagePullSecrets: []
   # Validate every submitted block against the node (the API does not).
   validate: true
+  # R8 STALE: an IE with no ledger score for this many seconds. At least twice the Trust
+  # Manager's scoreInterval below (minutes): 120 for scoreInterval = 1.
+  staleAfterS: 120
   # Empty: the chart-wide database Secret.
   database: {existingSecret: "", key: ""}
   extraArgs: []
@@ -294,7 +297,9 @@ trustManager:
     log_file_port = 8000
 
     [TrustAlgorithm]
-    scoreInterval = 120
+    ; minutes between scores; the indexer's R8 STALE fires after indexer.staleAfterS
+    ; seconds without one, so keep the two in step (compose: 1 minute and 120 s)
+    scoreInterval = 1
     reliabilityInterval = 20
     reputationInterval = 7
     healthPenalty = 0.01

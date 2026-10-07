@@ -16,7 +16,8 @@ Periodic (`periodic(now_ms=...)`):
 
 - R5 DRIFT: Orion's `trustScore` differs from the latest ledger score by more than
   `drift_epsilon`, or cannot be read at all, for longer than `drift_grace_s`;
-- R8 STALE: no ledger score for an IE within `stale_factor` x `score_interval_s`;
+- R8 STALE: no ledger score for an IE within `stale_after_s` (default `stale_factor` x
+  `score_interval_s`, the Trust Manager's scoring cadence);
 - R11 ANCHOR_MISMATCH: the milestone ids stored for an anchored window no longer hash to the
   `msRoot` recorded on IOTA Rebased (fetched from the anchor service, never taken from the
   private-Tangle mirror), or the `witness.anchor` mirror disagrees with Rebased. Every anchor
@@ -120,6 +121,9 @@ class RulesConfig:
     jump_threshold: float = 0.3
     stale_factor: float = 2.0
     score_interval_s: int = 60
+    # R8 threshold in seconds; None: stale_factor x score_interval_s. Set it from the
+    # deployment's Trust Manager scoreInterval (minutes), at least twice that.
+    stale_after_s: int | None = None
     clock_skew_s: int = 300
     corroboration_window_s: int = 300
     security_tags: frozenset[str] = frozenset({"self-orchestrator", "self-security"})
@@ -722,7 +726,8 @@ class RulesEngine:
     # -- R8 STALE -----------------------------------------------------------------------------
 
     async def _stale(self, now: int) -> list[Alert]:
-        threshold = int(self.cfg.stale_factor * self.cfg.score_interval_s)
+        threshold = (self.cfg.stale_after_s if self.cfg.stale_after_s is not None
+                     else int(self.cfg.stale_factor * self.cfg.score_interval_s))
         # Measured on the ledger clock when there is one, so a backfill or a halted
         # coordinator does not make every IE look silent; a halted ledger is reported instead.
         now_s = now // 1000

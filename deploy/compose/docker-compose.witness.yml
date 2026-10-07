@@ -213,6 +213,8 @@ services:
       - --resolver=http://witness-anchor:7300
       - --orion=http://orion-ld:1026
       - --validate
+      # R8 STALE: at least twice the Trust Manager's scoreInterval (1 minute in manager.ini).
+      - --stale-after-s=${WITNESS_STALE_AFTER_S:-120}
       - --log-level=${WITNESS_LOG_LEVEL:-INFO}
     volumes:
       - ${WITNESS_POLICY_FILE:-../policy.json}:/etc/witness/policy.json:ro

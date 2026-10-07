@@ -47,6 +47,7 @@ spec:
             {{- if .Values.indexer.validate }}
             - --validate
             {{- end }}
+            - --stale-after-s={{ int .Values.indexer.staleAfterS }}
             {{- with .Values.indexer.extraArgs }}
             {{- toYaml . | nindent 12 }}
             {{- end }}
