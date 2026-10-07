@@ -7,7 +7,7 @@ import { computed, onBeforeUnmount, onMounted, reactive, ref, shallowRef } from 
 
 import type { MessageSummary, StreamEvent, StreamStatus, StreamType, WitnessData } from "@/api/client";
 
-import { scoreOf } from "./format";
+import { LIFECYCLE, LIFECYCLE_BAD, scoreOf } from "./format";
 
 export interface MessageRow {
   kind: "message";
@@ -158,8 +158,31 @@ export function rowFromEvent(e: StreamEvent): FeedRow | null {
   }
 }
 
-export const FEED_TYPES: readonly StreamType[] = ["message", "milestone", "alert", "anchor", "incident"];
+export const FEED_TYPES: readonly StreamType[] = ["message", "milestone", "alert", "anchor", "incident", "lifecycle"];
 export const FEED_MAX = 200;
+/** Blocks whose lifecycle the feed remembers. */
+export const LIFECYCLE_MAX = 400;
+
+export interface LifecycleStep {
+  status: string;
+  /** When the stream reported it; null when only implied by a later step. */
+  atMs: number | null;
+  reached: boolean;
+  bad: boolean;
+}
+
+/**
+ * The lifecycle path RECEIVED → SUBMITTED → SOLID → CONFIRMED → CONTENT_VERIFIED
+ * from the transitions the stream reported for one block: a step is reached
+ * when reported, or when a later step was (it is implied, without a time). A
+ * bad outcome (CONTENT_MISMATCH, ORPHANED, …) is added after the last step reached.
+ */
+export function lifecycleSteps(seen: ReadonlyMap<string, number>): LifecycleStep[] {
+  const last = Math.max(-1, ...LIFECYCLE.map((s, i) => (seen.has(s) ? i : -1)));
+  const steps: LifecycleStep[] = LIFECYCLE.map((s, i) => ({ status: s, atMs: seen.get(s) ?? null, reached: i <= last, bad: false }));
+  const bad = [...seen].filter(([s]) => LIFECYCLE_BAD.has(s)).map(([status, atMs]) => ({ status, atMs, reached: true, bad: true }));
+  return bad.length ? [...steps.filter((s) => s.reached), ...bad] : steps;
+}
 
 /**
  * `row` in a newest-first list, by its time: above every row that is older,
@@ -192,7 +215,28 @@ export function useLiveFeed(data: WitnessData) {
   const counts = reactive({ signed: 0, unsigned: 0, rejected: 0, alerts: 0 });
   const lastMilestone = ref<MilestoneRow | null>(null);
   const lastAnchor = ref<AnchorRow | null>(null);
+  /** Lifecycle transitions the stream reported, per block (lowercase id): status → first time seen. */
+  const lifecycles = reactive(new Map<string, Map<string, number>>());
   let stop: (() => void) | null = null;
+
+  function noteLifecycle(e: StreamEvent) {
+    const p = e.payload ?? {};
+    const blockId = typeof p.blockId === "string" ? p.blockId.toLowerCase() : null;
+    const status = typeof p.status === "string" && /^[A-Z_]{1,32}$/.test(p.status) ? p.status : null;
+    if (!blockId || !status) return;
+    const at = typeof p.atMs === "number" && Number.isFinite(p.atMs) ? p.atMs : e.atMs;
+    const seen = lifecycles.get(blockId) ?? new Map<string, number>();
+    if (!seen.has(status)) seen.set(status, at);
+    lifecycles.delete(blockId); // re-inserted last: the map keeps the most recently active blocks
+    lifecycles.set(blockId, seen);
+    while (lifecycles.size > LIFECYCLE_MAX) lifecycles.delete(lifecycles.keys().next().value!);
+  }
+
+  /** The lifecycle the stream reported for a block, or null when it reported none. */
+  function lifecycleOf(blockId: string): LifecycleStep[] | null {
+    const seen = lifecycles.get(blockId.toLowerCase());
+    return seen && seen.size ? lifecycleSteps(seen) : null;
+  }
 
   const showMilestones = ref(true);
   const visible = computed(() => (showMilestones.value ? rows.value : rows.value.filter((r) => r.kind !== "milestone")));
@@ -230,6 +274,7 @@ export function useLiveFeed(data: WitnessData) {
 
   function onEvent(e: StreamEvent) {
     conn.lastId = e.id;
+    if (e.type === "lifecycle") return noteLifecycle(e);
     const row = rowFromEvent(e);
     if (!row) return;
     const isNew = !rows.value.some((r) => r.key === row.key) && !held.value.some((r) => r.key === row.key);
@@ -280,5 +325,5 @@ export function useLiveFeed(data: WitnessData) {
   });
   onBeforeUnmount(() => stop?.());
 
-  return { rows, visible, held, paused, pause, resume, loading, loadError, conn, counts, lastMilestone, lastAnchor, showMilestones, reload: load };
+  return { rows, visible, held, paused, pause, resume, loading, loadError, conn, counts, lastMilestone, lastAnchor, showMilestones, lifecycleOf, reload: load };
 }

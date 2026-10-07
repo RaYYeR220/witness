@@ -4,7 +4,7 @@ import { computed, onBeforeUnmount, onMounted, ref } from "vue";
 import ConsoleShell from "@/components/ConsoleShell.vue";
 import { useData } from "@/console/data";
 import { useLiveFeed } from "@/console/feed";
-import { ago, clock, isoOf, shortDid, shortHex, utc, verdictInfo } from "@/console/format";
+import { ago, clock, isoOf, shortDid, shortHex, statusLabel, utc, verdictInfo } from "@/console/format";
 import VerdictMark from "@/console/VerdictMark.vue";
 
 /**
@@ -14,7 +14,7 @@ import VerdictMark from "@/console/VerdictMark.vue";
  */
 const data = useData();
 const feed = useLiveFeed(data);
-const { visible, held, paused, conn, counts, lastMilestone, lastAnchor, showMilestones, loading, loadError } = feed;
+const { visible, held, paused, conn, counts, lastMilestone, lastAnchor, showMilestones, loading, loadError, lifecycleOf } = feed;
 
 const now = ref(Date.now());
 let tick: ReturnType<typeof setInterval> | null = null;
@@ -94,6 +94,20 @@ const score = (s: number | null) => (s === null ? "" : s.toFixed(2));
                 <time class="at" :datetime="isoOf(r.atMs) ?? undefined" :title="utc(r.atMs)">
                   <span class="clk">{{ clock(r.atMs) }}</span><span class="ago">{{ ago(r.atMs, now) }}</span>
                 </time>
+                <span v-if="lifecycleOf(r.blockId)" class="sr-only"
+                  >, lifecycle as the explorer recorded it: {{ lifecycleOf(r.blockId)!.filter((s) => s.reached).map((s) => statusLabel(s.status)).join(", ") }}</span
+                >
+                <span v-if="lifecycleOf(r.blockId)" class="lc" aria-hidden="true">
+                  <span
+                    v-for="s in lifecycleOf(r.blockId)!"
+                    :key="s.status"
+                    class="lc-step"
+                    :data-r="s.reached"
+                    :data-bad="s.bad"
+                    :title="s.atMs ? `${statusLabel(s.status)} at ${utc(s.atMs)}` : statusLabel(s.status)"
+                    >{{ statusLabel(s.status).toLowerCase() }}</span
+                  >
+                </span>
                 <span class="sr-only">, open to verify block {{ r.blockId }}</span>
               </RouterLink>
 
@@ -309,6 +323,26 @@ h1 {
   font: 400 22px/1 var(--serif);
   color: var(--fog-50);
 }
+.lc {
+  grid-column: 3 / -1;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 2px 0;
+  font-size: 12px;
+  color: var(--fog-400);
+}
+.lc-step + .lc-step::before {
+  content: "→";
+  margin: 0 7px;
+  color: var(--hair-strong);
+}
+/* the explorer's record: reached steps are plain, not green */
+.lc-step[data-r="true"] {
+  color: var(--fog-200);
+}
+.lc-step[data-bad="true"] {
+  color: var(--fail);
+}
 .sealed {
   font-size: 12px;
   padding: 1px 8px;
@@ -515,7 +549,8 @@ h1 {
     grid-template-areas:
       "mk vd at"
       ". what what"
-      ". ie ie";
+      ". ie ie"
+      ". lc lc";
     row-gap: 4px;
     padding: 13px 4px;
   }
@@ -533,6 +568,9 @@ h1 {
   }
   .msg .ie {
     grid-area: ie;
+  }
+  .msg .lc {
+    grid-area: lc;
   }
   .msg .ms {
     display: none;

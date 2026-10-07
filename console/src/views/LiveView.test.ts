@@ -81,7 +81,7 @@ describe("Live", () => {
     // the first stream ended: the client reconnects and resumes after event 101
     await until(() => streams.length >= 2, 4000);
     expect(streams[0]!.lastEventId).toBeUndefined();
-    expect(streams[0]!.url).toContain("types=message%2Cmilestone%2Calert%2Canchor%2Cincident");
+    expect(streams[0]!.url).toContain("types=message%2Cmilestone%2Calert%2Canchor%2Cincident%2Clifecycle");
     expect(streams[1]!.lastEventId).toBe("101");
     w.unmount();
   });
@@ -130,6 +130,57 @@ describe("Live", () => {
     const live = w.find('.conn [aria-live="polite"]');
     expect(live.text()).toBe("Connected");
     expect(w.find(".conn").text()).toContain("resuming after event 9");
+    w.unmount();
+  });
+
+  it("shows the lifecycle transitions the stream reports for a new message", async () => {
+    let push!: (text: string) => void;
+    vi.stubGlobal("fetch", async (input: string, init: RequestInit = {}) => {
+      const url = String(input);
+      if (url.startsWith("/api/healthz")) return json({ status: "ok", db: "ok", network: "private_tangle1", version: "0.1.0" });
+      if (url.startsWith("/api/stream")) {
+        const body = new ReadableStream<Uint8Array>({
+          start(c) {
+            push = (t) => c.enqueue(enc.encode(t));
+            init.signal?.addEventListener("abort", () => c.error(new DOMException("aborted", "AbortError")));
+          },
+        });
+        return new Response(body, { status: 200 });
+      }
+      if (url.includes("block_id=")) return json({ items: [], nextCursor: null, limit: 1 });
+      return json({ items: [], nextCursor: null, limit: 25 });
+    });
+    let n = 200;
+    const ev = (type: string, payload: object) => {
+      n += 1;
+      return `id: ${n}
+event: ${type}
+data: ${JSON.stringify({ id: n, type, atMs: 1791283600000 + n, at: "", payload })}
+
+`;
+    };
+    const life = (status: string) => ev("lifecycle", { blockId: NEW, status, atMs: 1791283600000 + n * 10, subId: "s", detail: {} });
+    const { w } = await mountScreen(LiveView, { path: "/live", data: new LiveAdapter("/api") });
+    await until(() => typeof push === "function" && w.find(".conn").attributes("data-s") === "open");
+    // the relay saw it first; the message event comes once a milestone confirms it
+    push(life("RECEIVED") + life("SUBMITTED") + life("SOLID"));
+    push(ev("message", { blockId: NEW, tag: "trust.score", kind: "trust.score", verdict: "PRODUCER_SIGNED", ieId: "MyDomain:fa163e5e25ef", iss: DID, msIndex: 1285, ts: 1791283600, encrypted: false }));
+    await until(() => w.find("a.msg .lc").exists());
+    const steps = () => w.findAll("a.msg .lc-step").map((s) => [s.text(), s.attributes("data-r")]);
+    expect(steps()).toEqual([
+      ["received", "true"],
+      ["submitted", "true"],
+      ["solid", "true"],
+      ["confirmed", "false"],
+      ["content verified", "false"],
+    ]);
+    push(life("CONFIRMED") + life("CONTENT_VERIFIED"));
+    await until(() => steps().every(([, r]) => r === "true"));
+    expect(w.find("a.msg .sr-only").text()).toContain("lifecycle as the explorer recorded it: Received, Submitted, Solid, Confirmed, Content verified");
+    // a message the stream reported nothing about shows no lifecycle
+    push(ev("message", { blockId: OLD, tag: "trust.score", kind: "trust.score", verdict: "PRODUCER_SIGNED", ieId: "MyDomain:fa163e5e25ef", iss: DID, msIndex: 1286, ts: 1791283700, encrypted: false }));
+    await until(() => w.findAll("a.msg").length === 2);
+    expect(w.findAll("a.msg").find((a) => a.attributes("href") === `/m/${OLD}`)!.find(".lc").exists()).toBe(false);
     w.unmount();
   });
 });

@@ -26,3 +26,23 @@ describe("placeByTime", () => {
     expect(keys(placeByTime(list, row("c", 100), 2))).toEqual(["b", "a"]);
   });
 });
+
+describe("lifecycleSteps", () => {
+  it("marks reported steps, implies earlier ones and appends a bad outcome", async () => {
+    const { lifecycleSteps } = await import("./feed");
+    const s = lifecycleSteps(new Map([["CONFIRMED", 5]]));
+    expect(s.map((x) => [x.status, x.reached, x.atMs])).toEqual([
+      ["RECEIVED", true, null],
+      ["SUBMITTED", true, null],
+      ["SOLID", true, null],
+      ["CONFIRMED", true, 5],
+      ["CONTENT_VERIFIED", false, null],
+    ]);
+    const bad = lifecycleSteps(new Map([["SUBMITTED", 1], ["ORPHANED", 9]]));
+    expect(bad.map((x) => [x.status, x.bad])).toEqual([
+      ["RECEIVED", false],
+      ["SUBMITTED", false],
+      ["ORPHANED", true],
+    ]);
+  });
+});
