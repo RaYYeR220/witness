@@ -312,7 +312,35 @@ reachable from the browser.
 A replay build (`pnpm --filter console build:replay`) serves a snapshot
 recorded by `node console/scripts/record-replay.mjs --out <dist>/replay` from a
 running stack. It needs no API; step 4 uses the DID documents recorded with the
-snapshot (the screen says so) and step 5 still reads IOTA Rebased live.
+snapshot (the screen says so) and step 5 still reads IOTA Rebased live. The
+recorder also takes the explorer screens (IEs and lineages, alerts, incidents,
+identities, posture, stats, reports) and the blocks they link to;
+`--scorecard results/scorecard.json` adds an evaluation scorecard.
+
+Integrity shows an evaluation scorecard only when one is published: set
+`VITE_SCORECARD_URL` to a witness-chaos `scorecard.json` served next to the
+console (live builds), or record it into a replay snapshot. Without one the
+card says the scorecard appears after the evaluation run.
+
+The console never starts a posture scan or writes a report: both need the
+operator's tokens on the server (`POST /posture/scan`, `POST /reports`).
+Reports and Anchors re-check what the API says in the browser: a report counts
+as anchored only once its audit.report block passes checks 1 to 4 and names the
+hash the browser computed; a checkpoint turns green only once its record, read
+from the pinned trail, agrees.
+
+`pnpm --filter console build:lib` builds the Lineage chart alone into
+`console/dist-lib/` for the aeriOS Management Portal: `witness-lineage.js` (ES
+module) and `witness-lineage.umd.cjs` (global `WitnessLineage`, with Vue 3 as
+the global `Vue`), plus `witness-lineage.css`. Use the `WitnessLineage`
+component (`api-base`, `ie-id`) or
+`WitnessLineage.mountWitnessLineage(el, { apiBase, ieId, verifyBase })`; the
+API must allow the Portal's origin (CORS).
+
+End-to-end specs: `pnpm --filter console exec playwright test --project replay`
+(records `console/e2e/.snapshot` from the stack the first time, then needs no
+API) and `--project live` (this build against the stack, or a deployed console
+with `WITNESS_E2E_URL=http://127.0.0.1:8080`; skips when the API is down).
 
 ## Deployment: the Witness overlay
 
