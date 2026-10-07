@@ -67,7 +67,9 @@ records the SHA-256 of the answer key, the git commit and a hash of the run conf
 `trust.score` writers and nothing else changed. The stack runs with that policy for the
 evaluation (`WITNESS_POLICY_FILE`), so the live Trust Manager keeps writing its own chain next
 to the run, untouched. The outsider (A04) is a `did:key` derived from the seed, on no policy;
-the revoked identity (A05) is a DID on IOTA Rebased whose signing method was removed.
+the revoked identity (A05) is `chaos-revoked`, a DID on IOTA Rebased controlled by the domain
+DID whose `#sig-1` was removed right after creation (`deploy/identity/testnet.json`, under
+`eval`, records the revocation transaction).
 
 **Preflight.** API, relay, HORNET and Orion must answer. The producer must not be any DID
 in `deploy/identity/*.json` or published by the anchor service, and the writer policy the API
@@ -99,7 +101,9 @@ before sending the second, so the order the explorer sees is the order they were
 While A06 waits for DRIFT, the producer keeps scoring the IE with the unchanged ledger score,
 as a live Trust Manager would, so the IE does not go STALE first. A19 rewrites only a stored
 message the run's producer signed, never one it already rewrote, and the run restores every
-rewritten row when it ends (the bit flip is its own inverse; the alerts stay).
+rewritten row when it ends (the bit flip is its own inverse; the alerts stay). The indexer
+compares every stored copy with the Tangle every `--reverify-every-s` (60 s in the compose
+stack), which is what A19's 120 s window relies on.
 
 After each injection the harness polls the API (`/messages/{id}`, `/alerts?block_id=`, and for
 classes with per-trial IEs `/alerts?ie=`) once a second until every assertion of the class
@@ -132,8 +136,9 @@ attacker and of the `did:key` outsider; envelope nonces and timestamps are fresh
 
 **Preconditions.** A class whose setup is missing is reported as not run, never as detected:
 A05 needs a revoked identity (`--revoked-key`, a private JWK whose method was removed from
-its DID on IOTA Rebased); A11 needs `audit.report` in the relay's `RELAY_ENCRYPT_TAGS` and the
-blind-index key (`--search-key-file`); A19 needs a database DSN (`WITNESS_CHAOS_DB`, test
+its DID on IOTA Rebased: `secrets/chaos-revoked/sig-1.jwk.json`); A11 needs `audit.report` in
+the relay's `RELAY_ENCRYPT_TAGS` (the compose default) and the blind-index key
+(`--search-key-file`); A19 needs a database DSN (`WITNESS_CHAOS_DB`, test
 stack only); A16 and A18 need the ingest token or the relay's broker login.
 
 ### Reproduce
@@ -142,17 +147,25 @@ stack only); A16 and A18 need the ingest token or the relay's broker login.
 pnpm install && pnpm --filter @witness/verify build   # TS verifier, for bundle parity
 uv sync --all-packages
 uv run witness-chaos keys --out secrets/chaos          # run-only producer + eval policy
-# bring the stack up with the eval policy for the run:
-#   WITNESS_POLICY_FILE=<abs path>/secrets/chaos/eval-policy.json docker compose ... up -d
+# A05's revoked identity, once per network (anchor/.env with the wallet, as for the
+# component identities; about 0.01 testnet IOTA): secrets/chaos-revoked/sig-1.jwk.json
+pnpm --filter @witness/anchor bootstrap:identities --chaos-revoked
+# Run the stack on the eval policy: relay, indexer, API and anchor all read WITNESS_POLICY_FILE
+# (absolute, or relative to deploy/compose). The runner refuses to start until the API's
+# /identity shows the producer on trust.score.
+WITNESS_POLICY_FILE="$PWD/secrets/chaos/eval-policy.json" \
+  docker compose -f deploy/compose/docker-compose.witness.yml up -d
 WITNESS_CHAOS_DB=postgresql://postgres:witness@127.0.0.1:5432/postgres \
 uv run witness-chaos run \
   --api http://127.0.0.1:7200 --relay http://127.0.0.1:5557 --relay-node iota-hornet \
   --hornet http://127.0.0.1:14265 --orion http://127.0.0.1:1026 --anchor http://127.0.0.1:7300 \
   --secrets-dir secrets --env-file secrets/compose/api.env --env-file secrets/compose/relay.env \
   --mqtt-host 127.0.0.1 --search-key-file secrets/relay/search.key \
-  --revoked-key <revoked identity JWK> \
+  --revoked-key secrets/chaos-revoked/sig-1.jwk.json \
   --trials 20 --parallel 10 --out results/
 uv run witness-chaos score results/                    # rebuild the scorecard from the logs
+# afterwards: back to the deployment policy
+docker compose -f deploy/compose/docker-compose.witness.yml up -d
 ```
 
 The results directory holds `scorecard.json` and `scorecard.md`, `trials.jsonl` (one line per
