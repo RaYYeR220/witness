@@ -124,7 +124,7 @@ function select(blockId: string) {
             {{ verdictInfo(ledger.verdict).label.toLowerCase() }}, milestone {{ ledger.msIndex ?? "?" }}, {{ utc(ledger.atMs) }}.
             <a v-if="verifyHref" class="wl-link" :href="verifyHref(ledger.blockId)" @click="follow($event, ledger.blockId)">Verify it</a>
           </p>
-          <p v-else class="wl-sub">No signed score for this IE on the ledger.</p>
+          <p v-else class="wl-sub">No proven score for this IE: none producer-signed without an UNSIGNED or SHADOW alert.</p>
         </div>
         <div class="wl-cell wl-orion" :data-kind="orion.kind">
           <p class="wl-lab">Orion says now</p>
