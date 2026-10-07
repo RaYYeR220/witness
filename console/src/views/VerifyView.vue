@@ -363,7 +363,11 @@ const cfg = pinnedConfig();
               </div>
               <div>
                 <dt>Issuer keys from</dt>
-                <dd>{{ lookups.didSource }}</dd>
+                <dd>
+                  {{ lookups.didSource }}.
+                  <span class="assume">Check 4 trusts that answer: issuer keys come from the anchor service operated with this explorer, not from an
+                  independent read of the chain.</span>
+                </dd>
               </div>
               <div>
                 <dt>Anchor record from</dt>
@@ -620,6 +624,11 @@ const cfg = pinnedConfig();
 }
 .pins dd.mono {
   font-size: 12px;
+}
+.assume {
+  display: block;
+  margin-top: 4px;
+  color: var(--fog-400);
 }
 .fine {
   margin: 12px 0 0;

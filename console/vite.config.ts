@@ -5,15 +5,17 @@ import { defineConfig } from "vitest/config";
 
 /**
  * In dev and preview, the console reaches the stack through same-origin paths:
- * /api is witness-api and /anchor the anchor service (its DID resolver), so the
- * browser needs no CORS and the event stream can resume with Last-Event-ID.
- * WITNESS_API_TARGET and WITNESS_ANCHOR_TARGET point them elsewhere.
+ * /api is witness-api and /anchor/resolve/ the anchor service's DID resolver
+ * (nothing else of the anchor service: its admin endpoints stay unreachable),
+ * so the browser needs no CORS and the event stream can resume with
+ * Last-Event-ID. WITNESS_API_TARGET and WITNESS_ANCHOR_TARGET point them
+ * elsewhere. Deployments must proxy the same two paths (docs/operations.md).
  */
 const target = (env: string | undefined, fallback: string) => env ?? fallback;
 const strip = (prefix: string): ProxyOptions["rewrite"] => (path) => path.slice(prefix.length) || "/";
 const proxy: Record<string, ProxyOptions> = {
   "/api": { target: target(process.env.WITNESS_API_TARGET, "http://127.0.0.1:7200"), changeOrigin: true, rewrite: strip("/api") },
-  "/anchor": { target: target(process.env.WITNESS_ANCHOR_TARGET, "http://127.0.0.1:7300"), changeOrigin: true, rewrite: strip("/anchor") },
+  "/anchor/resolve/": { target: target(process.env.WITNESS_ANCHOR_TARGET, "http://127.0.0.1:7300"), changeOrigin: true, rewrite: strip("/anchor") },
 };
 
 export default defineConfig({

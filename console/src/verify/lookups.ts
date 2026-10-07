@@ -3,13 +3,16 @@
  * the issuer's DID document (step 4) and the anchor record on IOTA Rebased
  * (step 5). Neither ever comes from the explorer's API.
  *
- *   issuer keys   the anchor service's DID resolver (`/resolve/{did}`, which
- *                 reads did:iota documents and their history from IOTA
- *                 Rebased), at VITE_RESOLVER_URL. A replay build has no
- *                 resolver: it uses the copies recorded with the snapshot,
- *                 and says so.
+ *   issuer keys   asked of the anchor service operated with this explorer
+ *                 (`{VITE_RESOLVER_URL}/resolve/{did}`). That service reads
+ *                 the did:iota document and its key history from IOTA
+ *                 Rebased; the browser trusts its answer. This is an
+ *                 assumption, not an independent read of the chain. A replay
+ *                 build has no resolver: it uses the copies recorded with the
+ *                 snapshot, and says so.
  *   anchor record read by the browser itself from the pinned Rebased RPC
- *                 (verify/pinned.ts), live in both modes.
+ *                 (verify/pinned.ts), live in both modes: no service of this
+ *                 explorer is trusted for step 5.
  */
 
 import type { VerifyOptions } from "@witness/verify";
@@ -63,7 +66,7 @@ export function createLookups(
       // file names as scripts/record-replay.mjs writes them: anything but [A-Za-z0-9._-] becomes "_"
       resolveDid: (did) => getJson(`${root}dids/${did.replace(/[^A-Za-z0-9._-]/g, "_")}.json`, f, timeoutMs),
       fetchAnchorRecord: anchorFetcher(undefined, fetchImpl),
-      didSource: "copies recorded from the anchor service's resolver with this snapshot (not a live read)",
+      didSource: "copies recorded with this snapshot from the anchor service operated with this explorer: not a live read, and not an independent read of the chain",
       anchorSource,
       recordedDids: true,
     };
@@ -72,7 +75,7 @@ export function createLookups(
   return {
     resolveDid: (did) => getJson(`${resolver}/resolve/${encodeURIComponent(did)}`, f, timeoutMs),
     fetchAnchorRecord: anchorFetcher(undefined, fetchImpl),
-    didSource: `the anchor service's DID resolver at ${resolver}/resolve`,
+    didSource: `the anchor service operated with this explorer (${resolver}/resolve), which reads did:iota from IOTA Rebased: not an independent read of the chain`,
     anchorSource,
     recordedDids: false,
   };

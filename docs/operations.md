@@ -230,6 +230,43 @@ must allow the signer DID on `audit.report`.
   the report listed with `anchored: false`, and its HTML page says "NOT
   anchored".
 
+## Console
+
+The console verifies every proof in the browser against the pins built into it
+(`console/src/config/verifier.json`, written by `pnpm --filter console fixture`
+from the stack's protocol config, `deploy/identity/testnet.json`,
+`ANCHOR_TRAIL_ID` and, optionally, `WITNESS_REBASED_RPC`,
+`IOTA_AUDIT_TRAIL_ORIGINAL_PKG_ID`, `ANCHOR_WRITER_ADDRESS`). Regenerate it
+whenever the anchor service starts a new Audit Trail, or step 5 fails with
+"anchor trail is not the pinned trail".
+
+It talks to three places:
+
+| What | Where | Setting |
+| --- | --- | --- |
+| witness-api (messages, bundles, stream) | `/api` | `VITE_API_URL` |
+| issuer keys for step 4 | `/anchor/resolve/{did}` on the anchor service | `VITE_RESOLVER_URL` (base, default `/anchor`) |
+| anchor record for step 5 | the pinned IOTA Rebased RPC, straight from the browser | `rebasedRpc` in `verifier.json` |
+
+Step 4 trusts the anchor service operated with this explorer: it resolves the
+issuer's did:iota document (and its key history) from IOTA Rebased, and the
+browser takes its answer. That is not an independent read of the chain, unlike
+step 5. A resolver that does not answer within 15 s, or answers with a
+redirect, leaves step 4 unresolved (PARTIAL).
+
+`vite dev` and `vite preview` proxy `/api` to `WITNESS_API_TARGET`
+(default `http://127.0.0.1:7200`) and only `/anchor/resolve/` to
+`WITNESS_ANCHOR_TARGET` (default `http://127.0.0.1:7300`). A deployment must do
+the same: put the console, `/api` and `/anchor/resolve/` on one origin and
+proxy **only** `/anchor/resolve/` to the anchor service, never `/anchor/*`.
+The anchor service's admin endpoints (`POST /checkpoints/run`) must not be
+reachable from the browser.
+
+A replay build (`pnpm --filter console build:replay`) serves a snapshot
+recorded by `node console/scripts/record-replay.mjs --out <dist>/replay` from a
+running stack. It needs no API; step 4 uses the DID documents recorded with the
+snapshot (the screen says so) and step 5 still reads IOTA Rebased live.
+
 ## Troubleshooting
 
 - **`bootstrap.sh` refuses to run on Windows.** The upstream script wants root
