@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, onMounted, reactive, ref, shallowRef } from "vue";
+import { computed, markRaw, onMounted, reactive, ref, shallowRef } from "vue";
 
 import type { AnchorCheckpoint } from "@/api/client";
 import { recheckAnchor, selfConsistent, type Recheck } from "@/anchors/recheck";
@@ -21,7 +21,11 @@ const data = useData();
 const items = shallowRef<AnchorCheckpoint[]>([]);
 const error = ref<string | null>(null);
 const loaded = ref(false);
-const checks = reactive(new Map<number, Recheck | "running">());
+/**
+ * Re-check results keyed by the checkpoint object the explorer listed, never by a field of
+ * it: two rows claiming one `seq` cannot share (or steal) each other's result.
+ */
+const checks = reactive(new WeakMap<AnchorCheckpoint, Recheck | "running">());
 
 onMounted(async () => {
   try {
@@ -34,14 +38,17 @@ onMounted(async () => {
 });
 
 async function recheck(a: AnchorCheckpoint) {
-  if (checks.get(a.seq) === "running") return;
-  checks.set(a.seq, "running");
-  checks.set(a.seq, await recheckAnchor(a, PINNED));
+  if (checks.get(a) === "running") return;
+  checks.set(a, "running");
+  const r = await recheckAnchor(a, PINNED);
+  // kept raw, so `r.for` stays the very object it was asked about
+  if (r.for === a) checks.set(a, markRaw(r));
 }
 
-const result = (seq: number) => {
-  const r = checks.get(seq);
-  return r && r !== "running" ? r : null;
+const running = (a: AnchorCheckpoint) => checks.get(a) === "running";
+const result = (a: AnchorCheckpoint): Recheck | null => {
+  const r = checks.get(a);
+  return r && r !== "running" && r.for === a ? r : null;
 };
 
 /**
@@ -65,15 +72,33 @@ const msgCount = (a: AnchorCheckpoint) => {
   return typeof n === "number" ? n : null;
 };
 
-/** The explorer's status of a checkpoint, until the browser has read the record itself. */
-const STATUS: Record<string, string> = { anchored: "Anchored, per the explorer", pending: "Pending", failed: "Failed", mismatch: "Mismatch" };
+/**
+ * The explorer's status, in its own words and its own vocabulary: whatever the API
+ * sends, it never becomes one of the browser's states below.
+ */
+const API_STATUS: Record<string, string> = {
+  anchored: "Anchored, per the explorer",
+  pending: "Pending, per the explorer",
+  failed: "Failed, per the explorer",
+  mismatch: "Mismatch, per the explorer",
+  other: "A status this console does not know",
+};
+const apiStatus = (a: AnchorCheckpoint) => (Object.hasOwn(API_STATUS, a.status) && a.status !== "other" ? a.status : "other");
 
-/** The checkpoint's state on screen: the browser's own re-check decides green or red. */
-function shown(a: AnchorCheckpoint): { s: string; text: string } {
-  const r = result(a.seq);
-  if (r?.verdict === true) return { s: "checked", text: "Checked on IOTA Rebased in your browser" };
-  if (r?.verdict === false) return { s: "differs", text: "Does not match the chain" };
-  return { s: a.status, text: STATUS[a.status] ?? a.status };
+/** What the browser found, if it re-checked: the only source of green. */
+function checked(a: AnchorCheckpoint): { c: "agrees" | "differs" | "partial"; text: string } | null {
+  const r = result(a);
+  if (!r) return null;
+  if (r.verdict === true) return { c: "agrees", text: "Checked on IOTA Rebased in your browser" };
+  if (r.verdict === false) return { c: "differs", text: "Does not match the chain" };
+  return { c: "partial", text: "Not fully checked" };
+}
+
+/** The values shown for a checkpoint: the chain's once the browser has read the record. */
+function shownValues(a: AnchorCheckpoint) {
+  const c = result(a)?.chain;
+  if (c) return { from: c.fromMilestone, to: c.toMilestone, msRoot: c.msRoot, hash: c.checkpointHash, msgCount: c.msgCount, fromChain: true };
+  return { from: a.fromMilestone, to: a.toMilestone, msRoot: a.msRoot, hash: a.checkpointHash, msgCount: msgCount(a), fromChain: false };
 }
 const pinsComplete = Boolean(PINNED.rebasedRpc && PINNED.trailId && PINNED.auditTrailPackage);
 const otherNetwork = computed(() => items.value.find((a) => a.network && PINNED.rebasedNetwork && a.network !== PINNED.rebasedNetwork)?.network ?? null);
@@ -138,30 +163,34 @@ const otherNetwork = computed(() => items.value.find((a) => a.network && PINNED.
         <p v-else-if="error" class="x-quiet x-err">Could not list the checkpoints: {{ error }}</p>
         <p v-else-if="!items.length" class="x-quiet">No checkpoint yet. The anchor service commits a window once enough milestones have passed.</p>
         <ol v-else class="cps">
-          <li v-for="(a, i) in items" :key="a.seq" class="cp" :data-status="shown(a).s">
+          <li v-for="(a, i) in items" :key="i" class="cp" :data-status="apiStatus(a)" :data-check="checked(a)?.c ?? 'none'">
             <div class="rail">
               <span class="seq">{{ a.seq }}</span>
               <span class="dot" aria-hidden="true"></span>
             </div>
             <div class="body">
               <p class="top">
-                <span class="st" :data-status="shown(a).s">{{ shown(a).text }}</span>
+                <span class="st" :data-status="apiStatus(a)">{{ API_STATUS[apiStatus(a)] }}</span>
+                <span v-if="checked(a)" class="chk" :data-check="checked(a)!.c">{{ checked(a)!.text }}</span>
                 <span class="x-muted">{{ utc(a.createdAtMs) }}</span>
               </p>
-              <h3 class="win">Milestones {{ a.fromMilestone }}–{{ a.toMilestone }}</h3>
+              <h3 class="win">Milestones {{ shownValues(a).from ?? "?" }}–{{ shownValues(a).to ?? "?" }}</h3>
+              <p class="src x-sec-note">
+                {{ shownValues(a).fromChain ? "As the record on IOTA Rebased holds it, read by your browser." : "As the explorer shows it." }}
+              </p>
               <dl class="x-kv">
                 <div>
                   <dt>Messages</dt>
-                  <dd>{{ msgCount(a) ?? "not stated" }}</dd>
+                  <dd>{{ shownValues(a).msgCount ?? "not stated" }}</dd>
                 </div>
                 <div>
                   <dt>Milestone root</dt>
-                  <dd class="mono">{{ a.msRoot ?? "none" }}</dd>
+                  <dd class="mono">{{ shownValues(a).msRoot ?? "none" }}</dd>
                 </div>
                 <div>
                   <dt>Checkpoint hash</dt>
                   <dd class="mono">
-                    {{ a.checkpointHash ?? "none" }}
+                    {{ shownValues(a).hash ?? "none" }}
                     <span v-if="selfConsistent(a) === false" class="x-cmp" data-c="differs">the explorer's own document does not hash to it</span>
                   </dd>
                 </div>
@@ -187,24 +216,24 @@ const otherNetwork = computed(() => items.value.find((a) => a.network && PINNED.
                 <button
                   type="button"
                   class="btn"
-                  :disabled="!pinsComplete || a.record === null || checks.get(a.seq) === 'running'"
+                  :disabled="!pinsComplete || a.record === null || running(a)"
                   @click="recheck(a)"
                 >
-                  {{ checks.get(a.seq) === "running" ? "Reading the chain…" : result(a.seq) ? "Re-check again" : "Re-check from your browser" }}
+                  {{ running(a) ? "Reading the chain…" : result(a) ? "Re-check again" : "Re-check from your browser" }}
                 </button>
                 <span v-if="!pinsComplete" class="x-sec-note">This console pins no trail to read.</span>
               </div>
-              <div v-if="result(a.seq)" class="res" role="status">
-                <p class="verdict" :data-v="String(result(a.seq)!.verdict)">
-                  <template v-if="result(a.seq)!.verdict === true"
-                    ><b>The chain agrees.</b> Record {{ a.record }} of the pinned trail holds this checkpoint, read by your browser in {{ result(a.seq)!.ms }} ms.</template
+              <div v-if="result(a)" class="res" role="status">
+                <p class="verdict" :data-v="String(result(a)!.verdict)">
+                  <template v-if="result(a)!.verdict === true"
+                    ><b>The chain agrees.</b> Record {{ a.record }} of the pinned trail holds this checkpoint, read by your browser in {{ result(a)!.ms }} ms.</template
                   >
-                  <template v-else-if="result(a.seq)!.verdict === false"
-                    ><b>The chain disagrees.</b> {{ result(a.seq)!.problem ?? "What the explorer shows is not what record " + a.record + " holds." }}</template
+                  <template v-else-if="result(a)!.verdict === false"
+                    ><b>The chain disagrees.</b> {{ result(a)!.problem ?? "What the explorer shows is not what record " + a.record + " holds." }}</template
                   >
-                  <template v-else><b>Not checked.</b> {{ result(a.seq)!.problem }}</template>
+                  <template v-else><b>Not fully checked.</b> {{ result(a)!.problem }}</template>
                 </p>
-                <table v-if="result(a.seq)!.rows.length" class="x-tbl cmp">
+                <table v-if="result(a)!.rows.length" class="x-tbl cmp">
                   <thead>
                     <tr>
                       <th scope="col">Field</th>
@@ -214,7 +243,7 @@ const otherNetwork = computed(() => items.value.find((a) => a.network && PINNED.
                     </tr>
                   </thead>
                   <tbody>
-                    <tr v-for="r in result(a.seq)!.rows" :key="r.what" :data-c="r.c">
+                    <tr v-for="r in result(a)!.rows" :key="r.what" :data-c="r.c">
                       <th scope="row">{{ r.what }}</th>
                       <td class="mono" data-label="The explorer shows" :title="r.explorer ?? undefined">{{ r.explorer === null ? "–" : r.explorer.length > 24 ? shortHex(r.explorer, 10, 8) : r.explorer }}</td>
                       <td class="mono" data-label="The chain holds" :title="r.chain ?? undefined">{{ r.chain === null ? "–" : r.chain.length > 24 ? shortHex(r.chain, 10, 8) : r.chain }}</td>
@@ -281,13 +310,13 @@ const otherNetwork = computed(() => items.value.find((a) => a.network && PINNED.
 .cp[data-status="anchored"] .dot {
   border: 1.2px solid var(--fog-200);
 }
-.cp[data-status="checked"] .dot {
+.cp[data-check="agrees"] .dot {
   border: 0;
   background: var(--pass);
 }
-.cp[data-status="differs"] .dot,
-.cp[data-status="mismatch"] .dot,
-.cp[data-status="failed"] .dot {
+.cp[data-check="differs"] .dot,
+.cp[data-check="none"][data-status="mismatch"] .dot,
+.cp[data-check="none"][data-status="failed"] .dot {
   border: 1.4px solid var(--fail);
 }
 .body {
@@ -301,7 +330,8 @@ const otherNetwork = computed(() => items.value.find((a) => a.network && PINNED.
 }
 .top {
   display: flex;
-  gap: 12px;
+  flex-wrap: wrap;
+  gap: 8px 12px;
   align-items: center;
   margin: 0;
   font-size: 13px;
@@ -312,18 +342,30 @@ const otherNetwork = computed(() => items.value.find((a) => a.network && PINNED.
   border: 1px solid var(--hair-strong);
   color: var(--fog-200);
 }
-.st[data-status="checked"] {
+.chk {
+  padding: 1px 10px;
+  border-radius: var(--r-pill);
+  border: 1px solid var(--hair-strong);
+  color: var(--fog-200);
+}
+.chk[data-check="agrees"] {
   border-color: rgba(var(--rgb-aurora), 0.45);
   color: var(--pass);
 }
-.st[data-status="differs"],
+.chk[data-check="differs"] {
+  border-color: rgba(var(--rgb-nova), 0.55);
+  color: var(--fail);
+}
 .st[data-status="mismatch"],
 .st[data-status="failed"] {
   border-color: rgba(var(--rgb-nova), 0.55);
   color: var(--fail);
 }
+.src {
+  margin: 0 0 12px;
+}
 .win {
-  margin: 8px 0 14px;
+  margin: 8px 0 4px;
   font: 400 28px/1.1 var(--serif);
   color: var(--fog-50);
 }

@@ -23,15 +23,36 @@ export interface RecheckRow {
   c: Agreement;
 }
 
+/** The checkpoint as the record on the chain holds it, read by the browser. */
+export interface ChainCheckpoint {
+  fromMilestone: number | null;
+  toMilestone: number | null;
+  msRoot: string | null;
+  msgCount: number | null;
+  checkpointHash: string;
+  addedBy: string | null;
+}
+
 export interface Recheck {
-  /** true: every comparable field agrees; false: one differs; null: the chain could not be read. */
+  /** The checkpoint (the very object the explorer listed) this result is about. */
+  for: AnchorCheckpoint;
+  /**
+   * true: hash, window, root and message count are all the same and nothing differs or
+   * went unanswered; false: something differs, or the record is missing; null: the chain
+   * could not be read, or not every field could be compared ("not fully checked").
+   */
   verdict: boolean | null;
   rows: RecheckRow[];
+  /** What the record on the chain holds, once read. */
+  chain: ChainCheckpoint | null;
   /** Why the chain could not be read, or why the explorer's own document is off. */
   problem: string | null;
   record: number | null;
   ms: number;
 }
+
+/** The rows that must all agree before a checkpoint counts as checked. */
+export const REQUIRED_ROWS = ["Checkpoint hash", "Milestones", "Milestone root", "Messages committed"] as const;
 
 type Pins = Pick<PinnedConfig, "rebasedRpc" | "trailId" | "auditTrailPackage" | "anchorWriter">;
 
@@ -67,7 +88,13 @@ export function selfConsistent(a: AnchorCheckpoint): boolean | null {
 export async function recheckAnchor(a: AnchorCheckpoint, pins: Pins, options: { fetch?: typeof fetch; now?: () => number } = {}): Promise<Recheck> {
   const now = options.now ?? (() => performance.now());
   const t0 = now();
-  const done = (r: Omit<Recheck, "ms" | "record">): Recheck => ({ ...r, record: a.record, ms: Math.round(now() - t0) });
+  const done = (r: Omit<Recheck, "ms" | "record" | "for" | "chain">, chain: ChainCheckpoint | null = null): Recheck => ({
+    ...r,
+    for: a,
+    chain,
+    record: a.record,
+    ms: Math.round(now() - t0),
+  });
   if (!pins.rebasedRpc || !pins.trailId || !pins.auditTrailPackage) {
     return done({ verdict: null, rows: [], problem: "This console pins no Rebased RPC, Audit Trail or package, so it cannot read the chain." });
   }
@@ -97,6 +124,22 @@ export async function recheckAnchor(a: AnchorCheckpoint, pins: Pins, options: { 
   ];
   // the expected writer comes from this console's pins, not from the explorer
   if (pins.anchorWriter) rows.push(row("Writer, as pinned here", pins.anchorWriter, rec.addedBy, lowerHex));
-  const verdict = rows.some((r) => r.c === "differs") ? false : rows.some((r) => r.c === "same") ? true : null;
-  return done({ verdict, rows, problem: null });
+  const required = rows.filter((r) => (REQUIRED_ROWS as readonly string[]).includes(r.what));
+  const verdict = rows.some((r) => r.c === "differs")
+    ? false
+    : required.length === REQUIRED_ROWS.length && rows.every((r) => r.c === "same")
+      ? true
+      : null;
+  const num = (v: unknown) => (typeof v === "number" && Number.isFinite(v) ? v : null);
+  const chain: ChainCheckpoint = {
+    fromMilestone: num(field(cp, "from", "index")),
+    toMilestone: num(field(cp, "to", "index")),
+    msRoot: lowerHex(field(cp, "msRoot")),
+    msgCount: num(field(cp, "msgCount")),
+    checkpointHash: rec.checkpointHash,
+    addedBy: lowerHex(rec.addedBy),
+  };
+  const problem =
+    verdict === null ? `Not fully checked: ${rows.filter((r) => r.c === "unknown").map((r) => r.what.toLowerCase()).join(", ")} could not be compared.` : null;
+  return done({ verdict, rows, problem }, chain);
 }

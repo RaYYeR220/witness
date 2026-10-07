@@ -102,6 +102,27 @@ describe("recheckAnchor", () => {
     expect(r.rows.find((x) => x.what === "Writer, as pinned here")!.c).toBe("differs");
   });
 
+  it("is green only when hash, window, root and message count are all the same", async () => {
+    // the explorer does not state a message count: the field cannot be compared
+    const noCount = await recheckAnchor(row({ checkpoint: { ...CP, msgCount: undefined } }), PINS, { fetch: rpc().f });
+    expect(noCount.verdict).toBeNull();
+    expect(noCount.rows.find((x) => x.what === "Messages committed")!.c).toBe("unknown");
+    expect(noCount.problem).toContain("Not fully checked");
+    // no hash stated either: still not green
+    const noHash = await recheckAnchor(row({ checkpointHash: null }), PINS, { fetch: rpc().f });
+    expect(noHash.verdict).toBeNull();
+    // the chain's own values are kept, for the screen to show
+    const ok = await recheckAnchor(row(), PINS, { fetch: rpc().f });
+    expect(ok.chain).toEqual({
+      fromMilestone: CP.from.index,
+      toMilestone: CP.to.index,
+      msRoot: CP.msRoot,
+      msgCount: CP.msgCount,
+      checkpointHash: HASH,
+      addedBy: WRITER,
+    });
+  });
+
   it("says a missing record is missing, and an unreadable chain unread", async () => {
     const missing = await recheckAnchor(row(), PINS, { fetch: rpc({ missing: true }).f });
     expect(missing.verdict).toBe(false);
@@ -138,10 +159,13 @@ describe("Anchors screen", () => {
     expect(tx.attributes("href")).toBe("https://explorer.iota.org/txblock/8L3KZB5SN8Dd7UTorJ6sUqC3DFyuatJ6WPvuSQZummtu?network=testnet");
     // until the browser has read the chain, it is the explorer's word, and not green
     expect(w.find(".st").text()).toBe("Anchored, per the explorer");
-    expect(w.find('[data-status="checked"]').exists()).toBe(false);
+    expect(w.find(".chk").exists()).toBe(false);
+    expect(w.find(".cp").attributes("data-check")).toBe("none");
     await w.find(".re .btn").trigger("click");
     await until(() => w.find(".res .verdict").exists());
-    expect(w.find(".st").text()).toBe("Checked on IOTA Rebased in your browser");
+    expect(w.find(".chk").text()).toBe("Checked on IOTA Rebased in your browser");
+    expect(w.find(".cp").attributes("data-check")).toBe("agrees");
+    expect(w.find(".src").text()).toContain("As the record on IOTA Rebased holds it");
     expect(w.find(".res .verdict").attributes("data-v")).toBe("true");
     expect(w.find(".res .verdict").text()).toContain("The chain agrees");
     expect(w.findAll(".res tbody tr").every((r) => r.attributes("data-c") === "same")).toBe(true);
@@ -152,6 +176,38 @@ describe("Anchors screen", () => {
     w.unmount();
   });
 
+  it("never takes the browser's words from the API: a status of \"checked\" is a status it does not know", async () => {
+    vi.stubGlobal("fetch", rpc().f);
+    const { w } = await mountScreen(AnchorsView, { path: "/anchors", data: data([row({ status: "checked" }), row({ status: "agrees" })]) });
+    await until(() => w.findAll(".cp").length === 2);
+    for (const cp of w.findAll(".cp")) {
+      expect(cp.attributes("data-status")).toBe("other");
+      expect(cp.attributes("data-check")).toBe("none");
+      expect(cp.find(".st").text()).toBe("A status this console does not know");
+      expect(cp.find(".chk").exists()).toBe(false);
+    }
+    w.unmount();
+  });
+
+  it("keeps each re-check with its own checkpoint, even when two rows claim one seq", async () => {
+    vi.stubGlobal("fetch", rpc().f);
+    const good = row({ seq: 7 });
+    const liar = row({ seq: 7, msRoot: "0x" + "ee".repeat(32) });
+    const { w } = await mountScreen(AnchorsView, { path: "/anchors", data: data([liar, good]) });
+    await until(() => w.findAll(".cp").length === 2);
+    // re-check the honest one: the liar with the same seq must not turn green
+    await w.findAll(".cp")[1]!.find(".re .btn").trigger("click");
+    await until(() => w.findAll(".cp")[1]!.find(".res .verdict").exists());
+    expect(w.findAll(".cp")[1]!.attributes("data-check")).toBe("agrees");
+    expect(w.findAll(".cp")[0]!.attributes("data-check")).toBe("none");
+    expect(w.findAll(".cp")[0]!.find(".res").exists()).toBe(false);
+    await w.findAll(".cp")[0]!.find(".re .btn").trigger("click");
+    await until(() => w.findAll(".cp")[0]!.find(".res .verdict").exists());
+    expect(w.findAll(".cp")[0]!.attributes("data-check")).toBe("differs");
+    expect(w.findAll(".cp")[1]!.attributes("data-check")).toBe("agrees");
+    w.unmount();
+  });
+
   it("turns a checkpoint the chain contradicts red", async () => {
     vi.stubGlobal("fetch", rpc().f);
     const { w } = await mountScreen(AnchorsView, { path: "/anchors", data: data([row({ msRoot: "0x" + "ee".repeat(32) })]) });
@@ -159,7 +215,7 @@ describe("Anchors screen", () => {
     await w.find(".re .btn").trigger("click");
     await until(() => w.find(".res .verdict").exists());
     expect(w.find(".res .verdict").attributes("data-v")).toBe("false");
-    expect(w.find(".st").text()).toBe("Does not match the chain");
+    expect(w.find(".chk").text()).toBe("Does not match the chain");
     expect(w.find('.res tr[data-c="differs"]').text()).toContain("Milestone root");
     w.unmount();
   });
