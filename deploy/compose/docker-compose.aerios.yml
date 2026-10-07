@@ -4,7 +4,7 @@ name: witness-aerios
 # Trust Manager can reach the messages relay and HORNET.
 #
 # Host ports are published on the loopback interfaces only, IPv4 and IPv6 (`localhost`
-# resolves to ::1 first on some hosts). Mosquitto needs secrets/mosquitto/passwd: run
+# resolves to ::1 first on some hosts). Mosquitto and Postgres read files from secrets/: run
 # deploy/compose/setup-secrets.sh first (stack-up.sh does).
 services:
   mongo-db:
@@ -57,8 +57,19 @@ services:
     image: postgres:16-alpine
     container_name: witness-postgres
     restart: unless-stopped
+    # The owner's password is set when the database is first created, from
+    # secrets/postgres/postgres.password (setup-secrets.sh: random on a fresh setup; a stack
+    # created earlier keeps the password it was created with, WITNESS_PG_PASSWORD=witness).
     environment:
-      POSTGRES_PASSWORD: witness
+      POSTGRES_PASSWORD_FILE: /run/witness/postgres.password
+    group_add: ["${WITNESS_SECRETS_GID:-0}"]
+    volumes:
+      - type: bind
+        source: ${WITNESS_SECRETS_DIR:-../../secrets}/postgres/postgres.password
+        target: /run/witness/postgres.password
+        read_only: true
+        bind:
+          create_host_path: false
     ports:
       - "127.0.0.1:5432:5432"
       - "[::1]:5432:5432"

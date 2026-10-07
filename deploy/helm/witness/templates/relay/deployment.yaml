@@ -32,7 +32,7 @@ spec:
             - secretRef:
                 name: {{ required "relay.secrets.env is required" .Values.relay.secrets.env }}
           env:
-            {{- include "witness.databaseEnv" (dict "ctx" . "name" "RELAY_DB_URL") | nindent 12 }}
+            {{- include "witness.databaseEnv" (dict "ctx" . "name" "RELAY_DB_URL" "values" .Values.relay) | nindent 12 }}
             - name: RELAY_DB_SCHEMA
               value: relay
             - name: RELAY_HOST

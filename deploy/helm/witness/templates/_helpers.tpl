@@ -121,12 +121,14 @@ Volume with the writer policy, mounted at /etc/witness.
 {{- end }}
 
 {{/*
-The database DSN as an environment variable: (dict "ctx" $ "name" "WITNESS_DB").
+The database DSN as an environment variable: (dict "ctx" $ "name" "WITNESS_DB" "values" .Values.api).
+A component's own database.existingSecret / database.key win over the chart-wide ones.
 */}}
 {{- define "witness.databaseEnv" -}}
+{{- $own := .values.database | default (dict) }}
 - name: {{ .name }}
   valueFrom:
     secretKeyRef:
-      name: {{ required "database.existingSecret is required" .ctx.Values.database.existingSecret }}
-      key: {{ .ctx.Values.database.key }}
+      name: {{ $own.existingSecret | default .ctx.Values.database.existingSecret | required "database.existingSecret is required" }}
+      key: {{ $own.key | default .ctx.Values.database.key }}
 {{- end }}

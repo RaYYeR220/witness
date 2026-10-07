@@ -6,6 +6,9 @@ for a producer envelope *before* it is sent, so a replayed or concurrent duplica
 loses atomically. A claim is released (compare-and-set) when nothing reached the node.
 `last_block_id` / `last_block_seq` point at the issuer's newest block on the Tangle and
 feed the next relay envelope's `prev`; they only ever move to a strictly newer seq.
+
+The relay can run as a role that owns only its schema (deploy/compose/db-init.sql): a schema
+that exists is used as it is, so the role needs no CREATE privilege on the database.
 """
 
 from __future__ import annotations
@@ -18,7 +21,6 @@ from psycopg.rows import dict_row
 from psycopg_pool import AsyncConnectionPool
 
 _DDL = """
-CREATE SCHEMA IF NOT EXISTS {s};
 CREATE TABLE IF NOT EXISTS {s}.issuer_seq (
     iss            text PRIMARY KEY,
     seq            bigint NOT NULL,
@@ -77,7 +79,11 @@ class ReceiptStore:
         )
         await pool.open(wait=True, timeout=15)
         store = cls(pool, schema)
-        await store.migrate()
+        try:
+            await store.migrate()
+        except BaseException:
+            await pool.close()
+            raise
         return store
 
     async def close(self) -> None:
@@ -92,6 +98,13 @@ class ReceiptStore:
             await conn.execute(
                 "SELECT pg_advisory_xact_lock(hashtext(%s))", ("witness-relay:" + self._schema,)
             )
+            # CREATE SCHEMA IF NOT EXISTS checks the database privilege even when the schema
+            # exists, so only create a missing one.
+            cur = await conn.execute(
+                "SELECT 1 FROM pg_namespace WHERE nspname = %s", (self._schema,)
+            )
+            if await cur.fetchone() is None:
+                await conn.execute(self._q("CREATE SCHEMA {s}"))
             await conn.execute(self._q(_DDL))
 
     async def ping(self) -> bool:

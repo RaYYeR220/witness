@@ -51,7 +51,7 @@ spec:
             - secretRef:
                 name: {{ required "indexer.secrets.env is required" .Values.indexer.secrets.env }}
           env:
-            {{- include "witness.databaseEnv" (dict "ctx" . "name" "WITNESS_DB") | nindent 12 }}
+            {{- include "witness.databaseEnv" (dict "ctx" . "name" "WITNESS_DB" "values" .Values.indexer) | nindent 12 }}
             - name: WITNESS_REBASED_NETWORK
               value: {{ .Values.rebased.network | quote }}
           # No HTTP port. Ready while the database answers and the newest indexed milestone is

@@ -6,6 +6,10 @@
 #   deploy/compose/setup-secrets.sh        # WITNESS_SECRETS_DIR overrides <repo>/secrets
 #
 # Creates, when missing:
+#   postgres/postgres.password                    database owner's password: WITNESS_PG_PASSWORD if
+#                                                 set, else the one an existing witness-postgres
+#                                                 container was created with, else random
+#   postgres/relay.password                       the relay's own database login (random)
 #   mosquitto/{relay,indexer,observer}.password   broker passwords (random)
 #   tokens/{ingest,report,posture,anchor-admin}.token
 #   relay/search.key                              blind-index key for sealed tags (random)
@@ -13,7 +17,8 @@
 #   mosquitto/passwd                              hashed broker passwords (when a password changed)
 #   relay/sig-1.pem                               relay signing key as PKCS#8 (from sig-1.jwk.json)
 #   relay/recipients.json                         public X25519 key of the domain (from deploy/identity)
-#   compose/{relay,indexer,api,anchor}.env        credentials each container gets, nothing more
+#   postgres/{explorer,relay}.dsn                 database URLs (for Kubernetes Secrets)
+#   compose/{relay,indexer,api,anchor,db-init}.env  credentials each container gets, nothing more
 #
 # Component signing keys (<component>/sig-1.jwk.json) come from anchor/scripts/bootstrap-identities.ts.
 # Helper containers (the broker image for hashing, python:3.12-slim for the rest) only compute
@@ -31,6 +36,7 @@ root="$(cd "$here/../.." && pwd)"
 from_env_file() { [ -f "$here/.env" ] && sed -n "s/^$1=//p" "$here/.env" | tail -n 1 | tr -d '\r'; true; }
 : "${WITNESS_SECRETS_DIR:=$(from_env_file WITNESS_SECRETS_DIR)}"
 : "${WITNESS_REBASED_NETWORK:=$(from_env_file WITNESS_REBASED_NETWORK)}"
+: "${WITNESS_PG_PASSWORD:=$(from_env_file WITNESS_PG_PASSWORD)}"
 secrets="${WITNESS_SECRETS_DIR:-$root/secrets}"
 case "$secrets" in
   /* | [A-Za-z]:*) ;;
@@ -41,7 +47,7 @@ export MSYS_NO_PATHCONV=1
 native() { (cd "$1" && { pwd -W 2>/dev/null || pwd; }); }
 
 umask 077
-mkdir -p "$secrets/mosquitto" "$secrets/tokens" "$secrets/compose" "$secrets/relay"
+mkdir -p "$secrets/mosquitto" "$secrets/tokens" "$secrets/compose" "$secrets/relay" "$secrets/postgres"
 secrets_n="$(native "$secrets")"
 identity_n="$(native "$root/deploy/identity")"
 
@@ -56,6 +62,25 @@ keep_random() {
 
 for user in relay indexer observer; do keep_random "$secrets/mosquitto/$user.password"; done
 for token in ingest report posture anchor-admin; do keep_random "$secrets/tokens/$token.token"; done
+keep_random "$secrets/postgres/relay.password"
+
+# The database owner's password is fixed when the database is first created. A base stack
+# created before this file existed was created with POSTGRES_PASSWORD in its environment:
+# keep using that one (or WITNESS_PG_PASSWORD, if set).
+if [ ! -s "$secrets/postgres/postgres.password" ]; then
+  if [ -n "${WITNESS_PG_PASSWORD:-}" ]; then
+    printf '%s' "$WITNESS_PG_PASSWORD" >"$secrets/postgres/postgres.password"
+    echo "created postgres/postgres.password (from WITNESS_PG_PASSWORD)"
+  elif docker inspect witness-postgres >/dev/null 2>&1 \
+      && docker inspect --format '{{range .Config.Env}}{{println .}}{{end}}' witness-postgres \
+         | grep -q '^POSTGRES_PASSWORD='; then
+    docker inspect --format '{{range .Config.Env}}{{println .}}{{end}}' witness-postgres \
+      | sed -n 's/^POSTGRES_PASSWORD=//p' | tr -d '\n' >"$secrets/postgres/postgres.password"
+    echo "created postgres/postgres.password (from the existing witness-postgres container)"
+  else
+    keep_random "$secrets/postgres/postgres.password"
+  fi
+fi
 
 # The broker's hashed password file, rebuilt when a password is newer than it. The plain
 # passwords travel on stdin, never on a command line.
@@ -87,6 +112,7 @@ import secrets
 import sys
 import tarfile
 import time
+from urllib.parse import quote
 
 S = "/s"
 network = os.environ["WITNESS_REBASED_NETWORK"]
@@ -152,21 +178,45 @@ emit("relay/recipients.json", json.dumps([{**kex["publicKeyJwk"], "kid": kex["ki
 
 anchor = jwk("anchor")
 mqtt = "mqtt://{user}:{password}@witness-mosquitto:1883"
+
+
+def dsn(user, password):
+    return f"postgresql://{quote(user, safe='')}:{quote(password, safe='')}@witness-postgres:5432/postgres"
+
+
+pg_owner = read("postgres/postgres.password")
+pg_relay = read("postgres/relay.password")
+# The explorer (indexer, API) uses the database owner; the relay has a login of its own that
+# owns only the relay schema (deploy/compose/db-init.sql creates it).
+explorer_dsn, relay_dsn = dsn("postgres", pg_owner), dsn("witness_relay", pg_relay)
+emit("postgres/explorer.dsn", explorer_dsn, "wrote")
+emit("postgres/relay.dsn", relay_dsn, "wrote")
 env = {
     "relay": {
+        "RELAY_DB_URL": relay_dsn,
         "RELAY_MQTT_URL": mqtt.format(user="relay", password=read("mosquitto/relay.password")),
         "RELAY_EXPLORER_TOKEN": read("tokens/ingest.token"),
     },
     "indexer": {
+        "WITNESS_DB": explorer_dsn,
         "WITNESS_MQTT": mqtt.format(user="indexer", password=read("mosquitto/indexer.password")),
     },
     "api": {
+        "WITNESS_DB": explorer_dsn,
         "WITNESS_INGEST_TOKEN": read("tokens/ingest.token"),
         "WITNESS_REPORT_TOKEN": read("tokens/report.token"),
         "WITNESS_POSTURE_TOKEN": read("tokens/posture.token"),
     },
     "anchor": {
         "ANCHOR_ADMIN_TOKEN": read("tokens/anchor-admin.token"),
+    },
+    "db-init": {
+        "PGHOST": "witness-postgres",
+        "PGPORT": "5432",
+        "PGDATABASE": "postgres",
+        "PGUSER": "postgres",
+        "PGPASSWORD": pg_owner,
+        "RELAY_DB_PASSWORD": pg_relay,
     },
 }
 if relay is not None:
@@ -183,10 +233,11 @@ PY
 
 # Group access for the containers (see the header).
 gid="$(id -g)"
-for d in "" relay mosquitto domain anchor trust-manager; do
+for d in "" relay mosquitto postgres domain anchor trust-manager; do
   if [ -d "$secrets/$d" ]; then chmod 0750 "$secrets/$d"; fi
 done
 for f in relay/sig-1.pem relay/recipients.json relay/search.key mosquitto/passwd \
+         postgres/postgres.password \
          domain/sig-1.jwk.json anchor/sig-1.jwk.json trust-manager/sig-1.jwk.json; do
   if [ -f "$secrets/$f" ]; then
     chgrp "$gid" "$secrets/$f" 2>/dev/null || true

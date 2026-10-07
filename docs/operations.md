@@ -39,7 +39,7 @@ shows up within a minute or two.
 | Orion-LD | 1026 |
 | Mongo | 27017 |
 | Trust Manager | 3100 (container 3000) |
-| Postgres (`witness-postgres`, password `witness`) | 5432 |
+| Postgres (`witness-postgres`; owner password in `secrets/postgres/postgres.password`) | 5432 |
 | Mosquitto (`witness-mosquitto`, logins only) | 1883 MQTT, 9001 websockets |
 | Witness console (overlay) | 8080 |
 | Witness API (overlay; also `:14265/api/witness/v1`) | 7200 |
@@ -318,14 +318,23 @@ docker compose -f deploy/compose/docker-compose.witness.yml up -d --build
   Infrastructure Elements and write Orion's `trustScore`, and the stock one writes
   unsigned `trust.score` that the writer policy rejects. `stack-up.sh --witness` leaves
   the stock one stopped; the stock one stays defined in `docker-compose.aerios.yml`.
-- **Secrets.** `setup-secrets.sh` writes, into `secrets/` (gitignored): broker passwords and
-  the hashed password file, service tokens, the relay key as PEM, the relay's search key
-  and recipients, and one env file per service (`secrets/compose/*.env`) holding only that
-  service's credentials. Existing values are kept. Component keys
+- **Secrets.** `setup-secrets.sh` writes, into `secrets/` (gitignored): database and broker
+  passwords, the broker's hashed password file, service tokens, the relay key as PEM, the
+  relay's search key and recipients, and one env file per service (`secrets/compose/*.env`)
+  holding only that service's credentials, database URL included. Existing values are kept. Component keys
   (`secrets/<component>/sig-1.jwk.json`) come from `anchor/scripts/bootstrap-identities.ts`.
   Each container gets read-only mounts of the files it needs and nothing else; images hold
   no key material. The anchor mounts only the IOTA keystore file (`WITNESS_IOTA_KEYSTORE`),
   never the directory around it.
+- **Database.** No password is committed. A fresh setup gets a random owner password
+  (`secrets/postgres/postgres.password`, read by Postgres when it first creates the
+  database). A base stack created before that keeps the password it was created with:
+  `setup-secrets.sh` takes it from `WITNESS_PG_PASSWORD` in `.env` (`witness` for the old
+  local stack) or from the existing container. The indexer and the API use the owner login;
+  the relay has its own, `witness_relay`, which owns the `relay` schema and nothing else (no
+  CREATE on the database, no access to the explorer's schema). The one-shot
+  `witness-db-init` service creates or updates it (`deploy/compose/db-init.sql`) before the
+  relay starts.
 - **Mosquitto.** No anonymous clients. `relay` may write `aerios/iota/submissions/#`,
   `indexer` may read it and write `witness/alerts/#`, `observer` may read both
   (`deploy/compose/mosquitto.acl`). The legacy messages API does not use MQTT.
@@ -359,7 +368,10 @@ HORNET REST/INX endpoints under `iota.hornet`, and secrets only by reference to 
 that exist before the release:
 
 ```bash
-kubectl create secret generic witness-db --from-literal=dsn=postgresql://...
+# Database URLs: postgres/*.dsn from setup-secrets.sh, edited for the cluster's database host.
+# Create the relay's role there first: RELAY_DB_PASSWORD=... psql -f deploy/compose/db-init.sql
+kubectl create secret generic witness-db --from-file=dsn=secrets/postgres/explorer.dsn
+kubectl create secret generic witness-relay-db --from-file=dsn=secrets/postgres/relay.dsn
 kubectl create secret generic witness-relay-env --from-env-file=secrets/compose/relay.env
 kubectl create secret generic witness-relay-keys --from-file=secrets/relay/sig-1.pem \
   --from-file=secrets/relay/recipients.json --from-file=secrets/relay/search.key
@@ -374,8 +386,10 @@ kubectl create configmap witness-policy --from-file=policy.json=deploy/policy.js
 helm install witness deploy/helm/witness --set anchor.loop=true --set anchor.address=0x...
 ```
 
-The broker URLs inside the env files name `witness-mosquitto`; point them at the
-cluster's broker. Images are built from the Dockerfiles above and pushed to your
+Values from files, never from the command line (`--from-literal` leaves passwords in the
+shell history and the process list). The broker URLs inside the env files name
+`witness-mosquitto`; point them at the cluster's broker. The database URL in the env files is
+overridden by the chart's database Secrets. Images are built from the Dockerfiles above and pushed to your
 registry (`<component>.image.repository`); CI builds them but publishes nothing.
 
 ## Troubleshooting

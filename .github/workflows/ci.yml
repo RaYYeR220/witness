@@ -64,7 +64,7 @@ jobs:
         run: |
           secrets="$(mktemp -d)"
           mkdir -p "$secrets/compose"
-          for f in relay indexer api anchor; do : > "$secrets/compose/$f.env"; done
+          for f in relay indexer api anchor db-init; do : > "$secrets/compose/$f.env"; done
           export WITNESS_SECRETS_DIR="$secrets" WITNESS_IOTA_KEYSTORE=/dev/null WITNESS_ANCHOR_ADDRESS=0x1
           for f in docker-compose.aerios.yml docker-compose.witness.yml messages-api.yml inx-poi.yml; do
             docker compose -f "deploy/compose/$f" config --quiet

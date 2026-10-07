@@ -34,7 +34,7 @@ spec:
             - secretRef:
                 name: {{ required "api.secrets.env is required" .Values.api.secrets.env }}
           env:
-            {{- include "witness.databaseEnv" (dict "ctx" . "name" "WITNESS_DB") | nindent 12 }}
+            {{- include "witness.databaseEnv" (dict "ctx" . "name" "WITNESS_DB" "values" .Values.api) | nindent 12 }}
             - name: WITNESS_SCHEMA
               value: witness
             - name: WITNESS_HOST

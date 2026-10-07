@@ -31,9 +31,27 @@ x-service: &service
     driver: json-file
     options: {max-size: "10m", max-file: "3"}
 
-x-database: &database postgresql://postgres:witness@witness-postgres:5432/postgres
-
 services:
+  # Creates the relay's own database login (owner of the relay schema only), idempotently,
+  # before the relay starts; deploy/compose/db-init.sql. Credentials: secrets/compose/db-init.env.
+  witness-db-init:
+    <<: *service
+    image: postgres:16-alpine@sha256:721873c34ceb9f8d8fc265984940dc982404c105f19ad51be9fdc5970a6080ea
+    container_name: witness-db-init
+    restart: "no"
+    user: "70:70"
+    mem_limit: 64m
+    env_file:
+      - ${WITNESS_SECRETS_DIR:-../../secrets}/compose/db-init.env
+    volumes:
+      - ./db-init.sql:/etc/witness/db-init.sql:ro
+    entrypoint:
+      - /bin/sh
+      - -c
+      - >-
+        for i in $$(seq 1 60); do pg_isready -q && break; sleep 2; done;
+        exec psql -q -f /etc/witness/db-init.sql
+
   witness-relay:
     <<: *service
     build:
@@ -49,7 +67,7 @@ services:
       RELAY_ALLOWED_NODES: '{"iota-hornet": "http://iota-hornet:14265"}'
       RELAY_KEY_PATH: /run/witness/relay/sig-1.pem
       RELAY_POLICY_PATH: /etc/witness/policy.json
-      RELAY_DB_URL: *database
+      # RELAY_DB_URL (the relay's own login) comes from relay.env.
       RELAY_DB_SCHEMA: relay
       # did:iota producer keys are resolved by the anchor service.
       RELAY_RESOLVER_URL: http://witness-anchor:7300
@@ -68,6 +86,8 @@ services:
     ports:
       - "127.0.0.1:${WITNESS_RELAY_PORT:-5557}:5555"
       - "[::1]:${WITNESS_RELAY_PORT:-5557}:5555"
+    depends_on:
+      witness-db-init: {condition: service_completed_successfully}
 
   witness-api:
     <<: *service
@@ -81,7 +101,7 @@ services:
     env_file:
       - ${WITNESS_SECRETS_DIR:-../../secrets}/compose/api.env
     environment:
-      WITNESS_DB: *database
+      # WITNESS_DB comes from api.env.
       WITNESS_SCHEMA: witness
       WITNESS_HOST: 0.0.0.0
       WITNESS_PORT: "7200"
@@ -174,10 +194,10 @@ services:
     mem_limit: 768m
     stop_grace_period: 30s
     env_file:
-      # WITNESS_MQTT (submissions, and incident alerts on the same broker) and WITNESS_ANCHOR_DID.
+      # WITNESS_DB, WITNESS_MQTT (submissions, and incident alerts on the same broker) and
+      # WITNESS_ANCHOR_DID.
       - ${WITNESS_SECRETS_DIR:-../../secrets}/compose/indexer.env
     environment:
-      WITNESS_DB: *database
       WITNESS_REBASED_NETWORK: ${WITNESS_REBASED_NETWORK:-testnet}
     command:
       - --source=inx

@@ -395,6 +395,39 @@ async def test_chain_head_never_moves_back(make_cfg, ids):
         await store.close()
 
 
+async def test_runs_as_a_role_that_owns_only_its_schema(make_cfg):
+    # deploy/compose/db-init.sql gives the relay a role that owns its schema and nothing else:
+    # no CREATE on the database, so the store must not try to create a schema that exists.
+    import secrets as pysecrets
+
+    import psycopg
+    from psycopg import sql
+    from psycopg.conninfo import make_conninfo
+
+    cfg = make_cfg()
+    role, password = f"relay_{pysecrets.token_hex(6)}", pysecrets.token_urlsafe(16)
+    with psycopg.connect(cfg.db_url, autocommit=True) as admin:
+        admin.execute(sql.SQL("CREATE ROLE {} LOGIN PASSWORD {}").format(
+            sql.Identifier(role), sql.Literal(password)))
+        admin.execute(sql.SQL("CREATE SCHEMA {} AUTHORIZATION {}").format(
+            sql.Identifier(cfg.db_schema), sql.Identifier(role)))
+    try:
+        dsn = make_conninfo(cfg.db_url, user=role, password=password)
+        store = await ReceiptStore.open(dsn, cfg.db_schema)
+        try:
+            assert await store.reserve("did:example:a", 1) == -1
+            await store.migrate()  # a second start finds everything in place
+        finally:
+            await store.close()
+        with pytest.raises(psycopg.errors.InsufficientPrivilege):
+            await ReceiptStore.open(dsn, cfg.db_schema + "_other")
+    finally:
+        with psycopg.connect(cfg.db_url, autocommit=True) as admin:
+            admin.execute(sql.SQL("DROP SCHEMA IF EXISTS {} CASCADE").format(
+                sql.Identifier(cfg.db_schema)))
+            admin.execute(sql.SQL("DROP ROLE IF EXISTS {}").format(sql.Identifier(role)))
+
+
 async def test_plaintext_envelope_on_encrypt_tag_refused(make_cfg, hornet, relay, ids):
     cfg = make_cfg(encrypt_tags=["trust.score"])
     plain = _seal(ids.producer, seq=1)

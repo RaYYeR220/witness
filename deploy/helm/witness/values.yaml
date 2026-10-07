@@ -44,6 +44,8 @@ orion:
   url: http://orion-ld-broker:1026
 
 # PostgreSQL holding the explorer's database (schema witness) and the relay's (schema relay).
+# The chart-wide Secret holds the DSN the indexer and the API use; a component's own
+# `database.existingSecret` / `database.key` win over it (the relay has its own login).
 database:
   # Existing Secret with the DSN, e.g. postgresql://user:password@host:5432/db.
   existingSecret: witness-db
@@ -83,6 +85,11 @@ relay:
     port: 5555
   # Tags the relay seals (encrypts to the domain key), comma-separated.
   encryptTags: ""
+  # The relay's own login, owner of the relay schema only (deploy/compose/db-init.sql creates
+  # it; secrets/postgres/relay.dsn). Empty existingSecret: the chart-wide database Secret.
+  database:
+    existingSecret: witness-relay-db
+    key: dsn
   secrets:
     # Env Secret: RELAY_DID, RELAY_KID, RELAY_MQTT_URL (with the relay's broker login),
     # RELAY_EXPLORER_TOKEN (secrets/compose/relay.env).
@@ -119,6 +126,8 @@ api:
   nodeRoute: witness/v1
   # Host HORNET proxies to (default: this chart's API service).
   routeHost: ""
+  # Empty: the chart-wide database Secret.
+  database: {existingSecret: "", key: ""}
   # Optional bearer token for POST /messages/{id}/verify, from secrets.env (WITNESS_VERIFY_TOKEN).
   secrets:
     # Env Secret: WITNESS_INGEST_TOKEN, WITNESS_REPORT_TOKEN, WITNESS_POSTURE_TOKEN
@@ -151,6 +160,8 @@ indexer:
   imagePullSecrets: []
   # Validate every submitted block against the node (the API does not).
   validate: true
+  # Empty: the chart-wide database Secret.
+  database: {existingSecret: "", key: ""}
   extraArgs: []
   secrets:
     # Env Secret: WITNESS_MQTT (submissions and incident alerts, with the indexer's broker
