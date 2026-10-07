@@ -293,6 +293,34 @@ async def test_orion_unreachable_no_drift(client, store, vectors, settings):
     assert j["orion"]["status"] == "not_configured" and j["drift"] is None
 
 
+async def test_ledger_score_is_the_latest_proven_one(client, store, vectors):
+    """A score taken out of evidence (SHADOW, UNSIGNED) or not producer-signed is listed, but
+    the ledger value drift is measured against is the latest proven one."""
+    await seed_lineage(store, vectors)  # 0.91 legacy at ms 370; signed 0.80 (380), 0.42 (381)
+    history = {r["score"]: bytes(r["block_id"]) for r in await store.score_history(IE)}
+    await store.put_alert(Alert("SHADOW", "high", history[0.42], IE,
+                                {"reason": "written around the relay"}, MS371_TS * 1000 + 70_000))
+    await put_signed(store, sealed_score({"id": IE, "score": 0.10}, seq=3), ms_index=382,
+                     ts=MS371_TS + 70, verdict=verdicts.RELAY_ATTESTED)
+    await put_signed(store, sealed_score({"id": IE, "score": 0.05}, seq=4), ms_index=383,
+                     ts=MS371_TS + 75, verdict=verdicts.UNSIGNED_LEGACY)
+    with respx.mock() as mock:
+        mock.get(ORION_ENTITY).respond(200, json={"id": "x", "trustScore": 0.42})
+        j = (await client.get(f"/ie/{IE}/lineage")).json()
+    assert [e["score"] for e in j["entries"]] == [0.91, 0.80, 0.42, 0.10, 0.05]
+    assert j["ledger"]["score"] == 0.80 and j["ledger"]["msIndex"] == 380
+    # Orion carries the shadow write's 0.42: that drifts from the proven 0.80
+    assert j["orion"]["value"] == 0.42 and j["drift"] is True
+
+    # an UNSIGNED alert takes a block out of evidence the same way; nothing proven is left
+    await store.put_alert(Alert("UNSIGNED", "medium", history[0.80], IE, {"reason": "policy"},
+                                MS371_TS * 1000 + 80_000))
+    with respx.mock() as mock:
+        mock.get(ORION_ENTITY).respond(200, json={"id": "x", "trustScore": 0.42})
+        j = (await client.get(f"/ie/{IE}/lineage")).json()
+    assert j["ledger"] is None and j["drift"] is None
+
+
 # -- flows, incidents, alerts, anchors ----------------------------------------------------------
 
 async def test_flows_and_incidents(client, store, vectors):

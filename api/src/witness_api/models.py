@@ -263,7 +263,8 @@ class Lineage(ApiModel):
     ie_id: str
     entries: list[LineageEntry] = Field(description="Newest `limit` entries, oldest first")
     total: int = Field(description="Entries in the whole lineage")
-    ledger: LedgerScore | None = Field(description="Latest score the ledger vouches for")
+    ledger: LedgerScore | None = Field(description="Latest proven score: PRODUCER_SIGNED, "
+                                       "with no UNSIGNED or SHADOW alert on its block")
     orion: OrionState
     drift: bool | None = Field(description="Orion differs from the ledger by more than "
                                "`epsilon`; null when Orion cannot be compared")

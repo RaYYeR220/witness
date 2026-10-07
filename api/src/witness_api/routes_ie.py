@@ -10,6 +10,7 @@ from urllib.parse import quote
 import httpx
 from fastapi import APIRouter, HTTPException, Path, Query
 from witness_core import verdicts
+from witness_indexer.incidents import DISTRUST_RULES
 
 from . import models as m
 from . import views
@@ -19,7 +20,6 @@ router = APIRouter(tags=["ie"])
 
 IE_URN = "urn:ngsi-ld:InfrastructureElement:"
 ENTITIES = "/ngsi-ld/v1/entities/"
-PROVEN = (verdicts.PRODUCER_SIGNED, verdicts.RELAY_ATTESTED)
 IePath = Annotated[str, Path(min_length=1, max_length=256, pattern=r"^[^/\s]+$",
                              examples=["MyDomain:fa163e5e25ef"])]
 
@@ -78,20 +78,12 @@ async def orion_state(svc: Svc, ie_id: str) -> m.OrionState:
     return m.OrionState(status="ok", value=value, entity_id=entity)
 
 
-def _ledger_verdicts(svc: Svc) -> tuple[str, ...]:
-    """Scores the ledger vouches for: signed ones, plus unsigned legacy ones unless the
-    writer policy requires a signature on trust.score."""
-    policy = svc.policy
-    if policy is not None and policy.tags.get("trust.score", policy.default).require_signature:
-        return PROVEN
-    return (*PROVEN, verdicts.UNSIGNED_LEGACY)
-
-
 @router.get(
     "/ie/{ie_id}/lineage", response_model=m.Lineage, summary="Score lineage vs Orion",
     description=(
         "Every ledger message about the IE in milestone order with its score, the latest "
-        "score the ledger vouches for, Orion's current `trustScore` and whether they drift "
+        "score the ledger vouches for (a proven one: PRODUCER_SIGNED, with no UNSIGNED or "
+        "SHADOW alert on its block), Orion's current `trustScore` and whether they drift "
         "apart by more than `epsilon`. When Orion cannot be asked, `drift` is null."),
     responses={404: {"description": "No ledger messages about this IE"}},
 )
@@ -112,10 +104,15 @@ async def lineage(
             verdict=r["verdict"], ms_index=r["ms_index"], wf_index=r["wf_index"], at_ms=at,
             at=views.iso(at), score=scores.get(bytes(r["block_id"])),
             links=svc.link.message(bid)))
-    trusted = _ledger_verdicts(svc)
+    # Only a proven score is what the ledger vouches for: producer-signed (the pipeline gives
+    # an unauthorised writer its own verdict) and not taken out of evidence by an UNSIGNED or
+    # SHADOW alert, as the incident engine judges it. Drift is measured against that one.
+    distrusted = await svc.store.blocks_with_alert(
+        [bytes(r["block_id"]) for r in rows if bytes(r["block_id"]) in scores], DISTRUST_RULES)
     ledger = None
-    for e in reversed(entries):
-        if e.score is not None and e.verdict in trusted:
+    for e, r in zip(reversed(entries), reversed(rows)):
+        if (e.score is not None and e.verdict == verdicts.PRODUCER_SIGNED
+                and bytes(r["block_id"]) not in distrusted):
             ledger = m.LedgerScore(score=e.score, block_id=e.block_id, verdict=e.verdict,
                                    ms_index=e.ms_index, at_ms=e.at_ms, at=e.at)
             break

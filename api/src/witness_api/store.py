@@ -24,6 +24,15 @@ class ExplorerStore(Store):
             "SELECT block_id, ms_index, ts, score, verdict FROM ie_scores WHERE ie_id = %s "
             "ORDER BY ms_index, ts, block_id", (ie_id,))
 
+    async def blocks_with_alert(self, block_ids: list[bytes], rules) -> set[bytes]:
+        """The blocks among `block_ids` that carry an alert of one of `rules`."""
+        if not block_ids:
+            return set()
+        rows = await self._fetch(
+            "SELECT DISTINCT block_id FROM alerts WHERE rule = ANY(%s) AND block_id = ANY(%s)",
+            (sorted(rules), block_ids))
+        return {bytes(r["block_id"]) for r in rows}
+
     async def score_heads(self) -> dict[str, dict]:
         """The latest recorded score per IE."""
         rows = await self._fetch(
