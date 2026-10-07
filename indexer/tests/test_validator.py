@@ -13,7 +13,7 @@ from witness_core.codec import serialize_tagged_block
 from witness_core.ids import blake2b256
 from witness_indexer.hornet_rest import RAW_MEDIA_TYPE, HornetRest
 from witness_indexer.ingest import handle_record
-from witness_indexer.store import MessageRow
+from witness_indexer.store import Alert, MessageRow
 from witness_indexer.validator import PassResult, Validator, ValidatorConfig, json_diff
 
 BASE = "http://hornet.test"
@@ -740,14 +740,10 @@ async def test_reverify_skips_only_blocks_in_flight(env):
     await handle_record(store, v, rec("s-p", pending, data_p.replace(b"pending", b"PENDING")),
                         source="mqtt")
     assert v.is_in_flight(pending)
-    # Validated as CONTENT_MISMATCH and done: its stored copy differs from the Tangle too.
-    raw_m, mism, data_m = make_block({"id": "mismatch"})
-    serve(mism, raw_m, confirmed_always(mism))
-    await handle_record(store, RecordingValidator(),
-                        rec("s-m", mism, data_m.replace(b"mismatch", b"MISMATCH")),
-                        source="mqtt")
-    assert await v.validate_once(mism, "s-m") == "CONTENT_MISMATCH"
-    assert not v.is_in_flight(mism)
+    # Verified and done, then tampered with: not in flight, so judged.
+    bid, data, _ = await verified_block(store, v, "done")
+    await tamper_submission(store, bid, "0x" + data.replace(b"0.5", b"0.9").hex())
+    assert not v.is_in_flight(bid)
     # Indexed but not (yet) confirmed according to the node.
     raw_u, unconf, data_u = make_block({"id": "unconfirmed"})
     serve(unconf, raw_u, lambda request: httpx.Response(200, json=meta(unconf, solid=True)))
@@ -755,15 +751,14 @@ async def test_reverify_skips_only_blocks_in_flight(env):
 
     before = (p_meta.call_count, p_block.call_count)
     [alert] = await v.reverify_all()
-    assert (alert.rule, alert.block_id) == ("DB_TAMPER", mism)
+    assert (alert.rule, alert.block_id) == ("DB_TAMPER", bid)
     assert (p_meta.call_count, p_block.call_count) == before  # in flight: not touched
 
     # Once nothing has it in flight (here: a validator in another process), it is judged.
     other = Validator(store, v.hornet)
     [alert] = await other.reverify_all()
     assert (alert.rule, alert.block_id) == ("DB_TAMPER", pending)
-    assert sorted(a["rule"] for a in await store.alerts()) == [
-        "CONTENT_MISMATCH", "DB_TAMPER", "DB_TAMPER"]
+    assert sorted(a["rule"] for a in await store.alerts()) == ["DB_TAMPER", "DB_TAMPER"]
 
 
 FUTURE_MS = 4_000_000_000_000
@@ -1127,3 +1122,68 @@ async def test_scheduled_pass_with_nothing_to_check(env):
     _, v, _ = env
     assert await v.reverify_pass() == PassResult(0, [], True)
     assert (await v.scheduled_reverify()).complete
+
+
+# -- what re-verification leaves to the validator's own alerts -------------------------------
+
+
+async def mismatched_block(store, v, name):
+    """Forwarded bytes differ from the Tangle: the validator concludes CONTENT_MISMATCH and
+    raises its own alert; the stored copy still differs from the Tangle afterwards."""
+    raw, bid, data = make_block({"score": 0.5, "id": f"MyDomain:{name}"})
+    _, block_route = serve(bid, raw, confirmed_always(bid))
+    await handle_record(store, RecordingValidator(),
+                        rec(f"s-{name}", bid, data.replace(b"0.5", b"0.7")), source="mqtt")
+    assert await v.validate_once(bid, f"s-{name}") == "CONTENT_MISMATCH"
+    return bid, block_route
+
+
+@respx.mock
+async def test_already_alerted_outcomes_get_no_db_tamper(env):
+    store, v, _ = env
+    _, mism_route = await mismatched_block(store, v, "m")
+    # NOT_FOUND: confirmed, but the node does not return the block.
+    _, gone, data_n = make_block({"id": "gone"})
+    serve(gone, None, confirmed_always(gone))
+    await handle_record(store, RecordingValidator(), rec("s-n", gone, data_n), source="mqtt")
+    assert await v.validate_once(gone, "s-n") == "NOT_FOUND"
+    # A verified block that is then tampered with is still DB_TAMPER.
+    bid, data, _ = await verified_block(store, v, "ok")
+    await store._fetch(*tamper_sql(bid))
+
+    calls = mism_route.call_count
+    [alert] = await v.reverify_all()
+    assert (alert.rule, alert.severity, alert.block_id) == ("DB_TAMPER", "critical", bid)
+    assert mism_route.call_count == calls  # not even fetched
+    assert sorted(a["rule"] for a in await store.alerts()) == [
+        "CONTENT_MISMATCH", "DB_TAMPER", "NOT_FOUND"]
+    # Its own DB_TAMPER row does not turn it into an exempt CONTENT_MISMATCH: deduplicated
+    # while unchanged, a new tampering is reported again.
+    assert (await statuses(store, bid))[-1] == "CONTENT_MISMATCH"
+    assert await v.reverify_all() == []
+    await tamper_submission(store, bid, "0x" + data.replace(b"0.5", b"0.1").hex())
+    [again] = await v.reverify_all()
+    assert (again.rule, again.block_id) == ("DB_TAMPER", bid)
+    assert (await v.scheduled_reverify()).alerts == []
+
+
+@respx.mock
+async def test_an_outcome_without_its_alert_exempts_nothing(env):
+    store, v, _ = env
+    mism, _ = await mismatched_block(store, v, "m")
+    await store._fetch("DELETE FROM alerts WHERE block_id = %s RETURNING 1", (mism,))
+    [alert] = await v.reverify_all()
+    assert (alert.rule, alert.block_id) == ("DB_TAMPER", mism)
+
+
+@respx.mock
+async def test_a_block_verified_after_its_orphan_alert_is_judged(env):
+    store, v, _ = env
+    bid, data, _ = await verified_block(store, v, "late")
+    # It went ORPHANED (with its alert) before a milestone referenced it; the latest outcome
+    # is the later CONTENT_VERIFIED, so its stored copies are held to the Tangle again.
+    await store.set_lifecycle(block_id=bid, sub_id="s-late", status="ORPHANED", at_ms=1)
+    await store.put_alert(Alert("ORPHANED", "high", bid, None, {}, 1))
+    await tamper_submission(store, bid, "0x" + data.replace(b"0.5", b"0.9").hex())
+    [alert] = await v.reverify_all()
+    assert (alert.rule, alert.block_id) == ("DB_TAMPER", bid)

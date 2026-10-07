@@ -488,7 +488,10 @@ class Store:
         a submission with a block id, an indexed message or a CONTENT_VERIFIED lifecycle row
         (hiding a block takes wiping all four). In block id order after `after`, with every
         copy of its content (submission tag/data_hex, message tag/data, for whichever rows
-        exist) and `verified_once` (a MATCH check or a CONTENT_VERIFIED row)."""
+        exist), `verified_once` (a MATCH check or a CONTENT_VERIFIED row), `outcome` (the
+        latest validation outcome, not counting the CONTENT_MISMATCH rows re-verification
+        itself writes for DB_TAMPER) and `outcome_alerted` (an alert of that outcome's rule
+        exists for the block)."""
         return await self._fetch(
             "WITH ids AS ("
             " SELECT block_id FROM content_checks WHERE result = 'MATCH'"
@@ -504,9 +507,15 @@ class Store:
             "m.tag AS msg_tag, m.data AS msg_data, "
             "(EXISTS (SELECT 1 FROM content_checks c WHERE c.block_id = p.block_id "
             "AND c.result = 'MATCH') OR EXISTS (SELECT 1 FROM lifecycle l "
-            "WHERE l.block_id = p.block_id AND l.status = 'CONTENT_VERIFIED')) AS verified_once "
+            "WHERE l.block_id = p.block_id AND l.status = 'CONTENT_VERIFIED')) AS verified_once, "
+            "o.status AS outcome, (o.status IS NOT NULL AND EXISTS (SELECT 1 FROM alerts a "
+            "WHERE a.block_id = p.block_id AND a.rule = o.status)) AS outcome_alerted "
             "FROM page p LEFT JOIN submissions s ON s.block_id = p.block_id "
             "LEFT JOIN messages m ON m.block_id = p.block_id "
+            "LEFT JOIN LATERAL (SELECT l.status FROM lifecycle l WHERE l.block_id = p.block_id "
+            " AND l.status IN ('CONTENT_VERIFIED', 'CONTENT_MISMATCH', 'NOT_FOUND', 'ORPHANED')"
+            " AND coalesce(l.detail->>'cause', '') <> 'DB_TAMPER'"
+            " ORDER BY l.at_ms DESC, l.id DESC LIMIT 1) o ON true "
             "ORDER BY p.block_id", (after, after, limit))
 
     # -- events -----------------------------------------------------------------------------
