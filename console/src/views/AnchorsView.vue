@@ -44,15 +44,19 @@ const result = (seq: number) => {
   return r && r !== "running" ? r : null;
 };
 
-/** How each checkpoint links to the one before it (newest first in `items`). */
-function chain(i: number): { tone: "same" | "differs" | "unknown"; text: string } {
+/**
+ * How each checkpoint links to the one before it (newest first in `items`):
+ * two of the explorer's answers held against each other, so at best
+ * "consistent", never shown as checked.
+ */
+function chain(i: number): { tone: "consistent" | "differs" | "unknown"; text: string } {
   const a = items.value[i]!;
   const prev = (a.checkpoint as Record<string, unknown> | null)?.prev;
   const older = items.value[i + 1];
-  if (prev === null || prev === undefined) return a.seq === 1 ? { tone: "same", text: "the first checkpoint" } : { tone: "unknown", text: "names no previous checkpoint" };
+  if (prev === null || prev === undefined) return a.seq === 1 ? { tone: "consistent", text: "the first checkpoint" } : { tone: "unknown", text: "names no previous checkpoint" };
   if (!older) return { tone: "unknown", text: `follows ${shortHex(String(prev), 8, 6)}` };
   return String(prev).toLowerCase() === (older.checkpointHash ?? "").toLowerCase()
-    ? { tone: "same", text: `follows checkpoint ${older.seq}` }
+    ? { tone: "consistent", text: `follows checkpoint ${older.seq}` }
     : { tone: "differs", text: `names ${shortHex(String(prev), 8, 6)}, not checkpoint ${older.seq}` };
 }
 
@@ -61,7 +65,16 @@ const msgCount = (a: AnchorCheckpoint) => {
   return typeof n === "number" ? n : null;
 };
 
-const STATUS: Record<string, string> = { anchored: "Anchored", pending: "Pending", failed: "Failed", mismatch: "Mismatch" };
+/** The explorer's status of a checkpoint, until the browser has read the record itself. */
+const STATUS: Record<string, string> = { anchored: "Anchored, per the explorer", pending: "Pending", failed: "Failed", mismatch: "Mismatch" };
+
+/** The checkpoint's state on screen: the browser's own re-check decides green or red. */
+function shown(a: AnchorCheckpoint): { s: string; text: string } {
+  const r = result(a.seq);
+  if (r?.verdict === true) return { s: "checked", text: "Checked on IOTA Rebased in your browser" };
+  if (r?.verdict === false) return { s: "differs", text: "Does not match the chain" };
+  return { s: a.status, text: STATUS[a.status] ?? a.status };
+}
 const pinsComplete = Boolean(PINNED.rebasedRpc && PINNED.trailId && PINNED.auditTrailPackage);
 const otherNetwork = computed(() => items.value.find((a) => a.network && PINNED.rebasedNetwork && a.network !== PINNED.rebasedNetwork)?.network ?? null);
 </script>
@@ -125,14 +138,14 @@ const otherNetwork = computed(() => items.value.find((a) => a.network && PINNED.
         <p v-else-if="error" class="x-quiet x-err">Could not list the checkpoints: {{ error }}</p>
         <p v-else-if="!items.length" class="x-quiet">No checkpoint yet. The anchor service commits a window once enough milestones have passed.</p>
         <ol v-else class="cps">
-          <li v-for="(a, i) in items" :key="a.seq" class="cp" :data-status="a.status">
+          <li v-for="(a, i) in items" :key="a.seq" class="cp" :data-status="shown(a).s">
             <div class="rail">
               <span class="seq">{{ a.seq }}</span>
               <span class="dot" aria-hidden="true"></span>
             </div>
             <div class="body">
               <p class="top">
-                <span class="st" :data-status="a.status">{{ STATUS[a.status] ?? a.status }}</span>
+                <span class="st" :data-status="shown(a).s">{{ shown(a).text }}</span>
                 <span class="x-muted">{{ utc(a.createdAtMs) }}</span>
               </p>
               <h3 class="win">Milestones {{ a.fromMilestone }}–{{ a.toMilestone }}</h3>
@@ -266,9 +279,13 @@ const otherNetwork = computed(() => items.value.find((a) => a.network && PINNED.
   border: 1.2px dashed var(--fog-400);
 }
 .cp[data-status="anchored"] .dot {
+  border: 1.2px solid var(--fog-200);
+}
+.cp[data-status="checked"] .dot {
   border: 0;
   background: var(--pass);
 }
+.cp[data-status="differs"] .dot,
 .cp[data-status="mismatch"] .dot,
 .cp[data-status="failed"] .dot {
   border: 1.4px solid var(--fail);
@@ -295,10 +312,11 @@ const otherNetwork = computed(() => items.value.find((a) => a.network && PINNED.
   border: 1px solid var(--hair-strong);
   color: var(--fog-200);
 }
-.st[data-status="anchored"] {
+.st[data-status="checked"] {
   border-color: rgba(var(--rgb-aurora), 0.45);
   color: var(--pass);
 }
+.st[data-status="differs"],
 .st[data-status="mismatch"],
 .st[data-status="failed"] {
   border-color: rgba(var(--rgb-nova), 0.55);

@@ -182,6 +182,13 @@
   border: 1.4px solid var(--fail);
   background: none;
 }
+/* consistent: two of the explorer's own answers agree; nothing was checked against the chain, so not green */
+.x-cmp[data-c="consistent"] {
+  color: var(--fog-200);
+}
+.x-cmp[data-c="consistent"]::before {
+  border: 1.2px solid var(--fog-200);
+}
 
 @media (max-width: 760px) {
   .x-kv {

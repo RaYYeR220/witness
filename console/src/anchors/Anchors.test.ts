@@ -136,8 +136,12 @@ describe("Anchors screen", () => {
     expect(w.find(".cp").text()).toContain(`Milestones ${CP.from.index}–${CP.to.index}`);
     const tx = w.find('.cp a[target="_blank"]');
     expect(tx.attributes("href")).toBe("https://explorer.iota.org/txblock/8L3KZB5SN8Dd7UTorJ6sUqC3DFyuatJ6WPvuSQZummtu?network=testnet");
+    // until the browser has read the chain, it is the explorer's word, and not green
+    expect(w.find(".st").text()).toBe("Anchored, per the explorer");
+    expect(w.find('[data-status="checked"]').exists()).toBe(false);
     await w.find(".re .btn").trigger("click");
     await until(() => w.find(".res .verdict").exists());
+    expect(w.find(".st").text()).toBe("Checked on IOTA Rebased in your browser");
     expect(w.find(".res .verdict").attributes("data-v")).toBe("true");
     expect(w.find(".res .verdict").text()).toContain("The chain agrees");
     expect(w.findAll(".res tbody tr").every((r) => r.attributes("data-c") === "same")).toBe(true);
@@ -145,6 +149,18 @@ describe("Anchors screen", () => {
     const res = await axe.run(document.body, { rules: { "color-contrast": { enabled: false } } });
     const bad = res.violations.filter((v) => v.impact === "critical" || v.impact === "serious");
     expect(bad.map((v) => `${v.id}: ${v.nodes.map((n) => n.target.join(" ")).join(", ")}`)).toEqual([]);
+    w.unmount();
+  });
+
+  it("turns a checkpoint the chain contradicts red", async () => {
+    vi.stubGlobal("fetch", rpc().f);
+    const { w } = await mountScreen(AnchorsView, { path: "/anchors", data: data([row({ msRoot: "0x" + "ee".repeat(32) })]) });
+    await until(() => w.find(".cp").exists());
+    await w.find(".re .btn").trigger("click");
+    await until(() => w.find(".res .verdict").exists());
+    expect(w.find(".res .verdict").attributes("data-v")).toBe("false");
+    expect(w.find(".st").text()).toBe("Does not match the chain");
+    expect(w.find('.res tr[data-c="differs"]').text()).toContain("Milestone root");
     w.unmount();
   });
 

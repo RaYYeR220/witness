@@ -215,12 +215,13 @@ const ruleRows = computed(() => (policy.value ? Object.entries(policy.value.tags
               Policy hash <span class="mono" :title="policy.hash">{{ shortHex(policy.hash, 10, 8) }}</span>.
               <template v-if="committed">
                 The newest checkpoint (record {{ latest?.record ?? "?" }}) commits to
-                <span class="x-cmp" :data-c="committed === policy.hash ? 'same' : 'differs'">{{
+                <span class="x-cmp" :data-c="committed === policy.hash ? 'consistent' : 'differs'">{{
                   committed === policy.hash ? "the same hash" : `another hash, ${shortHex(committed, 10, 8)}`
                 }}</span
                 >.
               </template>
               <template v-else>Every checkpoint commits to it; none is anchored yet to compare with.</template>
+              <span class="x-sec-note">Both are the explorer's answers; Anchors re-reads the checkpoint itself from IOTA Rebased.</span>
             </p>
             <table class="x-tbl x-cards rules">
               <caption class="sr-only">Who may write each tag</caption>

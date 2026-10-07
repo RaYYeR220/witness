@@ -126,7 +126,7 @@ describe("Identity screen", () => {
     expect(hrefs.every((h) => h.startsWith("https://explorer.iota.org/") && h.includes("network="))).toBe(true);
     expect(w.findAll("a[target=_blank]").every((a) => a.attributes("rel")?.includes("noopener"))).toBe(true);
     // policy
-    expect(w.find(".hashline .x-cmp").attributes("data-c")).toBe("same");
+    expect(w.find(".hashline .x-cmp").attributes("data-c")).toBe("consistent");
     const ts = w.findAll(".rules tbody tr").find((r) => r.find(".tag").exists() && r.find(".tag").text() === "trust.score")!;
     expect(ts.text()).toContain("trust-manager");
     expect(ts.text()).toContain("required");
