@@ -19,7 +19,12 @@ checkpoint record from IOTA Rebased testnet live.
 
 - **Landing page, "Flip one byte".** Change any byte of the sample block and the BLAKE2b-256 hash
   no longer equals the block id: that is check ①.
-- **A forged message.** In Search, type `FORGED` and open a result. The Verify screen shows two
+- **A forged message.** In Search, type `FORGED` and open a result. On a stack that holds the
+  evaluation data, open
+  `/m/0xc28899293cca00d7233727df3ba380564f24b403c026ae190f210bd2a35f54a5` directly: an
+  evaluation trial of class A02, a valid `trust.score` envelope replayed under the `LLO-K8s`
+  tag (listed in [`results/eval-final/full/trials.jsonl`](results/eval-final/full/trials.jsonl)).
+  It is not part of the offline replay snapshot. The Verify screen shows two
   verdicts: the one the explorer recorded when it indexed the block, and the five checks your
   browser just ran from the bundle's bytes. Expect ①, ② and ③ green (the block is real and a
   milestone confirmed it) and ④ red: the envelope does not verify for the issuer it names.
@@ -71,7 +76,7 @@ checkpoint (window, `msRoot`, `prev`, `policyHash`) with the address that added 
 
 ### 4. The scorecard
 
-<!-- EVAL-HEADLINE -->No scored run is published yet.<!-- /EVAL-HEADLINE -->
+**394/400 injected attacks detected across 20 pre-registered classes (19 classes 20/20; Orion drift 14/20), 0 false positives on 599 genuine messages over 30 minutes, positive control 40/40.** [Results and method](docs/eval.md#results)
 
 The method, the 20 attack classes, the positive control and the genuine-traffic trap are in
 [docs/eval.md](docs/eval.md); the answer key is

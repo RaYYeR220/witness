@@ -1,0 +1,35 @@
+{
+  "messages": 599,
+  "duration_s": 1802.2,
+  "alerts": 0,
+  "verdicts": {
+    "PRODUCER_SIGNED": 341,
+    "RELAY_ATTESTED": 258
+  },
+  "not_indexed": 0,
+  "failed_sends": 0,
+  "alert_rules": {},
+  "alert_ids": [],
+  "by_tag": {
+    "trust.score": 341,
+    "self-orchestrator": 76,
+    "LLO-K8s": 111,
+    "LLO-Docker": 71
+  },
+  "window_end_ms": 1791348659214,
+  "all_alerts_in_window": {
+    "CHAIN_GAP": 1
+  },
+  "all_alerts_truncated": false,
+  "ies": [
+    "TrapDomain:338f05061f06",
+    "TrapDomain:fdbf0326be2c",
+    "TrapDomain:43d002dd7a64",
+    "TrapDomain:1a60c95dd276"
+  ],
+  "profile": {
+    "minutes": 30,
+    "messages": 500,
+    "ratePerMin": 20.0
+  }
+}

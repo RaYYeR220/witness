@@ -1,0 +1,234 @@
+{
+  "schema": "witness-chaos/run/v1",
+  "startedAtMs": 1791351019519,
+  "git": {
+    "commit": "c94618cf795bc656d1932214256b0801efdeb8da",
+    "branch": "main",
+    "dirty": false
+  },
+  "configHash": "501b54a9c7292581e6722254f0c32f4cb79270a04b92b56fd10fbe702445fcc1",
+  "answerKeySha256": "63fa160cdf480c2594d1ae78f5210a02a921844be522ebb9090f144ff8e7a484",
+  "config": {
+    "api": "http://127.0.0.1:7200",
+    "relay": "http://127.0.0.1:5557",
+    "relay_node": "iota-hornet",
+    "hornet": "http://127.0.0.1:14265",
+    "orion": "http://127.0.0.1:1026",
+    "anchor": "http://127.0.0.1:7300",
+    "out": "results/eval-a19",
+    "repo": ".",
+    "trials": 20,
+    "classes": [
+      "A19"
+    ],
+    "seed": 1,
+    "poll_s": 1.0,
+    "parallel": 10,
+    "trap": false,
+    "trap_minutes": null,
+    "trap_messages": null,
+    "trap_rate_per_min": 20.0,
+    "trap_ies": 4,
+    "trap_settle_s": 70.0,
+    "controls": true,
+    "secrets_dir": "secrets",
+    "producer_key": null,
+    "outsider_key": null,
+    "revoked_key": "secrets/chaos-revoked/sig-1.jwk.json",
+    "search_key_file": "secrets/relay/search.key",
+    "ingest_via": "both",
+    "bundle_source": "auto",
+    "vectors_dir": null,
+    "verify_cli": null,
+    "node": "node",
+    "db_schema": "witness",
+    "orion_settle_s": 6.0,
+    "drift_keepalive_s": 45.0,
+    "wait_indexed_s": 30.0,
+    "exclusive_window_s": 120.0,
+    "allow_concurrent_producer": false,
+    "allow_nonlocal": false,
+    "cleanup_orion": true,
+    "ingest_token": "<set>",
+    "mqtt_url": "<set>",
+    "db_dsn": "<set>"
+  },
+  "python": "3.12.11",
+  "local": {
+    "nonlocal": [],
+    "allowNonlocal": false
+  },
+  "preflight": {
+    "api": {
+      "ok": true,
+      "url": "http://127.0.0.1:7200/healthz",
+      "health": {
+        "status": "ok",
+        "db": "ok",
+        "network": "private_tangle1",
+        "version": "0.1.0"
+      }
+    },
+    "relay": {
+      "ok": true,
+      "url": "http://127.0.0.1:5557/healthz",
+      "did": "did:iota:testnet:0xe6cf1bf1e06f82d7956585085306fc23daee082cc75120459f7d39bb152f0459"
+    },
+    "hornet": {
+      "ok": true,
+      "url": "http://127.0.0.1:14265/api/core/v2/info"
+    },
+    "orion": {
+      "ok": true,
+      "url": "http://127.0.0.1:1026/ngsi-ld/ex/v1/version"
+    },
+    "stats": {
+      "counts": {
+        "anchors": 7,
+        "incidents": 28,
+        "blind_index": 22,
+        "content_checks": 1898,
+        "ie_scores": 2090,
+        "alerts": 1157,
+        "validations": 7048,
+        "lifecycle": 11550,
+        "milestones": 5423,
+        "messages": 2468,
+        "blocks": 7890,
+        "submissions": 1930,
+        "events": 18790,
+        "cursor": 5423
+      },
+      "services": {
+        "resolver": "unreachable",
+        "anchor-mirror": "on",
+        "policy": "file",
+        "alerts-mqtt": "ok",
+        "orion": "ok",
+        "ledger": "ok",
+        "indexer": "ok",
+        "anchor": "ok",
+        "shadow": "ok",
+        "rules": "ok",
+        "incident-orion": "ok",
+        "incident-engine": "ok",
+        "reverify": "ok",
+        "resolver(rules)": "ok"
+      },
+      "validator": {
+        "configured": true,
+        "running": false,
+        "pending": 0
+      },
+      "nodeRoute": {
+        "enabled": true,
+        "route": "witness/v1",
+        "registered": true,
+        "error": null
+      },
+      "streamSubscribers": 0
+    }
+  },
+  "identities": {
+    "producer": "did:key:z6MkiHHMbugzsbVKBkTyBmyov5ZDok4bGEErk6yQYVtSWzVf",
+    "outsider": "did:key:z6Mkhq9L8rdoy3eNVBD5RPaWPEwwc4Dx9PUaMbTDthnwSGqH",
+    "revoked": "did:iota:testnet:0xe9b8e9c6afd436bffb296ed21f1588c6fc6c23210b3610c89107d5453a0c92f9"
+  },
+  "identity": {
+    "producer": "did:key:z6MkiHHMbugzsbVKBkTyBmyov5ZDok4bGEErk6yQYVtSWzVf",
+    "policyHash": "0x0443b65a4d98d29b8302324e39d54d48ad1744403585a1310680b8444528580e",
+    "trustScoreWriters": [
+      "did:iota:testnet:0x15eb8c4d90fa4fff1d49f3ae8b1676a61e09c883303acd383cbfaacb538db9ba",
+      "did:key:z6MkiHHMbugzsbVKBkTyBmyov5ZDok4bGEErk6yQYVtSWzVf"
+    ]
+  },
+  "exclusive": {
+    "recentProducerBlocks": 0,
+    "latest": null
+  },
+  "restored": [
+    {
+      "block": "0x37421132317a2eb9c2dd3143cefc01e80a0dc6500d8d896396dc92db909d9aa2",
+      "ok": true
+    },
+    {
+      "block": "0x4c7e1f960b8e5e4c482921a085b5c055cddae97c65006bc24adf1ba49439acf9",
+      "ok": true
+    },
+    {
+      "block": "0x7c54fd61c8ac69f0632dafe5ec0225a8795a1815e83df0f821e2657594e76dc3",
+      "ok": true
+    },
+    {
+      "block": "0x64d5a0ac0452f0b9da3ce0aafa1e81b9574c7119245bd6666f3df06dd916baf9",
+      "ok": true
+    },
+    {
+      "block": "0x71016973d7c6a53e94f49de649cf7c615afa30a3e76e4e0f2ca53008ca522d59",
+      "ok": true
+    },
+    {
+      "block": "0x6778747e804fc52228eeadaeb67da50a4410695030ecbcd636c98e5c14b329a6",
+      "ok": true
+    },
+    {
+      "block": "0x5da41f767d711544c92e42b520698e251ca5d3238aca6535badfe067038aabe6",
+      "ok": true
+    },
+    {
+      "block": "0x7e220f8514f71144d4ed438b9f115d32a3102f666437fcbabf7a21b58cc09b2b",
+      "ok": true
+    },
+    {
+      "block": "0x203de53cc02fb2c0b257cb3a76831bd67a56bec72e149a38b2a722278e156f27",
+      "ok": true
+    },
+    {
+      "block": "0x200161cf91325c7be6aad9e55048b4e970f21e991c49ddb5a97717562d5da76c",
+      "ok": true
+    },
+    {
+      "block": "0xd9e029bd3814b3be64182b400f298332880faf78e20121d392d91dd12472f7b0",
+      "ok": true
+    },
+    {
+      "block": "0xfa94ff8c009aef33782ac9929583ac4097b239ae977d99fcfb8d3dc15261547c",
+      "ok": true
+    },
+    {
+      "block": "0x947c22f60ef3fbe081d4b41d2f37e839bd528515aecc4734b5ecd49218ac9eb2",
+      "ok": true
+    },
+    {
+      "block": "0xb83e396effc4a079ff27876383b49625d29111522c5d52d99526938ff16b32b5",
+      "ok": true
+    },
+    {
+      "block": "0xeb41dc697706aeaff7dc1958cb392b406ba35593445ecb8ff55c7dda76a27d5b",
+      "ok": true
+    },
+    {
+      "block": "0x016ac482650e4497b706c72d1379d0b858cdb1d4a5b1c8656b1bddfa605a450d",
+      "ok": true
+    },
+    {
+      "block": "0x80540f9885c5ee52457649d0cd6a4df44300769d91c299d1ac409b752cbc0a74",
+      "ok": true
+    },
+    {
+      "block": "0x3661eea969fff466bb6bb09bb9e8dc4ba0dc1405281bfb97b18682006699411e",
+      "ok": true
+    },
+    {
+      "block": "0x578ce44828ca80b606232908a14f664c9d7ec19360ba4d3411044d73bd108cb2",
+      "ok": true
+    },
+    {
+      "block": "0x2fb1f9542962e4484e959ea21251b362039bc5e1886fc6e9ead33d141cbe7984",
+      "ok": true
+    }
+  ],
+  "restoreFailed": [],
+  "finishedAtMs": 1791352392918,
+  "bundles": null
+}

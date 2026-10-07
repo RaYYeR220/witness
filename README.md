@@ -11,7 +11,7 @@ Replay console, nothing to install: <!-- REPLAY-URL -->not published yet<!-- /RE
 · Judges start here: [JUDGES.md](JUDGES.md)
 · Every claim with its evidence: [CLAIMS.md](CLAIMS.md)
 
-<!-- EVAL-HEADLINE -->
+**394/400 injected attacks detected across 20 pre-registered classes (19 classes 20/20; Orion drift 14/20), 0 false positives on 599 genuine messages over 30 minutes, positive control 40/40.** [Results and method](docs/eval.md#results)
 
 ## Challenge brief → where it is
 

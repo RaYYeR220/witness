@@ -1,0 +1,177 @@
+{
+  "schema": "witness-chaos/run/v1",
+  "startedAtMs": 1791346778995,
+  "git": {
+    "commit": "cd985fe2f24e8425f93911d3c8743a6a0a9815d9",
+    "branch": "main",
+    "dirty": false
+  },
+  "configHash": "33da8531c039e1ba3d4963cd984d782c8f4785faf60be60b1376be0010a53316",
+  "answerKeySha256": "63fa160cdf480c2594d1ae78f5210a02a921844be522ebb9090f144ff8e7a484",
+  "config": {
+    "api": "http://127.0.0.1:7200",
+    "relay": "http://127.0.0.1:5557",
+    "relay_node": "iota-hornet",
+    "hornet": "http://127.0.0.1:14265",
+    "orion": "http://127.0.0.1:1026",
+    "anchor": "http://127.0.0.1:7300",
+    "out": "results/eval-full",
+    "repo": ".",
+    "trials": 20,
+    "classes": null,
+    "seed": 1,
+    "poll_s": 1.0,
+    "parallel": 10,
+    "trap": true,
+    "trap_minutes": null,
+    "trap_messages": null,
+    "trap_rate_per_min": 20.0,
+    "trap_ies": 4,
+    "trap_settle_s": 70.0,
+    "controls": true,
+    "secrets_dir": "secrets",
+    "producer_key": null,
+    "outsider_key": null,
+    "revoked_key": "secrets/chaos-revoked/sig-1.jwk.json",
+    "search_key_file": "secrets/relay/search.key",
+    "ingest_via": "both",
+    "bundle_source": "auto",
+    "vectors_dir": null,
+    "verify_cli": null,
+    "node": "node",
+    "db_schema": "witness",
+    "orion_settle_s": 6.0,
+    "drift_keepalive_s": 45.0,
+    "wait_indexed_s": 30.0,
+    "exclusive_window_s": 120.0,
+    "allow_concurrent_producer": false,
+    "allow_nonlocal": false,
+    "cleanup_orion": true,
+    "ingest_token": "<set>",
+    "mqtt_url": "<set>",
+    "db_dsn": null
+  },
+  "python": "3.12.11",
+  "local": {
+    "nonlocal": [],
+    "allowNonlocal": false
+  },
+  "preflight": {
+    "api": {
+      "ok": true,
+      "url": "http://127.0.0.1:7200/healthz",
+      "health": {
+        "status": "ok",
+        "db": "ok",
+        "network": "private_tangle1",
+        "version": "0.1.0"
+      }
+    },
+    "relay": {
+      "ok": true,
+      "url": "http://127.0.0.1:5557/healthz",
+      "did": "did:iota:testnet:0xe6cf1bf1e06f82d7956585085306fc23daee082cc75120459f7d39bb152f0459"
+    },
+    "hornet": {
+      "ok": true,
+      "url": "http://127.0.0.1:14265/api/core/v2/info"
+    },
+    "orion": {
+      "ok": true,
+      "url": "http://127.0.0.1:1026/ngsi-ld/ex/v1/version"
+    },
+    "stats": {
+      "counts": {
+        "milestones": 4575,
+        "blocks": 5807,
+        "messages": 1233,
+        "blind_index": 2,
+        "ie_scores": 1174,
+        "alerts": 524,
+        "anchors": 6,
+        "events": 10813,
+        "submissions": 911,
+        "validations": 3297,
+        "content_checks": 903,
+        "lifecycle": 5355,
+        "incidents": 7,
+        "cursor": 4575
+      },
+      "services": {
+        "resolver": "unreachable",
+        "anchor-mirror": "on",
+        "policy": "file",
+        "alerts-mqtt": "ok",
+        "orion": "ok",
+        "ledger": "ok",
+        "indexer": "ok",
+        "anchor": "ok",
+        "shadow": "ok",
+        "rules": "ok",
+        "incident-orion": "ok",
+        "incident-engine": "ok",
+        "reverify": "ok",
+        "resolver(rules)": "ok"
+      },
+      "validator": {
+        "configured": true,
+        "running": false,
+        "pending": 0
+      },
+      "nodeRoute": {
+        "enabled": true,
+        "route": "witness/v1",
+        "registered": true,
+        "error": null
+      },
+      "streamSubscribers": 0
+    }
+  },
+  "identities": {
+    "producer": "did:key:z6MkiHHMbugzsbVKBkTyBmyov5ZDok4bGEErk6yQYVtSWzVf",
+    "outsider": "did:key:z6Mkhq9L8rdoy3eNVBD5RPaWPEwwc4Dx9PUaMbTDthnwSGqH",
+    "revoked": "did:iota:testnet:0xe9b8e9c6afd436bffb296ed21f1588c6fc6c23210b3610c89107d5453a0c92f9"
+  },
+  "identity": {
+    "producer": "did:key:z6MkiHHMbugzsbVKBkTyBmyov5ZDok4bGEErk6yQYVtSWzVf",
+    "policyHash": "0x0443b65a4d98d29b8302324e39d54d48ad1744403585a1310680b8444528580e",
+    "trustScoreWriters": [
+      "did:iota:testnet:0x15eb8c4d90fa4fff1d49f3ae8b1676a61e09c883303acd383cbfaacb538db9ba",
+      "did:key:z6MkiHHMbugzsbVKBkTyBmyov5ZDok4bGEErk6yQYVtSWzVf"
+    ]
+  },
+  "exclusive": {
+    "recentProducerBlocks": 0,
+    "latest": null
+  },
+  "restored": [],
+  "restoreFailed": [],
+  "finishedAtMs": 1791350991099,
+  "bundles": {
+    "requested": "auto",
+    "source": "api",
+    "blockId": "0xce3ea13c6d164757153a40ce212f4258b971427bd53087315dcc9ffc3572eb03",
+    "anchorSeq": 7,
+    "msIndex": 5040,
+    "baseline": {
+      "py": {
+        "block_hash": true,
+        "inclusion": true,
+        "milestone_signatures": true,
+        "envelope": null,
+        "anchor": true
+      },
+      "pyOverall": "PARTIAL",
+      "ts": {
+        "block_hash": true,
+        "inclusion": true,
+        "milestone_signatures": true,
+        "envelope": null,
+        "anchor": true
+      },
+      "tsOverall": "PARTIAL",
+      "parity": true,
+      "diffs": []
+    }
+  }
+}

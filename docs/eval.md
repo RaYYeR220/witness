@@ -184,13 +184,124 @@ alerts) and `run.json` (commit, configuration with secrets masked, hashes, prefl
 
 ### Results
 
-> **PLACEHOLDER: no full run yet.** This section is filled in from `results/scorecard.md`
-> after the pre-registered run (20 trials per class, 30-minute trap). Until then nothing here
-> is a result.
+**394/400 injected attacks detected across 20 pre-registered classes (19 classes 20/20; Orion drift 14/20), 0 false positives on 599 genuine messages over 30 minutes, positive control 40/40.**
 
-- Headline: detected __/__ attacks, __/__ false positives
-- Per-class detection, confusion matrix, latency p50/p95: _pending_
-- Positive control C01: _pending_
-- Python / TS verifier parity on the bundle classes: _pending_
+The numbers come from two runs of the same build, because the first one could not include A19
+(see Provenance). The answer key (SHA-256 `63fa160cdf480c25...`) is the same in both, and every
+figure below can be recomputed from the committed logs.
+
+| Class | Name | Expected | Detected | p50 | p95 |
+|---|---|---|---|---|---|
+| A01 | FORGED_SIGNATURE | FORGED | 20/20 | 5.2 s | 5.2 s |
+| A02 | CROSS_TAG_REPLAY | FORGED | 20/20 | 5.2 s | 5.2 s |
+| A03 | SEQ_REPLAY | REPLAY | 20/20 | 5.2 s | 5.2 s |
+| A04 | UNAUTHORIZED_WRITER | UNAUTHORIZED_WRITER | 20/20 | 5.2 s | 5.5 s |
+| A05 | REVOKED_KEY | REVOKED_KEY | 20/20 | 5.2 s | 5.2 s |
+| A06 | ORION_DRIFT | DRIFT | **14/20** | 161.8 s | 162.4 s |
+| A07 | BLOCK_BYTE_FLIP | ladder:block_hash | 20/20 | - | - |
+| A08 | BAD_MERKLE_PATH | ladder:inclusion | 20/20 | - | - |
+| A09 | SAMPLE_KEY_FORGED_MILESTONE | ladder:anchor | 20/20 | - | - |
+| A10 | ANCHOR_MISMATCH | ladder:anchor | 20/20 | - | - |
+| A11 | SEALED_WITHOUT_KEY | RELAY_ATTESTED | 20/20 | 5.2 s | 5.4 s |
+| A12 | UNKNOWN_IE | UNKNOWN_IE | 20/20 | 3.7 s | 4.9 s |
+| A13 | SCORE_JUMP | ANOMALY | 20/20 | 4.3 s | 4.9 s |
+| A14 | STALE_IE | STALE | 20/20 | 141.9 s | 150.1 s |
+| A15 | MALFORMED_PAYLOAD | MALFORMED | 20/20 | 5.2 s | 5.2 s |
+| A16 | CONTENT_MISMATCH | CONTENT_MISMATCH | 20/20 | 3.6 s | 3.7 s |
+| A17 | SHADOW | SHADOW | 20/20 | 59.5 s | 59.7 s |
+| A18 | ORPHANED | ORPHANED | 20/20 | 60.0 s | 60.0 s |
+| A19 | DB_TAMPER | DB_TAMPER | 20/20 (separate run) | 59.8 s | 60.2 s |
+| A20 | CHAIN_GAP | CHAIN_GAP | 20/20 | 4.4 s | 4.8 s |
+
+19 classes x 20 + 14 = 394 of 400. The full run alone scored 374/380 (A19 was not run in it);
+the separate A19 run scored 20/20. The bundle classes A07-A10 have no latency: they are
+checked offline on the bundle, not on the live system.
+
+**Unexpected alerts.** The full run reports 2 alerts on injected blocks that the answer key
+does not allow, both in A06 (ANOMALY, see below). The A19 run reports 0. Every other alert on
+an injected block was a pre-registered side alert (for example SHADOW on the envelope attacks
+that go straight to HORNET). Alerts that arrived after a trial ended (mostly STALE and SHADOW
+on the test IEs) are listed in `scorecard.md` and are not scored.
+
+**Latency.** Insertion to detection over the full run: p50 5.2 s, p95 150.2 s. Most classes
+are detected on arrival, in 3.6 to 5.5 s (the harness polls once a second). A few are slow by
+design, because the rule has to wait before it may conclude:
+
+- STALE (A14), ~142 s: no new score for an IE within `stale_after_s` (120 s in the compose
+  stack), checked on the 30 s periodic pass;
+- SHADOW (A17) and ORPHANED (A18), ~60 s: the grace period before a confirmed block that no
+  submission names, or a submitted block that is never confirmed, counts as such;
+- DRIFT (A06), ~162 s: the 150 s grace period of R5 plus the periodic pass.
+
+The p95 of 150.2 s comes from these classes; the other classes finish within about 5.5 s.
+
+**Positive control C01.** Genuine blocks sent through the relay were indexed as
+PRODUCER_SIGNED with no alert: 20/20 in the full run and 20/20 in the A19 run, 40/40 in total.
+
+**Trap.** 599 genuine messages over 30 minutes (1802 s) on four trap IEs: 0 alerts on any of
+them; verdicts PRODUCER_SIGNED 341, RELAY_ATTESTED 258; 0 not indexed, 0 failed sends.
+`trap.json` also lists one CHAIN_GAP alert raised somewhere in the same time window
+(`all_alerts_in_window`); it is not attached to any trap message. It is mentioned here so it
+is not hidden.
+
+**Parity.** On the bundle classes A07-A10, 80/80 trials: core `bundle.verify` (Python) and
+the TypeScript verifier CLI agreed on every step. The genuine bundle was taken from the API.
+
+**A06 ORION_DRIFT, 14/20.** Observed outcomes: DRIFT 14, ANOMALY 2, no alert within the 240 s
+timeout 4. This is a miss.
+
+Why it is slow. R5 does not compare once. The periodic pass (every `--periodic-s`, 30 s)
+opens an episode the first time Orion's `trustScore` differs from the latest ledger score by
+more than `drift_epsilon` (0.01), and raises DRIFT only when the divergence has lasted longer
+than `drift_grace_s` (150 s, `indexer/src/witness_indexer/rules.py`). The grace period is
+there so that the normal lag between a score landing on the ledger and Orion being updated
+does not alert. Detection therefore cannot come before about 150 s, and with the pass
+interval it lands at 150 to 180 s. The 14 detections took 161.4 to 162.4 s.
+
+Why some trials failed. The episode is dropped as soon as one pass finds the IE no longer
+diverging (or absent from the list Orion returned), and the 150 s clock then restarts. The
+logs do not show whether that happened in the four trials with no alert (trials 12, 13, 16
+and 17): they ran the whole 240 s without a DRIFT, and I have not diagnosed them, so no cause
+is claimed here. In the two ANOMALY trials (4 and 5), R7 raised ANOMALY on the seeded
+baseline block about 3 s after injection, which the answer key does not allow for A06, and no
+DRIFT followed within the timeout either. Those are the 2 unexpected alerts. Nothing about
+the class was changed after seeing this: the pre-registered 240 s timeout and 20 trials
+stand, and the result is 14/20.
+
+**Provenance.**
+
+- Full run: 2026-10-07, 04:19 to 05:29 UTC. Runner at repo commit `cd985fe` (the services
+  were built from the same code; that commit differs only in docs), 20 classes x 20 trials
+  planned, config hash `33da8531c039e1ba`. A19 was not run in that invocation because no
+  database DSN was passed (`--db-dsn` / `WITNESS_CHAOS_DB`); the scorecard says so ("20
+  planned trials not run: A19"). Its own headline reads "detected 374/380 attacks, 2
+  unexpected alerts, 0/599 false positives".
+- A19 run: 2026-10-07, 05:30 to 05:53 UTC, same build, runner at commit `c94618c` (docs-only
+  difference), `--classes A19 --no-trap` with a loopback DSN for the database owner. 20/20
+  DB_TAMPER detected, 0 unexpected alerts, C01 20/20. All 20 rewritten rows were restored and
+  verified (`restoreFailed` is empty in `run.json`). A19 was run separately because it needs
+  that DSN and the first invocation did not have it; it was run right after on the same
+  stack, and the 30-minute trap was not repeated.
+- Logs: [`results/eval-final/full/`](../results/eval-final/full/scorecard.md) and
+  [`results/eval-final/a19/`](../results/eval-final/a19/scorecard.md): `scorecard.md`,
+  `scorecard.json`, `run.json`, `trials.jsonl` (and `trap.json` for the full run). The
+  per-message trap logs (`trap.jsonl`, `trap-sent.jsonl`) are not committed.
+- Rescore from the logs: `uv run witness-chaos score results/eval-final/full` (and
+  `results/eval-final/a19`).
+
+**Changes after the evaluation.** The evaluation ran on the build before the final review
+fixes. Behaviour changes made after it:
+
+- R7 ANOMALY is no longer suppressed by reports with error code 0, and self-security events
+  corroborate a jump;
+- R5 DRIFT ignores SHADOW and UNSIGNED scores;
+- the anchor's DID-resolution cache is 2 s by default (was 60 s; 5 s in our deployment);
+- the relay refuses envelopes nested past 64 levels, and refuses a reused seq or nonce before
+  posting;
+- verification step 4 refuses non-canonical `did:iota` DIDs and resolves `did:key` locally;
+- a DID document that cannot be used is answered with 422.
+
+None of the pre-registered expectations changed. The evaluation has not been re-run on the
+post-fix build, so the numbers above describe the earlier build.
 
 Not measured here: lookup p95 at 100k messages and in-browser verification time.
