@@ -563,6 +563,17 @@ async def test_passthrough_tag_is_byte_exact_legacy(
     assert record["relay"] == {"verdict": verdicts.UNSIGNED_LEGACY, "iss": None, "seq": None}
 
 
+def test_encryption_needs_recipients_and_a_search_key(make_cfg):
+    from dataclasses import replace
+
+    cfg = make_cfg(encrypt_tags=["audit.report"])
+    with pytest.raises(ValueError, match="RELAY_SEARCH_KEY_PATH"):
+        create_app(replace(cfg, search_key_path=None))
+    with pytest.raises(ValueError, match="RELAY_RECIPIENTS_PATH"):
+        create_app(replace(cfg, recipients=[]))
+    create_app(replace(make_cfg(), search_key_path=None, recipients=[]))  # nothing sealed
+
+
 def test_passthrough_and_encryption_cannot_overlap(make_cfg):
     with pytest.raises(ValueError):
         create_app(make_cfg(encrypt_tags=["x"], passthrough_tags=["x"]))

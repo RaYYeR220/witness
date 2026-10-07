@@ -64,8 +64,14 @@ class Attestor:
     def __post_init__(self) -> None:
         if self.kid.split("#", 1)[0] != self.did:
             raise ValueError("relay kid must belong to the relay DID")
+        # Sealing needs both: who can read it (recipients) and how it stays findable
+        # (the blind-index key). Refuse to start with either missing.
         if self.encrypt_tags and not self.recipients:
-            raise ValueError("encrypt_tags needs at least one recipient")
+            raise ValueError("RELAY_ENCRYPT_TAGS needs at least one recipient "
+                             "(RELAY_RECIPIENTS_PATH)")
+        if self.encrypt_tags and not self.search_key:
+            raise ValueError("RELAY_ENCRYPT_TAGS needs the blind-index key "
+                             "(RELAY_SEARCH_KEY_PATH)")
 
     def protect(self, tag: str, message: Any) -> dict:
         """The content part of the envelope: `{body}` or `{enc, bix}`."""
@@ -73,8 +79,7 @@ class Attestor:
         if tag not in self.encrypt_tags:
             return {"body": body}
         enc = encrypt_body(body, list(self.recipients))
-        if self.search_key is None:
-            return {"enc": enc}
+        assert self.search_key  # checked at construction for every encrypted tag
         bix = [blind_token(self.search_key, "tag", tag)]
         ie = body.get("id")
         if isinstance(ie, str) and ie:
