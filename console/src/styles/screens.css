@@ -1,0 +1,219 @@
+/*
+ * Shared layout of the explorer screens (Lineage, Integrity, Identity,
+ * Anchors, Posture, Reports): the same head, section titles, notes and tables
+ * as Live, Search and Verify. Global, so every class carries the `x-` prefix
+ * and never meets a component's own (scoped) class of the same name.
+ */
+
+.x-head {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 24px 40px;
+  flex-wrap: wrap;
+  padding-bottom: 24px;
+  border-bottom: 1px solid var(--hair);
+}
+.x-title {
+  margin: 0;
+  font: 400 var(--fs-h2) / 1 var(--serif);
+  letter-spacing: -0.012em;
+  color: var(--fog-50);
+}
+.x-lede {
+  margin: 12px 0 0;
+  max-width: 66ch;
+  color: var(--fog-200);
+}
+.x-kicker {
+  margin: 0 0 14px;
+  font-size: 13px;
+  color: var(--fog-400);
+}
+.x-kicker a {
+  color: var(--fog-400);
+}
+.x-kicker a:hover {
+  color: var(--fog-50);
+}
+
+.x-sec {
+  margin-top: 40px;
+}
+.x-sec-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 10px 24px;
+  flex-wrap: wrap;
+  margin-bottom: 14px;
+}
+.x-sec-title {
+  margin: 0;
+  font: 400 26px/1.1 var(--serif);
+  color: var(--fog-50);
+}
+.x-sec-note {
+  margin: 0;
+  font-size: 13px;
+  color: var(--fog-400);
+}
+
+.x-note {
+  margin: 12px 0 0;
+  padding: 10px 14px;
+  border-left: 2px solid var(--ember);
+  font-size: 14px;
+  line-height: 21px;
+  color: var(--fog-200);
+}
+.x-note b {
+  font-weight: 500;
+  color: var(--fog-50);
+}
+.x-note[data-tone="bad"] {
+  border-color: var(--fail);
+  background: var(--nova-wash);
+  color: var(--fog-50);
+}
+.x-note[data-tone="bad"] b {
+  color: var(--fail);
+}
+.x-note[data-tone="ok"] {
+  border-color: var(--pass);
+}
+.x-quiet {
+  margin: 0;
+  padding: 18px 0;
+  color: var(--fog-400);
+}
+.x-err {
+  color: var(--fail);
+}
+.x-muted {
+  color: var(--fog-400);
+}
+
+.x-link {
+  color: var(--fog-50);
+  text-decoration: underline;
+  text-decoration-color: rgba(var(--rgb-ember), 0.6);
+  text-underline-offset: 4px;
+}
+.x-link:hover {
+  text-decoration-color: var(--ember);
+}
+
+.x-tbl {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 13.5px;
+}
+.x-tbl th {
+  padding: 0 14px 10px 0;
+  text-align: left;
+  font-weight: 400;
+  font-size: 12.5px;
+  color: var(--fog-400);
+  border-bottom: 1px solid var(--hair-strong);
+  white-space: nowrap;
+}
+.x-tbl td {
+  padding: 11px 14px 11px 0;
+  border-bottom: 1px solid var(--hair);
+  color: var(--fog-200);
+  vertical-align: baseline;
+}
+.x-tbl .num {
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+.x-tbl .nowrap {
+  white-space: nowrap;
+}
+
+/* key–value facts in two columns */
+.x-kv {
+  display: grid;
+  grid-template-columns: max-content minmax(0, 1fr);
+  gap: 8px 20px;
+  margin: 0;
+}
+.x-kv > div {
+  display: contents;
+}
+.x-kv dt {
+  font-size: 13px;
+  color: var(--fog-400);
+}
+.x-kv dd {
+  margin: 0;
+  font-size: 13.5px;
+  color: var(--fog-200);
+  overflow-wrap: anywhere;
+}
+
+/* match / differ marks for comparisons the browser makes */
+.x-cmp {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 13.5px;
+}
+.x-cmp::before {
+  content: "";
+  flex: none;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  border: 1.2px dashed var(--fog-400);
+}
+.x-cmp[data-c="same"] {
+  color: var(--pass);
+}
+.x-cmp[data-c="same"]::before {
+  border: 0;
+  background: var(--pass);
+}
+.x-cmp[data-c="differs"] {
+  color: var(--fail);
+}
+.x-cmp[data-c="differs"]::before {
+  border: 1.4px solid var(--fail);
+  background: none;
+}
+
+@media (max-width: 760px) {
+  .x-kv {
+    grid-template-columns: 1fr;
+    gap: 2px;
+  }
+  .x-kv dd {
+    margin-bottom: 8px;
+  }
+  .x-tbl.x-cards,
+  .x-tbl.x-cards thead,
+  .x-tbl.x-cards tbody,
+  .x-tbl.x-cards tr,
+  .x-tbl.x-cards td {
+    display: block;
+  }
+  .x-tbl.x-cards thead {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip-path: inset(50%);
+  }
+  .x-tbl.x-cards tr {
+    padding: 12px 0;
+    border-bottom: 1px solid var(--hair);
+  }
+  .x-tbl.x-cards td {
+    padding: 2px 0;
+    border: 0;
+  }
+  .x-tbl.x-cards td.num {
+    text-align: left;
+  }
+}

@@ -138,6 +138,8 @@ function safeHex(h: string): Uint8Array | null {
 }
 // What the block's own bytes say comes first; the explorer's index only fills gaps.
 const ie = computed(() => trust.value?.entity ?? msg.value?.ieId ?? null);
+/** An IE id the lineage route takes (the API's own pattern: no slash, no space). */
+const ieLinkable = computed(() => typeof ie.value === "string" && /^[^/\s]{1,256}$/.test(ie.value));
 const iss = computed(() => trust.value?.issuer ?? msg.value?.iss ?? null);
 const tag = computed(() => trust.value?.tag ?? msg.value?.tag ?? null);
 /** Where the explorer's record names something else than the bytes do. */
@@ -307,7 +309,9 @@ const cfg = pinnedConfig();
           <h1 v-if="score !== null" class="title">
             <span class="score">{{ score }}</span>
             <span class="for"
-              >trust score for <span class="mono">{{ ie }}</span
+              >trust score for
+              <RouterLink v-if="ieLinkable" class="mono ie-link" :to="{ name: 'lineage', params: { id: ie } }" title="Its score history">{{ ie }}</RouterLink
+              ><span v-else class="mono">{{ ie }}</span
               ><span v-if="scoreExact !== score" class="exact">exactly <span class="mono">{{ scoreExact }}</span></span></span
             >
           </h1>
@@ -481,6 +485,11 @@ const cfg = pinnedConfig();
   display: block;
   margin-top: 4px;
   font-size: 13px;
+}
+.ie-link {
+  text-decoration: underline;
+  text-decoration-color: rgba(var(--rgb-ember), 0.6);
+  text-underline-offset: 4px;
 }
 .for .mono,
 .for.mono {

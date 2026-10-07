@@ -10,6 +10,7 @@
     "fixture": "node scripts/make-fixture.mjs",
     "record-replay": "node scripts/record-replay.mjs",
     "build:replay": "vue-tsc -p tsconfig.json --noEmit && vite build --mode replay",
+    "build:lib": "vue-tsc -p tsconfig.json --noEmit && vite build --mode lib",
     "build": "vue-tsc -p tsconfig.json --noEmit && vite build",
     "typecheck": "vue-tsc -p tsconfig.json --noEmit",
     "preview": "vite preview",

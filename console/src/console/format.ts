@@ -1,5 +1,11 @@
 /** Small formatting helpers shared by the console screens. */
 
+/** A Tangle block id (0x and 64 hex digits): the only kind of id a screen turns into a Verify link. */
+export const isBlockId = (v: unknown): v is string => typeof v === "string" && /^0x[0-9a-fA-F]{64}$/.test(v);
+
+/** A score as the console shows it: two decimals. */
+export const score2 = (s: number | null | undefined): string => (typeof s === "number" && Number.isFinite(s) ? s.toFixed(2) : "");
+
 export const shortHex = (h: string | null | undefined, head = 6, tail = 4): string => {
   if (!h) return "";
   return h.length > head + tail + 2 ? `${h.slice(0, head)}…${h.slice(-tail)}` : h;

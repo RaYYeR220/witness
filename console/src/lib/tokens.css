@@ -1,0 +1,41 @@
+/*
+ * The console's design tokens, scoped to the embedded widget's root so a host
+ * page gets the Witness look inside the widget and nothing outside it.
+ * Values mirror src/styles/tokens.css. Fonts fall back to the host's.
+ */
+.witness-lineage {
+  --void: #05100f;
+  --void-raised: #0a1a18;
+  --hair: #1c3330;
+  --hair-strong: #27504d;
+  --fog-400: #6e8f8a;
+  --fog-200: #b7cdc8;
+  --fog-50: #eef6f3;
+  --ember: #f2a35e;
+  --aurora: #7df0c8;
+  --nova: #ff5a6e;
+  --rgb-fog-50: 238, 246, 243;
+  --rgb-fog-200: 183, 205, 200;
+  --rgb-fog-400: 110, 143, 138;
+  --rgb-ember: 242, 163, 94;
+  --rgb-aurora: 125, 240, 200;
+  --rgb-nova: 255, 90, 110;
+  --pass: var(--aurora);
+  --fail: var(--nova);
+  --serif: "Instrument Serif", "Iowan Old Style", Georgia, serif;
+  --sans: "Schibsted Grotesk", system-ui, -apple-system, "Segoe UI", sans-serif;
+  --mono: "Spline Sans Mono", ui-monospace, "Cascadia Mono", Consolas, monospace;
+  --r-cell: 3px;
+  --r-pill: 999px;
+
+  box-sizing: border-box;
+  padding: 20px;
+  background: var(--void);
+  font-size: 15px;
+  line-height: 1.6;
+}
+.witness-lineage *,
+.witness-lineage *::before,
+.witness-lineage *::after {
+  box-sizing: border-box;
+}

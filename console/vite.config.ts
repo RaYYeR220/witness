@@ -1,6 +1,6 @@
 import vue from "@vitejs/plugin-vue";
 import { fileURLToPath, URL } from "node:url";
-import type { ProxyOptions } from "vite";
+import type { ProxyOptions, UserConfig } from "vite";
 import { defineConfig } from "vitest/config";
 
 /**
@@ -18,17 +18,42 @@ const proxy: Record<string, ProxyOptions> = {
   "/anchor/resolve/": { target: target(process.env.WITNESS_ANCHOR_TARGET, "http://127.0.0.1:7300"), changeOrigin: true, rewrite: strip("/anchor") },
 };
 
-export default defineConfig({
+/**
+ * `vite build --mode lib` builds WitnessLineage alone, for the aeriOS
+ * Management Portal to embed (dist-lib/): an ES module and a UMD script with
+ * Vue as a peer (the host's own copy, global `Vue` for the UMD), and one CSS
+ * file that carries the design tokens on the widget's root.
+ */
+const lib: UserConfig["build"] = {
+  target: "es2022",
+  outDir: "dist-lib",
+  copyPublicDir: false,
+  lib: {
+    entry: fileURLToPath(new URL("./src/lib/witness-lineage.ts", import.meta.url)),
+    name: "WitnessLineage",
+    formats: ["es", "umd"],
+    fileName: (format) => (format === "es" ? "witness-lineage.js" : "witness-lineage.umd.cjs"),
+  },
+  rollupOptions: {
+    external: ["vue"],
+    output: { globals: { vue: "Vue" }, assetFileNames: "witness-lineage.[ext]", exports: "named" },
+  },
+};
+
+export default defineConfig(({ mode }) => ({
   plugins: [vue()],
   resolve: {
     alias: { "@": fileURLToPath(new URL("./src", import.meta.url)) },
   },
   server: { proxy },
   preview: { proxy },
-  build: {
-    target: "es2022",
-    chunkSizeWarningLimit: 700,
-  },
+  build:
+    mode === "lib"
+      ? lib
+      : {
+          target: "es2022",
+          chunkSizeWarningLimit: 700,
+        },
   test: {
     include: ["src/**/*.test.ts", "scripts/**/*.test.ts"],
     environment: "node",
@@ -36,4 +61,4 @@ export default defineConfig({
     maxWorkers: 2,
     minWorkers: 1,
   },
-});
+}));

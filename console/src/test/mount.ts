@@ -17,6 +17,12 @@ export async function mountScreen(view: Component, opts: { path: string; data: W
       { path: "/live", name: "live", component: Stub },
       { path: "/search", name: "search", component: Stub },
       { path: "/m/:blockId", name: "verify", component: Stub },
+      { path: "/ie/:id?", name: "lineage", component: Stub },
+      { path: "/integrity", name: "integrity", component: Stub },
+      { path: "/identity", name: "identity", component: Stub },
+      { path: "/anchors", name: "anchors", component: Stub },
+      { path: "/posture", name: "posture", component: Stub },
+      { path: "/reports", name: "reports", component: Stub },
       { path: "/:rest(.*)*", name: "other", component: Stub },
     ],
   });

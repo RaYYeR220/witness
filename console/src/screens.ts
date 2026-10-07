@@ -7,9 +7,10 @@ export interface Screen {
   blurb: string;
   /** Listed in the console's top bar (screens with a parameter are reached from other screens). */
   tab: boolean;
+  /** Where the tab links to, when the path has a parameter. */
+  link?: string;
 }
 
-/** Console screens. Each one is a placeholder until its task lands. */
 export const SCREENS: Screen[] = [
   {
     path: "/live",
@@ -21,10 +22,11 @@ export const SCREENS: Screen[] = [
   { path: "/search", name: "search", title: "Search", tab: true, blurb: "Find a block, a milestone, a DID or an aeriOS entity by any id you have." },
   { path: "/m/:blockId", name: "verify", title: "Verify", tab: false, blurb: "One trust message, its raw bytes and the five checks, run in your browser." },
   {
-    path: "/ie/:id",
+    path: "/ie/:id?",
     name: "lineage",
     title: "Lineage",
-    tab: false,
+    tab: true,
+    link: "/ie",
     blurb: "The trust score history of one aeriOS entity as written to the ledger, next to what Orion reports now.",
   },
   {
@@ -32,49 +34,35 @@ export const SCREENS: Screen[] = [
     name: "integrity",
     title: "Integrity",
     tab: true,
-    blurb: "Forgeries, replays and unauthorized writers the pipeline caught, and the check each one failed.",
+    blurb: "Alerts the rules raised, the incidents they were grouped into, and how well detection held up under attack.",
   },
   {
     path: "/identity",
     name: "identity",
     title: "Identity",
     tab: true,
-    blurb: "The did:iota identities that sign trust messages, their keys and when keys were revoked.",
+    blurb: "The did:iota identities that sign trust messages, their keys and the writer policy that says who may write what.",
   },
   {
     path: "/anchors",
     name: "anchors",
     title: "Anchors",
     tab: true,
-    blurb: "Checkpoints of milestone ranges recorded on IOTA Rebased, and the proof that each one matches.",
+    blurb: "Checkpoints of milestone ranges recorded on IOTA Rebased, and a re-check of each one from your browser.",
   },
   {
     path: "/posture",
     name: "posture",
     title: "Posture",
     tab: true,
-    blurb: "How much of the domain's traffic is signed, attested, legacy or rejected, over time.",
+    blurb: "The last security scan of the node this explorer watches: what it found and how to fix it.",
   },
   {
     path: "/reports",
     name: "reports",
     title: "Reports",
     tab: true,
-    blurb: "Exportable evidence: a period, its checkpoints and every verdict, ready for an auditor.",
-  },
-  {
-    path: "/flows",
-    name: "flows",
-    title: "Flows",
-    tab: true,
-    blurb: "Which components write which tags, and how messages move between aeriOS domains.",
-  },
-  {
-    path: "/incidents",
-    name: "incidents",
-    title: "Incidents",
-    tab: true,
-    blurb: "Alerts grouped into incidents, with the blocks that triggered them.",
+    blurb: "Signed audit reports, whether the ledger vouches for each one, and its hash recomputed in your browser.",
   },
 ];
 

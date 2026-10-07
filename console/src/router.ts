@@ -10,6 +10,7 @@ const VIEWS: Record<string, RouteRecordRaw["component"]> = {
   live: () => import("@/views/LiveView.vue"),
   search: () => import("@/views/SearchView.vue"),
   verify: () => import("@/views/VerifyView.vue"),
+  lineage: () => import("@/views/LineageView.vue"),
 };
 
 const routes: RouteRecordRaw[] = [
@@ -17,6 +18,9 @@ const routes: RouteRecordRaw[] = [
   ...SCREENS.map(
     (s) => ({ path: s.path, name: s.name, component: VIEWS[s.name] ?? ComingSoon, meta: { title: s.title, blurb: s.blurb } }) as RouteRecordRaw,
   ),
+  // incidents live on Integrity
+  { path: "/incidents", redirect: { name: "integrity" } },
+  { path: "/incidents/:id", redirect: (to) => ({ name: "integrity", query: { incident: String(to.params.id) } }) },
   { path: "/:pathMatch(.*)*", redirect: "/" },
 ];
 

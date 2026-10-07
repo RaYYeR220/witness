@@ -38,7 +38,7 @@ function go() {
     <header class="bar">
       <RouterLink class="wordmark" to="/">Witness</RouterLink>
       <nav class="tabs" aria-label="Console">
-        <RouterLink v-for="t in CONSOLE_TABS" :key="t.path" :to="t.path">{{ t.title }}</RouterLink>
+        <RouterLink v-for="t in CONSOLE_TABS" :key="t.path" :to="t.link ?? t.path">{{ t.title }}</RouterLink>
       </nav>
       <form class="quick" role="search" @submit.prevent="go">
         <label class="sr-only" for="quick-q">Find a block, milestone, DID or IE</label>
