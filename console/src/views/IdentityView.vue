@@ -7,7 +7,7 @@ import { useData, useLookups } from "@/console/data";
 import { didObjectId, explorerAddress, explorerObject, explorerTx } from "@/console/explorer";
 import { shortDid, shortHex, utc } from "@/console/format";
 import VerdictMark from "@/console/VerdictMark.vue";
-import { fragment, keyStatus, readIdentities, tagsFor, type ComponentIdentity, type KeyState, type KeyStatus } from "@/identity/model";
+import { ForeignDocument, fragment, keyStatus, readIdentities, tagsFor, type ComponentIdentity, type KeyState, type KeyStatus } from "@/identity/model";
 import { PINNED } from "@/verify/pinned";
 
 /**
@@ -24,8 +24,8 @@ const identity = shallowRef<Identity | null>(null);
 const error = ref<string | null>(null);
 const loaded = ref(false);
 const latest = shallowRef<AnchorCheckpoint | null>(null);
-/** Key status per DID: undefined while asking, null when the resolver did not answer. */
-const status = reactive(new Map<string, KeyStatus | null | "pending">());
+/** Key status per DID: "pending" while asking, null when the resolver did not answer, "foreign" when it answered for another DID. */
+const status = reactive(new Map<string, KeyStatus | null | "pending" | "foreign">());
 let alive = true;
 onBeforeUnmount(() => (alive = false));
 
@@ -46,9 +46,9 @@ async function resolveAll(ids: ComponentIdentity[]) {
     for (let next = queue.shift(); next && alive; next = queue.shift()) {
       try {
         const resolved = await lookups.resolveDid(next.did);
-        status.set(next.did, resolved === null ? null : keyStatus(resolved, next.keys));
-      } catch {
-        status.set(next.did, null);
+        status.set(next.did, resolved === null ? null : keyStatus(resolved, next.did, next.keys));
+      } catch (e) {
+        status.set(next.did, e instanceof ForeignDocument ? "foreign" : null);
       }
     }
   };
@@ -80,6 +80,7 @@ function keyLine(did: string, kid: string): { tone: "ok" | "bad" | "wait" | "non
   const s = status.get(did);
   if (s === undefined || s === "pending") return { tone: "wait", text: "checking…" };
   if (s === null) return { tone: "none", text: "resolver did not answer" };
+  if (s === "foreign") return { tone: "bad", text: "resolver answered for another DID" };
   return stateLine(s.byKid.get(kid) ?? { kind: "absent" });
 }
 
@@ -188,7 +189,7 @@ const ruleRows = computed(() => (policy.value ? Object.entries(policy.value.tags
                       <VerdictMark :family="FAMILY[keyLine(i.did, k.kid).tone]" /> {{ keyLine(i.did, k.kid).text }}
                     </td>
                   </tr>
-                  <template v-if="status.get(i.did) && status.get(i.did) !== 'pending'">
+                  <template v-if="status.get(i.did) && status.get(i.did) !== 'pending' && status.get(i.did) !== 'foreign'">
                     <tr v-for="o in (status.get(i.did) as KeyStatus).others" :key="o.kid" class="other">
                       <td class="mono" :title="o.kid">{{ fragment(o.kid) }}</td>
                       <td colspan="2" class="x-muted">known to the resolver only</td>

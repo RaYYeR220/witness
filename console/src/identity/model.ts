@@ -93,12 +93,20 @@ export interface KeyStatus {
   historyComplete: boolean | null;
 }
 
+/** The resolver answered with the document of another DID than the one asked for. */
+export class ForeignDocument extends Error {
+  override name = "ForeignDocument";
+}
+
 /**
  * Key status from the resolver's answer (`{doc, keys: [{kid, revokedAtMs}], historyComplete}`),
  * read with the verifier's own snapshot reader. A kid with an entry in force is active; one whose
  * entries are all revoked is revoked at the latest time.
  */
-export function keyStatus(resolved: unknown, published: readonly IdentityKey[]): KeyStatus {
+export function keyStatus(resolved: unknown, did: string, published: readonly IdentityKey[]): KeyStatus {
+  const doc = isDict(resolved) ? (resolved as Record<string, unknown>).doc : undefined;
+  const id = isDict(doc) ? (doc as Record<string, unknown>).id : undefined;
+  if (id !== did) throw new ForeignDocument(`the resolver answered with ${typeof id === "string" ? id : "no DID document"}`);
   const table = snapshotKeys(resolved);
   const state = (kid: string): KeyState => {
     const entries = table.get(kid);

@@ -9,7 +9,7 @@ import { mountScreen, until } from "@/test/mount";
 import type { TrustedLookups } from "@/verify/lookups";
 import IdentityView from "@/views/IdentityView.vue";
 
-import { keyStatus, readIdentities, readIdentity, tagsFor } from "./model";
+import { ForeignDocument, keyStatus, readIdentities, readIdentity, tagsFor } from "./model";
 
 /* eslint-disable @typescript-eslint/no-explicit-any */
 const ID = live.identity as unknown as Identity;
@@ -48,13 +48,16 @@ describe("identity model", () => {
 
   it("reads key status from the resolver: in force, revoked, or unknown to it", () => {
     const tm = readIdentity(TM)!;
-    const s = keyStatus(resolvedTm(), tm.keys);
+    const s = keyStatus(resolvedTm(), TM.did, tm.keys);
     expect(s.byKid.get(TM.keys[0].kid)).toEqual({ kind: "revoked", atMs: REVOKED_AT });
     expect(s.byKid.get(TM.keys[1].kid)).toEqual({ kind: "active" });
     expect(s.others).toEqual([{ kid: `${TM.did}#sig-0`, state: { kind: "revoked", atMs: REVOKED_AT - 1000 } }]);
     expect(s.historyComplete).toBe(false);
-    const none = keyStatus({ doc: { id: TM.did }, keys: [] }, tm.keys);
+    const none = keyStatus({ doc: { id: TM.did }, keys: [] }, TM.did, tm.keys);
     expect(none.byKid.get(TM.keys[0].kid)).toEqual({ kind: "absent" });
+    // a document of another DID is not an answer about this one
+    expect(() => keyStatus(resolvedTm(), "did:iota:testnet:0x" + "00".repeat(32), tm.keys)).toThrow(ForeignDocument);
+    expect(() => keyStatus({ keys: [] }, TM.did, tm.keys)).toThrow(ForeignDocument);
   });
 
   it("lists the tags a DID may write", () => {
@@ -95,7 +98,10 @@ describe("Identity screen", () => {
     const lookups: TrustedLookups = {
       resolveDid: async (did: string) => {
         asked.push(did);
-        return did === TM.did ? resolvedTm() : null;
+        if (did === TM.did) return resolvedTm();
+        // the LLO's DID is answered with the trust manager's document
+        if ((ID.anchor.identities as any[]).find((i) => i.name === "llo-k8s")?.did === did) return resolvedTm();
+        return null;
       },
       fetchAnchorRecord: null,
       didSource: "the test resolver",
@@ -120,6 +126,9 @@ describe("Identity screen", () => {
     // a DID the resolver does not know is said so, never shown in force
     const other = w.findAll(".card").find((c) => c.find(".name").text() === "relay")!;
     expect(other.find(".st").text()).toContain("resolver did not answer");
+    const llo = w.findAll(".card").find((c) => c.find(".name").text() === "llo-k8s")!;
+    expect(llo.find(".st").text()).toContain("resolver answered for another DID");
+    expect(llo.find(".st").attributes("data-tone")).toBe("bad");
     // explorer links: https, on the explorer, pinned network
     const hrefs = w.findAll("a[target=_blank]").map((a) => a.attributes("href")!);
     expect(hrefs.length).toBeGreaterThan(6);
