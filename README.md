@@ -179,23 +179,25 @@ full list, the indexer flags, the Helm chart and troubleshooting are in
 
 ## Tests
 
-Counted by collection at the commit this README was written on (`uv run pytest --collect-only
--q <pkg>/tests`, `vitest list`):
+<!-- TEST-COUNTS -->
+Counted by collection at commit `34fd911` (`uv run pytest --collect-only -q -m "not live"
+<pkg>/tests` for each Python package, `pnpm --filter <pkg> exec vitest list` for TypeScript):
 
 | Suite | Tests |
 |---|---:|
-| `core` | 374 |
-| `indexer` | 387 |
-| `api` | 95 |
-| `relay` | 83 |
+| `core` | 375 |
+| `indexer` | 398 |
+| `api` | 96 |
+| `relay` | 85 |
 | `sdk` | 12 |
 | `cli` | 42 |
 | `mcp` | 36 |
-| `chaos` | 189 |
+| `chaos` | 191 |
 | `packages/verify` (TypeScript) | 372 |
-| `anchor` (TypeScript) | 154 |
-| `console` (TypeScript) | 99 |
-| **Total** | **1843** |
+| `anchor` (TypeScript) | 156 |
+| `console` (TypeScript) | 183 |
+| **Total** | **1946** |
+<!-- /TEST-COUNTS -->
 
 ```bash
 uv sync --all-packages
