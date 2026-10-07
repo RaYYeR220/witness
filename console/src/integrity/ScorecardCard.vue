@@ -6,7 +6,7 @@ import type { Scorecard } from "@/api/client";
  * stack and scores what the explorer caught. Shown exactly as the published
  * scorecard.json states it; without one, the card says it is not there yet.
  */
-defineProps<{ card: Scorecard | null; error: string | null; loading: boolean }>();
+defineProps<{ card: Scorecard | null; error: string | null; loading: boolean; source: string | null }>();
 
 const pct = (r: number) => `${Math.round(r * 1000) / 10}%`;
 const secs = (ms: number | null) => (ms === null ? "–" : `${(ms / 1000).toFixed(1)} s`);
@@ -18,6 +18,7 @@ const secs = (ms: number | null) => (ms === null ? "–" : `${(ms / 1000).toFixe
     <p v-if="loading" class="x-quiet">Looking for the evaluation scorecard…</p>
     <template v-else-if="card">
       <p class="headline">{{ card.headline }}</p>
+      <p class="src x-sec-note">{{ source ? source[0]!.toUpperCase() + source.slice(1) : "Published by the operator" }}; shown as written, not checked in your browser.</p>
       <dl class="nums">
         <div>
           <dt>Detected</dt>
@@ -34,6 +35,10 @@ const secs = (ms: number | null) => (ms === null ? "–" : `${(ms / 1000).toFixe
         <div v-if="card.traps">
           <dt>False positives on genuine traffic</dt>
           <dd>{{ card.traps.false_positives }}/{{ card.traps.messages }}</dd>
+        </div>
+        <div v-if="card.unexpected_alerts !== null">
+          <dt>Unexpected alerts on attacked blocks</dt>
+          <dd>{{ card.unexpected_alerts }}</dd>
         </div>
         <div v-if="card.controls">
           <dt>Positive controls</dt>
@@ -94,6 +99,9 @@ const secs = (ms: number | null) => (ms === null ? "–" : `${(ms / 1000).toFixe
   margin: 8px 0 0;
   font: 400 30px/1.1 var(--serif);
   color: var(--fog-50);
+}
+.src {
+  margin-top: 6px;
 }
 .placeholder {
   margin: 8px 0 8px;

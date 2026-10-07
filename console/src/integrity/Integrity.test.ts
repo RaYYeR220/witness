@@ -169,9 +169,11 @@ describe("Integrity screen", () => {
       controls: null,
     };
     const { d } = data(card);
+    Object.assign(d, { scorecardSource: "published by the operator at /eval/scorecard.json" });
     const { w } = await mountScreen(IntegrityView, { path: "/integrity", data: d });
     await until(() => w.find(".headline").exists());
     expect(w.find(".headline").text()).toBe(card.headline);
+    expect(w.find(".card .src").text()).toBe("Published by the operator at /eval/scorecard.json; shown as written, not checked in your browser.");
     expect(w.find(".nums").text()).toContain("95%");
     expect(w.find(".nums").text()).toContain("57/60");
     w.unmount();

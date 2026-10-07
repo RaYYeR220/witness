@@ -450,7 +450,8 @@ export interface Scorecard {
   detection_rate: number;
   latency_p50_ms: number | null;
   latency_p95_ms: number | null;
-  unexpected_alerts: number;
+  /** null when the scorecard does not state it. */
+  unexpected_alerts: number | null;
   classes: ScorecardClass[];
   traps: { messages: number; duration_s: number; false_positives: number; meets_profile: boolean } | null;
   controls: { trials: number; passed: number } | null;
@@ -493,7 +494,7 @@ export function asScorecard(doc: unknown): Scorecard | null {
     detection_rate: d.detection_rate,
     latency_p50_ms: isNum(d.latency_p50_ms) ? d.latency_p50_ms : null,
     latency_p95_ms: isNum(d.latency_p95_ms) ? d.latency_p95_ms : null,
-    unexpected_alerts: isNum(d.unexpected_alerts) ? d.unexpected_alerts : 0,
+    unexpected_alerts: isNum(d.unexpected_alerts) ? d.unexpected_alerts : null,
     classes,
     traps:
       t && isNum(t.messages) && isNum(t.duration_s) && isNum(t.false_positives)
@@ -573,6 +574,8 @@ export interface WitnessData {
   reportHtmlUrl(reportHash: string): string | null;
   /** The evaluation scorecard, when this deployment publishes one; null otherwise. */
   scorecard(): Promise<Scorecard | null>;
+  /** Where a scorecard would come from, in words; null when this deployment names none. */
+  readonly scorecardSource: string | null;
   /** Subscribes to the event stream; returns the unsubscribe function. */
   stream(onEvent: (event: StreamEvent) => void, options?: StreamOptions): () => void;
   /**
@@ -681,11 +684,13 @@ export class LiveAdapter implements WitnessData {
   readonly source: string;
   private readonly base: string;
   private readonly scorecardUrl: string | null;
+  readonly scorecardSource: string | null;
 
   constructor(baseUrl: string, options: { scorecardUrl?: string | null } = {}) {
     this.base = baseUrl.replace(/\/+$/, "");
     this.source = `witness-api at ${this.base}`;
     this.scorecardUrl = options.scorecardUrl || null;
+    this.scorecardSource = this.scorecardUrl ? `published by the operator at ${this.scorecardUrl}` : null;
   }
 
   messages(query: MessageQuery = {}) {
@@ -933,12 +938,14 @@ export function pageIncident(full: IncidentDetail, page: IncidentPage = {}): Inc
 export class ReplayAdapter implements WitnessData {
   readonly mode = "replay" as const;
   readonly source: string;
+  readonly scorecardSource: string;
   private readonly root: string;
   private all: Promise<MessageSummary[]> | null = null;
 
   constructor(root = "/replay/") {
     this.root = root.endsWith("/") ? root : `${root}/`;
     this.source = `recorded snapshot at ${this.root}`;
+    this.scorecardSource = `recorded with this snapshot (${this.root}scorecard.json)`;
   }
 
   private file(name: string, as: "json" | "text" = "json") {

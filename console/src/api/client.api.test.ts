@@ -359,6 +359,11 @@ describe("ReplayAdapter", () => {
     snapshot({ "/replay/scorecard.json": () => json(card) });
     expect(await new ReplayAdapter("/replay/").scorecard()).toEqual(card);
     expect(asScorecard({ ...card, classes: [{ id: "A01" }] })).toBeNull();
+    // a count the file does not state is not shown as zero
+    expect(asScorecard({ ...card, unexpected_alerts: undefined })!.unexpected_alerts).toBeNull();
+    expect(new ReplayAdapter("/replay/").scorecardSource).toBe("recorded with this snapshot (/replay/scorecard.json)");
+    expect(new LiveAdapter("/api", { scorecardUrl: "/eval/scorecard.json" }).scorecardSource).toBe("published by the operator at /eval/scorecard.json");
+    expect(new LiveAdapter("/api").scorecardSource).toBeNull();
     expect(asScorecard({ ...card, detected: "9" })).toBeNull();
   });
 });

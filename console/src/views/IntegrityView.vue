@@ -112,7 +112,7 @@ const incidentTo = (id: number) => ({ name: "integrity", query: { ...route.query
         </div>
       </header>
 
-      <ScorecardCard class="x-sec" :card="card" :error="cardError" :loading="cardLoading" />
+      <ScorecardCard class="x-sec" :card="card" :error="cardError" :loading="cardLoading" :source="data.scorecardSource" />
 
       <section class="x-sec" aria-labelledby="incs-h">
         <div class="x-sec-head">
