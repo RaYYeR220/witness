@@ -12,6 +12,7 @@ const VIEWS: Record<string, RouteRecordRaw["component"]> = {
   verify: () => import("@/views/VerifyView.vue"),
   lineage: () => import("@/views/LineageView.vue"),
   integrity: () => import("@/views/IntegrityView.vue"),
+  identity: () => import("@/views/IdentityView.vue"),
 };
 
 const routes: RouteRecordRaw[] = [
