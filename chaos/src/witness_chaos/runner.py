@@ -1223,8 +1223,15 @@ class Runner:
                 trials_log.close()
             late = await self.late_sweep()
         finally:
-            # Whatever happened above, the rows A19 rewrote get their bytes back.
-            restored = await self.restore_tampered()
+            # Whatever happened above, the rows A19 rewrote get their bytes back. If that
+            # itself fails (the database is down), run.json still names every row left
+            # rewritten; `witness-chaos restore` can put them back from tampered.jsonl.
+            pending = [to_hex(b) for b in (self.ctx.originals if self.ctx else {})]
+            try:
+                restored = await self.restore_tampered()
+            except Exception as exc:  # noqa: BLE001 - recorded, then the run fails below
+                log.error("restoring rewritten rows failed: %s", type(exc).__name__)
+                restored = [{"block": b, "ok": False} for b in pending]
             self.meta["restored"] = restored
             self.meta["restoreFailed"] = [r["block"] for r in restored if not r["ok"]]
             self._write_meta()
@@ -1511,11 +1518,9 @@ def restore_command(out: Path, dsn: str | None, schema: str, allow_nonlocal: boo
     if not dsn:
         print("witness-chaos: --db-dsn (or WITNESS_EVAL_DB) is required", file=sys.stderr)
         return 2
-    from psycopg.conninfo import conninfo_to_dict, make_conninfo
+    from psycopg.conninfo import make_conninfo
 
-    host = conninfo_to_dict(dsn).get("host")
-    if not allow_nonlocal and not all(is_loopback_host(h) for h in str(host or "").split(",")
-                                      if h and not h.startswith("/")):
+    if not allow_nonlocal and not all(is_loopback_host(h) for h in dsn_hosts(dsn)):
         print("witness-chaos: --db-dsn host is not local (use --allow-nonlocal)",
               file=sys.stderr)
         return 2

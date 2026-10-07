@@ -134,3 +134,31 @@ async def test_an_interrupted_run_still_restores(tmp_path, monkeypatch):
     meta = json.loads((tmp_path / "out" / "run.json").read_text(encoding="utf-8"))
     assert meta["restored"] == [{"block": "0x" + "cd" * 32, "ok": True}]
     assert meta["restoreFailed"] == []
+
+
+async def test_a_failing_restore_is_recorded_with_every_row_left(tmp_path, monkeypatch):
+    cfg = R.RunConfig(api="http://127.0.0.1:7200", relay="http://127.0.0.1:5557",
+                      orion="http://127.0.0.1:1026", hornet="http://127.0.0.1:14265",
+                      out=str(tmp_path / "out"), trap=False, allow_nonlocal=True)
+    r = R.Runner(cfg)
+
+    async def nothing(*a, **k):
+        return {}
+
+    ctx = A.AttackContext(live=True, producer=types.SimpleNamespace(iss="did:key:zRun"))
+    ctx.originals[BID] = b"original"
+
+    async def db_down():
+        raise OSError("connection refused")
+
+    monkeypatch.setattr(r, "preflight", nothing)
+    monkeypatch.setattr(r, "build_context", lambda: ctx)
+    monkeypatch.setattr(r, "check_identity", nothing)
+    monkeypatch.setattr(r, "check_exclusive", nothing)
+    monkeypatch.setattr(r, "classes", list)
+    monkeypatch.setattr(r, "late_sweep", nothing)
+    monkeypatch.setattr(r, "restore_tampered", db_down)
+    card = await r.run()
+    assert card["restoreFailed"] == ["0x" + "cd" * 32]
+    meta = json.loads((tmp_path / "out" / "run.json").read_text(encoding="utf-8"))
+    assert meta["restoreFailed"] == ["0x" + "cd" * 32]
