@@ -11,6 +11,7 @@ import HexView from "@/console/HexView.vue";
 import LadderPanel from "@/console/LadderPanel.vue";
 import MessageBody from "@/console/MessageBody.vue";
 import NodeChecks from "@/console/NodeChecks.vue";
+import TangleChecks from "@/console/TangleChecks.vue";
 import VerdictBadge from "@/console/VerdictBadge.vue";
 import { bindBundle, type Binding } from "@/verify/binding";
 import { createLadder, resetLadder, runLadder } from "@/verify/ladder";
@@ -281,6 +282,17 @@ const comparison = computed(() => {
   return null;
 });
 
+/** After a re-check on the node, the lifecycle the explorer recorded has moved on too. */
+async function refreshLifecycle() {
+  const id = blockId.value;
+  try {
+    const l = await data.lifecycle(id);
+    if (id === blockId.value && l.blockId.toLowerCase() === id) life.value = l;
+  } catch {
+    /* the earlier answer stays */
+  }
+}
+
 function download() {
   if (!bundleText.value) return;
   const url = URL.createObjectURL(new Blob([bundleText.value], { type: "application/json" }));
@@ -368,6 +380,8 @@ const cfg = pinnedConfig();
         <p v-if="comparison" class="compare" :data-tone="comparison.tone" role="note">{{ comparison.text }}</p>
         <p v-if="notAnchoredYet" class="compare pending" data-tone="note" role="note"><b>Not anchored yet:</b> {{ pendingNote }}</p>
 
+        <TangleChecks :block-id="blockId" :recorded="life?.checks ?? null" :recorded-error="lifeError" @rechecked="refreshLifecycle" />
+
         <section class="checks" aria-labelledby="checks-h">
           <div class="checks-head">
             <h2 id="checks-h">The five checks, in your browser</h2>
@@ -429,7 +443,7 @@ const cfg = pinnedConfig();
       <aside class="rail">
         <MessageBody v-if="msg || bundle" :json="decoded" />
         <p v-else-if="!msgError" class="muted">Loading the message…</p>
-        <NodeChecks :block-id="blockId" :lifecycle="life" :lifecycle-error="lifeError" />
+        <NodeChecks :lifecycle="life" :lifecycle-error="lifeError" />
       </aside>
     </div>
   </ConsoleShell>

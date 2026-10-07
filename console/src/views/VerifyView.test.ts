@@ -110,6 +110,12 @@ describe("Verify", () => {
     expect(w.find(".score").text()).toBe("0.82");
     expect(w.find(".hex").exists()).toBe(true);
     expect(w.find(".pins").text()).toContain("they are the same");
+    // the brief's (c) and (d) sit above the browser's five checks
+    const html = w.html();
+    expect(html.indexOf('class="tangle"')).toBeGreaterThan(0);
+    expect(html.indexOf('class="tangle"')).toBeLessThan(html.indexOf('class="checks"'));
+    expect(w.find(".tangle").text()).toContain("(c) Solid on the Tangle");
+    expect(w.find(".tangle").text()).toContain("(d) Same content as on the Tangle");
     w.unmount();
   });
 
