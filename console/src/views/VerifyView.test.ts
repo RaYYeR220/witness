@@ -2,7 +2,7 @@
 import axe from "axe-core";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-import type { Lifecycle, Message, WitnessData } from "@/api/client";
+import { ReplayAdapter, type Lifecycle, type Message, type WitnessData } from "@/api/client";
 import { mountScreen, until } from "@/test/mount";
 import { bundleCase, wired } from "@/test/vectors";
 import type { TrustedLookups } from "@/verify/lookups";
@@ -22,9 +22,11 @@ vi.mock("@/verify/pinned", async () => {
   };
 });
 
-function fakeData(name: string, verdict: string): { data: WitnessData; lookups: TrustedLookups; blockId: string } {
+/** `served` swaps in another case's bundle, as a lying or confused API would. */
+function fakeData(name: string, verdict: string, served = name): { data: WitnessData; lookups: TrustedLookups; blockId: string; message: Message; lifecycle: Lifecycle } {
   const c = bundleCase(name);
   const w = wired(name);
+  const bundleText = wired(served).text;
   const blockId: string = c.bundle.block.id;
   const message = {
     blockId,
@@ -57,7 +59,7 @@ function fakeData(name: string, verdict: string): { data: WitnessData; lookups: 
     source: "test",
     message: async () => message,
     lifecycle: async () => lifecycle,
-    bundle: async () => w.text,
+    bundle: async () => bundleText,
     verifierConfig: async () => w.config,
     health: async () => ({ mode: "live", ok: true, network: "private_tangle1", version: "test", note: null }),
     recheck: async () => {
@@ -71,7 +73,7 @@ function fakeData(name: string, verdict: string): { data: WitnessData; lookups: 
     anchorSource: "a recorded copy from the test vectors",
     recordedDids: true,
   };
-  return { data, lookups, blockId };
+  return { data, lookups, blockId, message, lifecycle };
 }
 
 beforeEach(() => {
@@ -117,6 +119,54 @@ describe("Verify", () => {
     const result = await axe.run(document.body, { rules: { "color-contrast": { enabled: false } } });
     const bad = result.violations.filter((v) => v.impact === "critical" || v.impact === "serious");
     expect(bad.map((v) => `${v.id}: ${v.nodes.map((n) => n.target.join(" ")).join(", ")}`)).toEqual([]);
+    w.unmount();
+  });
+
+  it("refuses a proof of another block: banner, INVALID, no checks run on it", async () => {
+    // asked for the forged twin's block, the API serves the valid sample's bundle instead
+    const { data, lookups, blockId } = fakeData("envelope_forged", "PRODUCER_SIGNED", "valid_anchored");
+    const { w } = await mountScreen(VerifyView, { path: `/m/${blockId}`, data, lookups });
+    await until(() => w.find(".foreign").exists());
+    await new Promise((r) => setTimeout(r, 50));
+    expect(w.find(".foreign").text()).toContain("The explorer served a proof for another block");
+    expect(w.find(".vbox.mine").attributes("data-o")).toBe("INVALID");
+    expect(w.find(".vbox.mine").text()).not.toContain("VALID ");
+    expect(w.find(".overall-chip").text()).toBe("INVALID");
+    expect(w.find("li.step").exists()).toBe(false); // the ladder never ran on the foreign bundle
+    expect(w.find(".hex").exists()).toBe(false); // nor are its bytes shown as this block's
+    expect(w.text()).not.toContain("All five checks passed");
+    w.unmount();
+  });
+
+  it("applies the same binding to a replay snapshot whose bundle file is swapped", async () => {
+    const asked = fakeData("envelope_forged", "PRODUCER_SIGNED");
+    const swapped = wired("valid_anchored").text;
+    const files: Record<string, string> = {
+      [`/replay/messages/${asked.blockId}.json`]: JSON.stringify(asked.message),
+      [`/replay/lifecycle/${asked.blockId}.json`]: JSON.stringify(asked.lifecycle),
+      [`/replay/bundles/${asked.blockId}.json`]: swapped,
+      "/replay/manifest.json": JSON.stringify({ about: "test", recordedAtMs: 1791283579000, source: "test" }),
+      "/replay/verifier-config.json": JSON.stringify(bundleCase("valid_anchored").config),
+    };
+    vi.stubGlobal("fetch", async (input: string) => {
+      const body = files[String(input)];
+      return body === undefined ? new Response("{}", { status: 404 }) : new Response(body, { status: 200 });
+    });
+    const { w } = await mountScreen(VerifyView, { path: `/m/${asked.blockId}`, data: new ReplayAdapter("/replay/"), lookups: asked.lookups });
+    await until(() => w.find(".foreign").exists());
+    expect(w.find(".overall-chip").text()).toBe("INVALID");
+    expect(w.find("li.step").exists()).toBe(false);
+    w.unmount();
+  });
+
+  it("names what the explorer's record says when it differs from the bytes", async () => {
+    const f = fakeData("valid_anchored", "PRODUCER_SIGNED");
+    (f.message as { ieId: string }).ieId = "OtherDomain:000000000000";
+    const { w } = await mountScreen(VerifyView, { path: `/m/${f.blockId}`, data: f.data, lookups: f.lookups });
+    await until(() => w.find(".overall").attributes("data-o") === "VALID");
+    // the headline takes the IE from the bytes; the record's other IE is named as such
+    expect(w.find(".title").text()).toContain("MyDomain:fa163e5e25ef");
+    expect(w.text()).toContain("The explorer's record names IE OtherDomain:000000000000 instead");
     w.unmount();
   });
 });

@@ -12,6 +12,7 @@ import LadderPanel from "@/console/LadderPanel.vue";
 import MessageBody from "@/console/MessageBody.vue";
 import NodeChecks from "@/console/NodeChecks.vue";
 import VerdictBadge from "@/console/VerdictBadge.vue";
+import { bindBundle, type Binding } from "@/verify/binding";
 import { createLadder, resetLadder, runLadder } from "@/verify/ladder";
 import { anchorPinned, PINNED, pinnedConfig } from "@/verify/pinned";
 import { readTrustMessage } from "@/verify/sample";
@@ -33,6 +34,9 @@ const life = ref<Lifecycle | null>(null);
 const lifeError = ref<string | null>(null);
 const bundleText = ref<string | null>(null);
 const bundleError = ref<string | null>(null);
+/** Whether the served bundle is about the requested block at all. */
+const binding = ref<Binding | null>(null);
+const foreign = computed(() => binding.value?.kind === "other");
 const apiPins = ref<VerifierConfig | null>(null);
 const ladder = createLadder();
 const anchorOk = anchorPinned();
@@ -50,7 +54,8 @@ interface BundleView {
 
 /** Facts read from the bundle for display only; the ladder parses it on its own. */
 const bundle = computed<BundleView | null>(() => {
-  if (!bundleText.value) return null;
+  // a bundle about another block shows nothing of that block here
+  if (!bundleText.value || foreign.value) return null;
   try {
     const b = parseJson(bundleText.value) as Record<string, unknown>;
     const block = b.block as Record<string, unknown> | undefined;
@@ -129,16 +134,28 @@ function safeHex(h: string): Uint8Array | null {
     return null;
   }
 }
-const ie = computed(() => msg.value?.ieId ?? trust.value?.entity ?? null);
-const iss = computed(() => msg.value?.iss ?? trust.value?.issuer ?? null);
-const tag = computed(() => msg.value?.tag ?? trust.value?.tag ?? null);
+// What the block's own bytes say comes first; the explorer's index only fills gaps.
+const ie = computed(() => trust.value?.entity ?? msg.value?.ieId ?? null);
+const iss = computed(() => trust.value?.issuer ?? msg.value?.iss ?? null);
+const tag = computed(() => trust.value?.tag ?? msg.value?.tag ?? null);
+/** Where the explorer's record names something else than the bytes do. */
+const recordDiffers = computed(() => {
+  const t = trust.value;
+  const m = msg.value;
+  if (!t || !m) return [];
+  const out: string[] = [];
+  if (t.tag !== null && m.tag !== null && t.tag !== m.tag) out.push(`tag ${m.tag}`);
+  if (t.entity !== null && m.ieId !== null && t.entity !== m.ieId) out.push(`IE ${m.ieId}`);
+  if (t.issuer !== null && m.iss !== null && t.issuer !== m.iss) out.push(`issuer ${shortDid(m.iss)}`);
+  return out;
+});
 
 function reduced() {
   return typeof matchMedia === "function" && matchMedia("(prefers-reduced-motion: reduce)").matches;
 }
 
 async function verify() {
-  if (!bundleText.value) return;
+  if (!bundleText.value || foreign.value) return;
   await runLadder(ladder, bundleText.value, {
     resolveDid: lookups.resolveDid,
     fetchAnchorRecord: lookups.fetchAnchorRecord,
@@ -156,16 +173,21 @@ async function load(id: string) {
   msg.value = null;
   life.value = null;
   bundleText.value = null;
+  binding.value = null;
   msgError.value = lifeError.value = bundleError.value = null;
   resetLadder(ladder);
   const [m, l, b] = await Promise.allSettled([data.message(id), data.lifecycle(id), data.bundle(id)]);
   if (g !== generation) return;
-  if (m.status === "fulfilled") msg.value = m.value;
+  const same = (other: unknown) => typeof other === "string" && other.toLowerCase() === id;
+  if (m.status === "fulfilled" && same(m.value.blockId)) msg.value = m.value;
+  else if (m.status === "fulfilled") msgError.value = `The explorer answered with another message (${shortHex(String(m.value.blockId), 8, 6)}); it is not shown.`;
   else msgError.value = why(m.reason, "The explorer has no message with this id");
-  if (l.status === "fulfilled") life.value = l.value;
+  if (l.status === "fulfilled" && same(l.value.blockId)) life.value = l.value;
+  else if (l.status === "fulfilled") lifeError.value = "The explorer answered with the lifecycle of another block; it is not shown.";
   else lifeError.value = why(l.reason, "No lifecycle recorded");
   if (b.status === "fulfilled") {
     bundleText.value = b.value;
+    binding.value = bindBundle(b.value, id);
     void verify();
   } else {
     bundleError.value =
@@ -198,11 +220,14 @@ const pinsDiffer = computed(() => {
   return diffs;
 });
 
+/** The browser's verdict: the ladder's, except that a proof of another block is no proof of this one. */
+const browserOverall = computed(() => (foreign.value ? "INVALID" : ladder.overall));
+
 const family = computed(() => verdictInfo(msg.value?.verdict).family);
 const comparison = computed(() => {
-  const o = ladder.overall;
+  const o = browserOverall.value;
   const v = msg.value?.verdict;
-  if (!o || ladder.running || !v) return null;
+  if (foreign.value || !o || ladder.running || !v) return null;
   if (family.value === "signed" && o === "INVALID") {
     return { tone: "bad", text: `They disagree. The indexer recorded a valid signature; check ${ladder.failedAt} failed in your browser. Your result comes from the bytes in front of you.` };
   }
@@ -277,6 +302,9 @@ const cfg = pinnedConfig();
               <dd class="mono" :title="iss ?? undefined">{{ iss ? shortDid(iss) : "unsigned" }}</dd>
             </div>
           </dl>
+          <p v-if="recordDiffers.length" class="warn">
+            Read from the block's bytes. The explorer's record names {{ recordDiffers.join(", ") }} instead.
+          </p>
           <p v-if="msgError" class="warn">{{ msgError }}</p>
         </header>
 
@@ -286,26 +314,32 @@ const cfg = pinnedConfig();
             <VerdictBadge :verdict="msg?.verdict" />
             <p class="vfine">What the explorer decided when it stored the message. A record, not a proof.</p>
           </div>
-          <div class="vbox mine" :data-o="ladder.running ? 'RUNNING' : (ladder.overall ?? 'NONE')">
+          <div class="vbox mine" :data-o="ladder.running ? 'RUNNING' : (browserOverall ?? 'NONE')">
             <p class="vlabel">Checked in your browser</p>
             <span class="overall-chip">
               <span class="ring" aria-hidden="true"></span>
-              {{ ladder.running ? "Checking…" : (ladder.overall ?? (bundleError ? "Not run" : "Waiting")) }}
+              {{ ladder.running ? "Checking…" : (browserOverall ?? (bundleError ? "Not run" : "Waiting")) }}
             </span>
             <p class="vfine">Computed here from the bundle's bytes against keys built into this console. It can differ from the record.</p>
           </div>
         </section>
+        <p v-if="binding?.kind === 'other'" class="compare foreign" data-tone="bad" role="alert">
+          <b>The explorer served a proof for another block</b> (<span class="mono">{{ shortHex(binding.servedId, 10, 8) }}</span>), not for
+          <span class="mono">{{ shortHex(blockId, 10, 8) }}</span>. A proof of another block proves nothing about this one, so the checks were not run on
+          it and this block counts as invalid here.
+        </p>
         <p v-if="comparison" class="compare" :data-tone="comparison.tone" role="note">{{ comparison.text }}</p>
 
         <section class="checks" aria-labelledby="checks-h">
           <div class="checks-head">
             <h2 id="checks-h">The five checks, in your browser</h2>
             <div class="actions">
-              <button class="btn" type="button" :disabled="!bundleText || ladder.running" @click="verify">Run the checks again</button>
+              <button class="btn" type="button" :disabled="!bundleText || foreign || ladder.running" @click="verify">Run the checks again</button>
               <button class="btn btn--ghost" type="button" :disabled="!bundleText" @click="download">Download bundle</button>
             </div>
           </div>
           <p v-if="bundleError" class="warn">{{ bundleError }}</p>
+          <p v-else-if="foreign" class="warn">Not run: the bundle is about another block.</p>
           <LadderPanel v-else :state="ladder" :anchor-pinned="anchorOk" />
 
           <details class="pins">
@@ -519,6 +553,10 @@ const cfg = pinnedConfig();
   font-size: 14px;
   line-height: 21px;
   color: var(--fog-200);
+}
+.compare.foreign b {
+  font-weight: 500;
+  color: var(--fail);
 }
 .compare[data-tone="bad"] {
   border-color: var(--fail);
