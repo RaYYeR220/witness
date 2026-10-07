@@ -18,7 +18,7 @@ def test_perfect_run(key):
     card = scorecard.build_scorecard(make(key), None, key, CONTROLS_OK)
     assert (card["detected"], card["attacks"]) == (400, 400)
     assert card["detection_rate"] == 1.0
-    assert card["headline"] == "detected 400/400 attacks"
+    assert card["headline"] == "detected 400/400 attacks (400/400 planned), 0 unexpected alerts"
     assert card["classes"][0]["latency_p50_ms"] == 10_000
     assert card["classes"][0]["latency_p95_ms"] == 19_000
 
@@ -54,7 +54,8 @@ def test_trap_false_positives(key):
     card = scorecard.build_scorecard(make(key), ok, key, CONTROLS_OK)
     assert card["traps"]["false_positives"] == 0
     assert card["traps"]["meets_profile"]
-    assert card["headline"] == "detected 400/400 attacks, 0/520 false positives"
+    assert card["headline"] == ("detected 400/400 attacks (400/400 planned), 0 unexpected "
+                                "alerts, 0/520 false positives")
     bad = {**ok, "alerts": 2, "verdicts": {**ok["verdicts"], "FORGED": 1}}
     assert scorecard.trap_false_positives(bad, key["traps"]["expect"]["verdicts"]) == 3
 
@@ -66,13 +67,43 @@ def test_short_trap_run_is_flagged(key):
     assert "below the pre-registered profile" in scorecard.render_markdown(card)
 
 
+def test_unindexed_trap_messages_fail_the_profile_and_show(key):
+    trap = {"messages": 600, "duration_s": 2000, "alerts": 0, "not_indexed": 3,
+            "verdicts": {"PRODUCER_SIGNED": 597}}
+    card = scorecard.build_scorecard(make(key), trap, key, CONTROLS_OK)
+    assert card["traps"]["meets_profile"] is False and card["traps"]["not_indexed"] == 3
+    assert card["headline"].endswith("0/600 false positives, 3 trap messages not indexed")
+
+
+def test_detected_despite_an_unexpected_alert_is_still_counted_and_reported(key):
+    res = make(key)
+    for r in res:
+        if r["class"] == "A01" and r["trial"] == 0:
+            r["alerts"] = ["FORGED", "CLOCK_SKEW"]
+    card = scorecard.build_scorecard(res, None, key, CONTROLS_OK)
+    a01 = card["classes"][0]
+    assert a01["detected"] == 20 and a01["unexpected_alerts"] == {"CLOCK_SKEW": 1}
+    assert card["unexpected_alerts"] == 1
+    assert "1 unexpected alerts" in card["headline"]
+
+
+def test_wrong_rule_only_is_a_miss(key):
+    from helpers import cls
+
+    out = scorecard.evaluate_trial(cls(key, "A06"), {"alerts": ["STALE"]})
+    assert out == {"detected": False, "observed": "STALE", "alerts": ["STALE"]}
+    side, bad = scorecard.alert_buckets(cls(key, "A06"), ["STALE"])
+    assert (side, bad) == ([], ["STALE"])
+
+
 def test_scorecard_is_json_serialisable_and_markdown_renders(key):
     trap = {"messages": 600, "duration_s": 2000, "alerts": 0,
             "verdicts": {"PRODUCER_SIGNED": 600}}
     card = scorecard.build_scorecard(make(key, misses={"A06": 2}), trap, key, CONTROLS_OK)
     assert json.loads(json.dumps(card))["schema"] == scorecard.SCHEMA
     md = scorecard.render_markdown(card)
-    assert md.startswith("**detected 398/400 attacks, 0/600 false positives**")
+    assert md.startswith("**detected 398/400 attacks (398/400 planned), 0 unexpected alerts, "
+                         "0/600 false positives**")
     assert "| A06 | ORION_DRIFT | DRIFT | 18/20 | 90% |" in md
     assert "NONE x2" in md
     assert len([ln for ln in md.splitlines() if ln.startswith("| A")]) == 20

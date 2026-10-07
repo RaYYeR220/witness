@@ -211,8 +211,12 @@ def build_scorecard(results: list[dict], trap: dict | None, key: dict,
             "min_duration_s": key["traps"]["duration_min"] * 60,
             "false_positives": fp,
             "verdicts": trap.get("verdicts", {}),
+            "not_indexed": int(trap.get("not_indexed", 0)),
+            # A genuine message the explorer never indexed cannot be judged: the trap falls
+            # short of its profile.
             "meets_profile": (trap.get("messages", 0) >= key["traps"]["min_messages"]
-                              and trap.get("duration_s", 0) >= key["traps"]["duration_min"] * 60),
+                              and trap.get("duration_s", 0) >= key["traps"]["duration_min"] * 60
+                              and int(trap.get("not_indexed", 0)) == 0),
         }
     card["headline"] = headline(card)
     return card
@@ -228,10 +232,15 @@ def validity_prefix(card: dict) -> str:
 
 
 def headline(card: dict) -> str:
-    text = validity_prefix(card) + f"detected {card['detected']}/{card['attacks']} attacks"
+    text = (validity_prefix(card)
+            + f"detected {card['detected']}/{card['attacks']} attacks "
+            + f"({card['detected']}/{card['planned_attacks']} planned), "
+            + f"{card['unexpected_alerts']} unexpected alerts")
     if card.get("traps"):
         t = card["traps"]
         text += f", {t['false_positives']}/{t['messages']} false positives"
+        if t.get("not_indexed"):
+            text += f", {t['not_indexed']} trap messages not indexed"
     skipped = card.get("not_run") or []
     if skipped:
         n = sum(s.get("trials", 0) for s in skipped)

@@ -401,8 +401,8 @@ def test_scorecard_files_and_rescore(tmp_path, key):
     assert card["detected"] == 2 and card["attacks"] == 3
     assert card["controls"] == {"trials": 1, "passed": 1, "failures": []}
     assert card["valid"] is True
-    assert card["headline"] == ("detected 2/3 attacks, 0/40 false positives "
-                                "(4 planned trials not run: A02, A05)")
+    assert card["headline"] == ("detected 2/3 attacks (2/400 planned), 0 unexpected alerts, "
+                                "0/40 false positives (4 planned trials not run: A02, A05)")
     assert card["run"]["git"]["commit"] == "abc" and card["run"]["trialsPerClass"] == 3
     md = (out / "scorecard.md").read_text(encoding="utf-8")
     assert "A01: FORGED x1" in md and "no revoked identity" in md and "Commit abc" in md
