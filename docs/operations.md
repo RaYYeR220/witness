@@ -283,9 +283,11 @@ The console verifies every proof in the browser against the pins built into it
 (`console/src/config/verifier.json`, written by `pnpm --filter console fixture`
 from the stack's protocol config, `deploy/identity/testnet.json`,
 `ANCHOR_TRAIL_ID` and, optionally, `WITNESS_REBASED_RPC`,
-`IOTA_AUDIT_TRAIL_ORIGINAL_PKG_ID`, `ANCHOR_WRITER_ADDRESS`). Regenerate it
-whenever the anchor service starts a new Audit Trail, or step 5 fails with
-"anchor trail is not the pinned trail".
+`IOTA_AUDIT_TRAIL_ORIGINAL_PKG_ID`, `ANCHOR_WRITER_ADDRESS`, `REPORT_SIGNER_DID`).
+Regenerate it whenever the anchor service starts a new Audit Trail, or step 5
+fails with "anchor trail is not the pinned trail". `reportSigner` (the domain DID
+unless `REPORT_SIGNER_DID` names another) is the only signer whose audit.report
+messages anchor a report on the Reports screen.
 
 It talks to three places:
 
@@ -313,8 +315,10 @@ A replay build (`pnpm --filter console build:replay`) serves a snapshot
 recorded by `node console/scripts/record-replay.mjs --out <dist>/replay` from a
 running stack. It needs no API; step 4 uses the DID documents recorded with the
 snapshot (the screen says so) and step 5 still reads IOTA Rebased live. The
-recorder also takes the explorer screens (IEs and lineages, alerts, incidents,
-identities, posture, stats, reports) and the blocks they link to;
+recorder also takes the explorer screens (IEs and lineages, flows, alerts,
+incidents, identities, posture, stats, reports; report pages get the API's CSP
+as a meta tag) and the blocks they link to, plus a few trust scores from
+anchored windows;
 `--scorecard results/scorecard.json` adds an evaluation scorecard.
 
 Integrity shows an evaluation scorecard only when one is published: set
@@ -324,10 +328,14 @@ card says the scorecard appears after the evaluation run.
 
 The console never starts a posture scan or writes a report: both need the
 operator's tokens on the server (`POST /posture/scan`, `POST /reports`).
-Reports and Anchors re-check what the API says in the browser: a report counts
-as anchored only once its audit.report block passes checks 1 to 4 and names the
-hash the browser computed; a checkpoint turns green only once its record, read
-from the pinned trail, agrees.
+Only what the browser checked is green. Reports and Anchors re-check what the
+API says: a report counts as anchored only once its audit.report block passes
+checks 1 to 4, is signed by the pinned report signer and names the hash the
+browser computed; a checkpoint turns green only once its record, read from the
+pinned trail, agrees on hash, window, root and message count. Everything else
+(recorded verdicts, the engine's trust levels, the node checks (c) and (d) on
+Verify, lifecycles, flows and their chain view) is labelled as the explorer's
+word.
 
 `pnpm --filter console build:lib` builds the Lineage chart alone into
 `console/dist-lib/` for the aeriOS Management Portal: `witness-lineage.js` (ES
