@@ -96,11 +96,18 @@ own block returns only that block, since its parents are already referenced.
 ## Indexer
 
 ```bash
-uv run witness-indexer --db postgresql://postgres:witness@127.0.0.1:5432/postgres \
-  --schema witness --policy policy.json \
-  [--source inx|rest] [--mqtt mqtt://127.0.0.1:1883] [--validate] \
-  [--alerts-mqtt mqtt://127.0.0.1:1883 | --no-incidents]
+# Credentials go in the environment, not on the command line (`ps` shows arguments): the
+# database DSN and the broker URL with the `indexer` login, from secrets/compose/indexer.env.
+set -a; . secrets/compose/indexer.env; set +a
+export WITNESS_DB="${WITNESS_DB/@witness-postgres:/@127.0.0.1:}"
+export WITNESS_MQTT="${WITNESS_MQTT/@witness-mosquitto:/@127.0.0.1:}"
+uv run witness-indexer --schema witness --policy deploy/policy.json \
+  [--source inx|rest] [--validate] [--no-incidents]
 ```
+
+`--db` defaults to `$WITNESS_DB`, `--mqtt` (submission records) to `$WITNESS_MQTT`,
+`--alerts-mqtt` to `$WITNESS_ALERTS_MQTT`, else the `--mqtt` broker. The broker takes logins
+only: the `indexer` login may read `aerios/iota/submissions/#` and write `witness/alerts/#`.
 
 - `--source inx` (default) streams confirmed milestones over INX (`127.0.0.1:9029`)
   and reads each cone with `ReadMilestoneCone`. If INX does not answer within
@@ -187,7 +194,8 @@ served by the API at `GET /incidents` and `GET /incidents/{id}`.
 mosquitto_sub -h 127.0.0.1 -u observer -P "$(cat secrets/mosquitto/observer.password)" -t 'witness/alerts/#' -v
 ```
 
-Health shows up in `Store.stats()` (and so in the API's stats):
+Health shows up in `Store.stats()`, and so in `GET /stats` under `services` (row counts are
+under `counts`):
 
 | Key | Values |
 | --- | --- |
@@ -218,7 +226,13 @@ speaks) by `scripts/gen_inx.sh`; rerun it only to bump the pinned commit.
 Live checks: `WITNESS_LIVE=1 uv run pytest indexer/tests/test_source_inx_live.py`
 (streams real milestones, compares INX with REST, proxies a test route, and
 indexes a block written straight to HORNET into a throwaway schema; needs
-`WITNESS_TEST_PG`).
+`WITNESS_TEST_PG`). The live MQTT tests (`relay/tests/test_relay_live.py`,
+`test_alerts_reach_mosquitto` in `indexer/tests/test_incidents.py`) log in to the broker:
+`WITNESS_LIVE_MQTT` is the broker (default `mqtt://127.0.0.1:1883`) and the `relay`,
+`indexer` and `observer` passwords are read from `WITNESS_LIVE_MQTT_SECRETS` (default
+`secrets/mosquitto`). They publish with the relay or indexer login (alerts under
+`witness/alerts/test-<id>`) and read with the observer login. The relay test writes one
+relay-attested `trust.score` block to the node, which a running explorer indexes.
 
 ## Signed audit reports
 

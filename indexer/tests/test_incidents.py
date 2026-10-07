@@ -5,7 +5,8 @@ import json
 import os
 import unicodedata
 import uuid
-from urllib.parse import urlsplit
+from pathlib import Path
+from urllib.parse import quote, urlsplit
 
 import pytest
 from witness_core import policy as writer_policy
@@ -1040,7 +1041,20 @@ async def test_unreachable_broker_is_reported_not_raised(store):
     await eng.aclose()
 
 
+# The broker takes logins only (deploy/compose/mosquitto.acl): alerts are published with the
+# `indexer` login and read with the read-only `observer` login. WITNESS_LIVE_MQTT is the broker;
+# passwords come from WITNESS_LIVE_MQTT_SECRETS/<user>.password (default: secrets/mosquitto of
+# this checkout, as deploy/compose/setup-secrets.sh writes them). No password file: no login.
 LIVE_MQTT = os.environ.get("WITNESS_LIVE_MQTT", "mqtt://127.0.0.1:1883")
+LIVE_MQTT_SECRETS = Path(os.environ.get(
+    "WITNESS_LIVE_MQTT_SECRETS", Path(__file__).resolve().parents[2] / "secrets" / "mosquitto"))
+
+
+def live_mqtt_login(user: str) -> tuple[str | None, str | None]:
+    path = LIVE_MQTT_SECRETS / f"{user}.password"
+    if not path.is_file():
+        return None, None
+    return user, path.read_text(encoding="utf-8").strip()
 
 
 @pytest.mark.live
@@ -1049,11 +1063,17 @@ async def test_alerts_reach_mosquitto(store):
     import aiomqtt
 
     parts = urlsplit(LIVE_MQTT)
-    async with aiomqtt.Client(parts.hostname, parts.port or 1883,
+    host = f"{parts.hostname}:{parts.port or 1883}"
+    name, password = live_mqtt_login("indexer")
+    pub_url = (f"{parts.scheme}://{quote(name, safe='')}:{quote(password, safe='')}@{host}"
+               if name else f"{parts.scheme}://{host}")
+    user, secret = live_mqtt_login("observer")
+    async with aiomqtt.Client(parts.hostname, parts.port or 1883, username=user, password=secret,
                               identifier=f"witness-test-{uuid.uuid4().hex[:8]}") as sub:
-        prefix = f"witness-test/{uuid.uuid4().hex[:8]}/alerts"
+        # Inside the indexer's topic tree, so the broker's ACL lets it publish there.
+        prefix = f"witness/alerts/test-{uuid.uuid4().hex[:8]}"
         await sub.subscribe(f"{prefix}/#", qos=1)
-        pub = MqttAlertPublisher(LIVE_MQTT, client_id=f"witness-test-pub-{uuid.uuid4().hex[:8]}")
+        pub = MqttAlertPublisher(pub_url, client_id=f"witness-test-pub-{uuid.uuid4().hex[:8]}")
         eng = IncidentEngine(store, None, IncidentConfig(mqtt_topic_prefix=prefix), pub, policy=ALLOW_ALL)
         await feed(store, eng, score(0.9, ms=10))
         await feed(store, eng, score(0.3, ms=11))
