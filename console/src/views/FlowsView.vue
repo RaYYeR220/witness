@@ -14,7 +14,9 @@ import { alertReason } from "@/integrity/model";
  * Flows: IoT flow traceability. Messages grouped by producer (a hash chain:
  * each envelope names the producer's previous message), correlation id, IE or
  * service component. A producer's chain shows, message by message, whether it
- * follows the one before it; gaps and forks are flagged with the CHAIN_GAP /
+ * follows the one before it; a message that only claims the producer as issuer
+ * (not producer signed or relay attested) is marked and kept out of the chain.
+ * Gaps and forks are flagged with the CHAIN_GAP /
  * CHAIN_FORK alerts raised on them. Every message opens in Verify. The flow
  * and its chain are the explorer's index; Verify checks each message itself.
  */
@@ -136,7 +138,7 @@ const label = (k: string) => (by.value === "issuer" ? shortDid(k) : k);
               {{ flow.total }} {{ flow.total === 1 ? "message" : "messages" }}<template v-if="flow.items.length < flow.total">, the newest {{ flow.items.length }} shown</template
               >, newest first; as the explorer indexed them.
             </p>
-            <dl v-if="chain" class="chain" aria-label="Hash chain over the whole flow">
+            <dl v-if="chain" class="chain" aria-label="Hash chain over the producer's proven messages in the whole flow">
               <div>
                 <dt>Linked by prev</dt>
                 <dd>{{ chain.links }}</dd>
@@ -344,6 +346,9 @@ const label = (k: string) => (by.value === "issuer" ? shortDid(k) : k);
 .link[data-link="gap"],
 .link[data-link="fork"] {
   color: var(--fail);
+}
+.link[data-link="claims"] {
+  color: var(--fog-400);
 }
 .alert {
   margin: 3px 0 0;

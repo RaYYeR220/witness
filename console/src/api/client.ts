@@ -460,9 +460,14 @@ export interface FlowItem {
   wfIndex: number | null;
   atMs: number | null;
   links: Record<string, string>;
+  /**
+   * Issuer flows: true when the message only claims the issuer (not producer signed or relay
+   * attested), so it is outside the chain. Absent from older answers.
+   */
+  claimsIssuer?: boolean;
 }
 
-/** The hash chain of an issuer flow, over the whole flow, as the explorer computed it. */
+/** The hash chain of an issuer flow, over its proven messages, as the explorer computed it. */
 export interface ChainView {
   links: number;
   gaps: string[];

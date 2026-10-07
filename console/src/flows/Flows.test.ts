@@ -7,7 +7,7 @@ import live from "@/fixtures/api/live.json";
 import { mountScreen, until } from "@/test/mount";
 import FlowsView from "@/views/FlowsView.vue";
 
-import { chainAlerts, linkStates } from "./model";
+import { chainAlerts, claimsIssuer, linkStates } from "./model";
 
 /* eslint-disable @typescript-eslint/no-explicit-any */
 const L = live as unknown as Record<string, any>;
@@ -34,6 +34,26 @@ describe("flow chain", () => {
     // a page that starts mid-chain: the first message shown follows one older than the page
     const page = { items: items.slice(1, 3), total: 5, chain: { links: 2, gaps: [id(3)], forks: [] } };
     expect(page.items.map((i) => linkStates(page).get(i.blockId))).toEqual(["earlier", "gap"]);
+  });
+
+  it("keeps messages that only claim the issuer out of the chain", () => {
+    // 3 is a forgery naming the producer, continuing from 2 as the genuine 4 does
+    const forged = (n: number, prev: number, mark?: boolean): FlowItem => ({ ...item(n, prev), verdict: "FORGED", ...(mark === undefined ? {} : { claimsIssuer: mark }) });
+    // the explorer marks it, and its chain view counts proven messages only
+    const marked = [item(1, null), item(2, 1), forged(3, 2, true), item(4, 2)].map((i, k) => (k === 2 ? i : { ...i, claimsIssuer: false }));
+    const s = linkStates({ items: marked, total: 4, chain: { links: 2, gaps: [], forks: [] } });
+    expect(marked.map((i) => s.get(i.blockId))).toEqual(["start", "linked", "claims", "linked"]);
+    // an older answer without the mark, whose chain view still counted the forgery as a fork
+    const old = [item(1, null), item(2, 1), forged(3, 2), item(4, 2)];
+    const t = linkStates({ items: old, total: 4, chain: { links: 2, gaps: [id(4)], forks: [id(2)] } });
+    expect(old.map((i) => t.get(i.blockId))).toEqual(["start", "linked", "claims", "linked"]);
+    // a fork of two proven messages stays a fork, whatever else claims the same prev
+    const both = [item(1, null), item(2, 1), forged(3, 2), item(4, 2), item(5, 2)];
+    const u = linkStates({ items: both, total: 5, chain: { links: 2, gaps: [id(5)], forks: [id(2)] } });
+    expect(both.map((i) => u.get(i.blockId))).toEqual(["start", "linked", "claims", "fork", "fork"]);
+    expect(claimsIssuer({ verdict: "RELAY_ATTESTED" })).toBe(false);
+    expect(claimsIssuer({ verdict: "REPLAY" })).toBe(true);
+    expect(claimsIssuer({ verdict: "FORGED", claimsIssuer: false })).toBe(false);
   });
 
   it("agrees with the explorer's chain view on the recorded flow", () => {
@@ -125,6 +145,20 @@ describe("Flows screen", () => {
     expect(byId(4).attributes("data-link")).toBe("fork");
     expect(byId(2).attributes("data-link")).toBe("linked");
     expect(w.find('.chain div[data-bad="true"]').exists()).toBe(true);
+    w.unmount();
+  });
+
+  it("marks a message that only claims the producer, outside the chain", async () => {
+    const items = [item(1, null), item(2, 1), { ...item(3, 2), verdict: "FORGED", claimsIssuer: true }, item(4, 2)];
+    const flow = { ...FLOW, key: "y", items, total: 4, chain: { links: 2, gaps: [], forks: [] } } as Flow;
+    const { d } = data(flow);
+    const { w } = await mountScreen(FlowsView, { path: "/flows?by=issuer&key=y", data: d });
+    await until(() => w.findAll(".tl .msg").length === 4);
+    const byId = (n: number) => w.findAll(".tl .msg").find((m) => m.find("a.x-link").attributes("href") === `/m/${id(n)}`)!;
+    expect(byId(3).attributes("data-link")).toBe("claims");
+    expect(byId(3).find(".link").text()).toContain("claims this issuer");
+    expect(byId(4).attributes("data-link")).toBe("linked");
+    expect(w.find('.chain div[data-bad="true"]').exists()).toBe(false);
     w.unmount();
   });
 
