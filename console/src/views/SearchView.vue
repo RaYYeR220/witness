@@ -5,7 +5,7 @@ import { useRoute, useRouter } from "vue-router";
 import type { MessageSummary } from "@/api/client";
 import ConsoleShell from "@/components/ConsoleShell.vue";
 import { useData } from "@/console/data";
-import { shortDid, shortHex, utc, verdictInfo } from "@/console/format";
+import { RECORDED_NOTE, shortDid, shortHex, utc, verdictInfo } from "@/console/format";
 import LookupPanel from "@/console/LookupPanel.vue";
 import { parseSearch, type ParsedSearch } from "@/console/query";
 import VerdictMark from "@/console/VerdictMark.vue";
@@ -142,7 +142,9 @@ watch(
             <tbody>
               <tr v-for="m in items" :key="m.blockId" :data-f="verdictInfo(m.verdict).family">
                 <td class="vd">
-                  <span class="cell-v"><VerdictMark :family="verdictInfo(m.verdict).family" />{{ verdictInfo(m.verdict).label }}</span>
+                  <span class="cell-v" :title="RECORDED_NOTE"
+                    ><VerdictMark :family="verdictInfo(m.verdict).family" />{{ verdictInfo(m.verdict).label }}<span class="sr-only">, recorded</span></span
+                  >
                 </td>
                 <td class="dt">{{ utc(m.dateMs) }}</td>
                 <td>{{ m.tag ?? "" }}<span v-if="m.encrypted" class="sealed">sealed</span></td>

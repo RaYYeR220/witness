@@ -2,6 +2,7 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { LiveAdapter } from "@/api/client";
+import { RECORDED_NOTE } from "@/console/format";
 import { mountScreen, until } from "@/test/mount";
 
 import LiveView from "./LiveView.vue";
@@ -72,6 +73,10 @@ describe("Live", () => {
     expect(rows[0]!.attributes("href")).toBe(`/m/${NEW}`);
     expect(rows[1]!.attributes("href")).toBe(`/m/${OLD}`);
     expect(rows[0]!.text()).toContain("Producer signed");
+    // the indexer's verdict is labelled as its record, never as a check
+    expect(rows[0]!.find(".vd .rec").text()).toBe("recorded");
+    expect(rows[0]!.find(".vd").attributes("title")).toBe(RECORDED_NOTE);
+    expect(rows[0]!.find(".sr-only").text()).toContain("the explorer's recorded verdict");
     expect(rows[0]!.text()).toContain("MyDomain:fa163e5e25ef");
     expect(rows[0]!.text()).toContain("ms 1285");
     // the score is not in the event: it is read from the stored message

@@ -1,16 +1,17 @@
 <script setup lang="ts">
 import { computed } from "vue";
 
-import { verdictInfo } from "./format";
+import { RECORDED_NOTE, verdictInfo } from "./format";
 import VerdictMark from "./VerdictMark.vue";
 
 /** The verdict the indexer recorded, as mark + words. `quiet` drops the outline for dense rows. */
 const props = withDefaults(defineProps<{ verdict: string | null | undefined; quiet?: boolean }>(), { quiet: false });
 const info = computed(() => verdictInfo(props.verdict));
+const title = computed(() => [info.value.gloss, RECORDED_NOTE].filter(Boolean).join(" "));
 </script>
 
 <template>
-  <span class="vb" :class="{ quiet }" :data-f="info.family" :title="info.gloss || undefined">
+  <span class="vb" :class="{ quiet }" :data-f="info.family" :title="title">
     <VerdictMark :family="info.family" />
     <span class="lbl">{{ info.label }}</span>
   </span>

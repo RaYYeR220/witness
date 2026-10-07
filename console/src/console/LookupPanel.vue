@@ -250,8 +250,9 @@ select:focus-visible {
   font-weight: 500;
   color: var(--fog-50);
 }
+/* "Stored" is the explorer's answer: not green */
 .verdict[data-hit="true"] b {
-  color: var(--pass);
+  color: var(--fog-50);
 }
 .hashes {
   margin: 0;

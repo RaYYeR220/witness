@@ -2,9 +2,11 @@
 import type { VerdictFamily } from "./format";
 
 /**
- * A verdict as a shape first, a colour second: signed is a filled seal,
- * unsigned an open ring, rejected a broken ring with a cross, no verdict a
- * dotted ring. Same drawing language as the ladder's StepMark.
+ * A recorded verdict (the explorer's word) as a shape first, a colour second:
+ * signed is a filled seal, unsigned an open ring, rejected a broken ring with
+ * a cross, no verdict a dotted ring. Same drawing language as the ladder's
+ * StepMark, but never green: green is kept for what the browser checked
+ * itself. Rejected verdicts keep the alarm colour.
  */
 defineProps<{ family: VerdictFamily }>();
 </script>
@@ -32,7 +34,7 @@ defineProps<{ family: VerdictFamily }>();
   overflow: visible;
 }
 .seal {
-  fill: var(--pass);
+  fill: var(--fog-200);
 }
 .broken path {
   fill: none;

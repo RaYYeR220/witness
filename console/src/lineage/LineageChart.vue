@@ -166,7 +166,7 @@ const readoutLeft = computed(() => {
       <line v-if="hover" class="guide" :x1="X(hover.atMs)" :x2="X(hover.atMs)" :y1="box.top" :y2="box.bottom" />
     </svg>
     <div v-if="hover" class="readout" :style="{ left: `${readoutLeft}px` }" aria-hidden="true">
-      <b>{{ score2(hover.score) }}</b> <span>{{ verdictInfo(hover.verdict).label }}</span>
+      <b>{{ score2(hover.score) }}</b> <span>{{ verdictInfo(hover.verdict).label }}, recorded</span>
       <span class="when">{{ utc(hover.atMs) }}<template v-if="hover.msIndex !== null">, ms {{ hover.msIndex }}</template></span>
       <span class="go">Click to verify this message</span>
     </div>
@@ -243,8 +243,9 @@ const readoutLeft = computed(() => {
 .orion-mark[data-drift="yes"] text.v {
   fill: var(--fail);
 }
+/* a recorded verdict: never green (green is for what the browser checked) */
 .seal {
-  fill: var(--pass);
+  fill: var(--fog-200);
 }
 .ring {
   fill: var(--void);

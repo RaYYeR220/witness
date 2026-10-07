@@ -54,6 +54,9 @@ export function ago(ms: number | null | undefined, now = Date.now()): string {
 
 export type VerdictFamily = "signed" | "unsigned" | "rejected" | "unknown";
 
+/** What a verdict shown outside Verify's ladder is: the explorer's record, not a check made here. */
+export const RECORDED_NOTE = "The explorer's recorded verdict: open Verify to check it in your browser.";
+
 const VERDICT_INFO: Record<string, { label: string; family: VerdictFamily; gloss: string }> = {
   PRODUCER_SIGNED: { label: "Producer signed", family: "signed", gloss: "Signed by the component that produced it, with a key its DID lists." },
   RELAY_ATTESTED: { label: "Relay attested", family: "signed", gloss: "Signed by the relay on the producer's behalf." },

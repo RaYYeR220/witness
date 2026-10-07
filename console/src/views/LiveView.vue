@@ -4,7 +4,7 @@ import { computed, onBeforeUnmount, onMounted, ref } from "vue";
 import ConsoleShell from "@/components/ConsoleShell.vue";
 import { useData } from "@/console/data";
 import { useLiveFeed } from "@/console/feed";
-import { ago, clock, isoOf, shortDid, shortHex, statusLabel, utc, verdictInfo } from "@/console/format";
+import { ago, clock, isoOf, RECORDED_NOTE, shortDid, shortHex, statusLabel, utc, verdictInfo } from "@/console/format";
 import VerdictMark from "@/console/VerdictMark.vue";
 
 /**
@@ -82,7 +82,7 @@ const score = (s: number | null) => (s === null ? "" : s.toFixed(2));
             <li v-for="r in visible" :key="r.key" :data-kind="r.kind">
               <RouterLink v-if="r.kind === 'message'" class="msg" :to="{ name: 'verify', params: { blockId: r.blockId } }" :data-f="verdictInfo(r.verdict).family">
                 <span class="mk"><VerdictMark :family="verdictInfo(r.verdict).family" /></span>
-                <span class="vd">{{ verdictInfo(r.verdict).label }}</span>
+                <span class="vd" :title="RECORDED_NOTE">{{ verdictInfo(r.verdict).label }}<span class="rec">recorded</span></span>
                 <span class="what">
                   <span class="tag">{{ r.tag ?? "untagged" }}</span>
                   <span v-if="r.score !== null" class="score">{{ score(r.score) }}</span>
@@ -108,7 +108,7 @@ const score = (s: number | null) => (s === null ? "" : s.toFixed(2));
                     >{{ statusLabel(s.status).toLowerCase() }}</span
                   >
                 </span>
-                <span class="sr-only">, open to verify block {{ r.blockId }}</span>
+                <span class="sr-only">, the explorer's recorded verdict; open to check block {{ r.blockId }} in your browser</span>
               </RouterLink>
 
               <div v-else-if="r.kind === 'milestone'" class="ms-row">
@@ -153,7 +153,7 @@ const score = (s: number | null) => (s === null ? "" : s.toFixed(2));
         </section>
 
         <aside class="rail" aria-label="This session">
-          <h2>New since you opened this page</h2>
+          <h2>New since you opened this page, as recorded</h2>
           <dl class="tally">
             <div><dt><VerdictMark family="signed" />Signed</dt><dd>{{ counts.signed }}</dd></div>
             <div><dt><VerdictMark family="unsigned" />Unsigned</dt><dd>{{ counts.unsigned }}</dd></div>
@@ -298,6 +298,12 @@ h1 {
 .vd {
   font-size: 14px;
   color: var(--fog-50);
+}
+.rec {
+  display: block;
+  font-size: 11.5px;
+  line-height: 1.3;
+  color: var(--fog-400);
 }
 .msg[data-f="rejected"] .vd {
   color: var(--fail);

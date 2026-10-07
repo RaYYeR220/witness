@@ -5,7 +5,7 @@ import { useRoute, useRouter } from "vue-router";
 import { DataError, FLOW_BYS, isFlowBy, type Alert, type Flow, type FlowBy, type FlowSummary } from "@/api/client";
 import ConsoleShell from "@/components/ConsoleShell.vue";
 import { useData } from "@/console/data";
-import { isBlockId, shortDid, shortHex, utc, verdictInfo } from "@/console/format";
+import { isBlockId, RECORDED_NOTE, shortDid, shortHex, utc, verdictInfo } from "@/console/format";
 import VerdictMark from "@/console/VerdictMark.vue";
 import { chainAlerts, FLOW_TITLES, LINK_TEXT, linkStates, newestFirst } from "@/flows/model";
 import { alertReason } from "@/integrity/model";
@@ -157,7 +157,7 @@ const label = (k: string) => (by.value === "issuer" ? shortDid(k) : k);
                 <div class="body">
                   <p class="top">
                     <span class="tag">{{ m.tag ?? "untagged" }}</span>
-                    <span class="vd">{{ verdictInfo(m.verdict).label }}, as recorded</span>
+                    <span class="vd" :title="RECORDED_NOTE">{{ verdictInfo(m.verdict).label }}, as recorded</span>
                     <time class="at">{{ utc(m.atMs) }}</time>
                   </p>
                   <p class="meta">

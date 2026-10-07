@@ -329,8 +329,9 @@ const ruleRows = computed(() => (policy.value ? Object.entries(policy.value.tags
   margin-right: 6px;
   vertical-align: -1px;
 }
+/* the resolver's answer, not a check made here: not green */
 .st[data-tone="ok"] {
-  color: var(--pass);
+  color: var(--fog-50);
 }
 .st[data-tone="bad"] {
   color: var(--fail);

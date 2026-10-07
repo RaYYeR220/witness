@@ -2,7 +2,7 @@
 import { computed, ref, shallowRef, watch } from "vue";
 
 import { DataError, LiveAdapter, type Lineage, type WitnessData } from "@/api/client";
-import { isoOf, score2, shortHex, utc, verdictInfo } from "@/console/format";
+import { isoOf, RECORDED_NOTE, score2, shortHex, utc, verdictInfo } from "@/console/format";
 import SeverityTag from "@/console/SeverityTag.vue";
 import VerdictMark from "@/console/VerdictMark.vue";
 import LineageChart from "@/lineage/LineageChart.vue";
@@ -147,7 +147,7 @@ function select(blockId: string) {
       <div class="wl-chart">
         <p v-if="!points.length" class="wl-quiet">No message about this IE carries a score.</p>
         <LineageChart v-else :points="points" :orion="orion" :overlays="overlays" :latest-block-id="ledger?.blockId ?? null" :label="chartLabel" @select="select" />
-        <ul class="wl-legend" aria-label="Legend">
+        <ul class="wl-legend" aria-label="Legend" :title="RECORDED_NOTE">
           <li><VerdictMark family="signed" />Signed, as recorded</li>
           <li><VerdictMark family="unsigned" />Unsigned legacy, as recorded</li>
           <li><VerdictMark family="rejected" />Rejected, as recorded (not on the line)</li>
@@ -177,7 +177,9 @@ function select(blockId: string) {
                 <td class="wl-nowrap">{{ utc(e.atMs) }}</td>
                 <td class="wl-num wl-score">{{ e.score === null ? "–" : score2(e.score) }}</td>
                 <td>
-                  <span class="wl-v"><VerdictMark :family="verdictInfo(e.verdict).family" />{{ verdictInfo(e.verdict).label }}</span>
+                  <span class="wl-v" :title="RECORDED_NOTE"
+                    ><VerdictMark :family="verdictInfo(e.verdict).family" />{{ verdictInfo(e.verdict).label }}<span class="wl-sr">, recorded</span></span
+                  >
                 </td>
                 <td class="wl-num">{{ e.msIndex ?? "pending" }}</td>
                 <td>

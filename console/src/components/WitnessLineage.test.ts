@@ -6,6 +6,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { DataError, LiveAdapter, type Alert, type Incident, type Lineage, type WitnessData } from "@/api/client";
 import examples from "@/fixtures/api/examples.json";
 import live from "@/fixtures/api/live.json";
+import { RECORDED_NOTE } from "@/console/format";
 import { orionView, seriesOf } from "@/lineage/model";
 import { mountScreen, until } from "@/test/mount";
 import LineageView from "@/views/LineageView.vue";
@@ -71,6 +72,8 @@ describe("WitnessLineage", () => {
     // every score links to Verify
     const links = w.findAll(".wl-entries a").map((a) => a.attributes("href"));
     expect(links).toEqual([...ok.entries].reverse().map((e) => `/m/${e.blockId}`));
+    expect(w.find(".wl-v").attributes("title")).toBe(RECORDED_NOTE);
+    expect(w.find(".wl-v").text()).toContain("recorded");
     expect(src.lineage).toHaveBeenCalledWith(IE, { limit: 1000 });
     expect(src.alerts).toHaveBeenCalledWith({ ie: IE, limit: 200 });
     expect(src.incidents).toHaveBeenCalledWith({ ie: IE });
