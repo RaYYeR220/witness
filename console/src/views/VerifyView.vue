@@ -38,6 +38,8 @@ const bundleError = ref<string | null>(null);
 const binding = ref<Binding | null>(null);
 const foreign = computed(() => binding.value?.kind === "other");
 const apiPins = ref<VerifierConfig | null>(null);
+/** The last milestone an anchored checkpoint covers; undefined until asked. */
+const lastAnchored = ref<number | null | undefined>(undefined);
 const ladder = createLadder();
 const anchorOk = anchorPinned();
 let generation = 0;
@@ -156,12 +158,41 @@ function reduced() {
 
 async function verify() {
   if (!bundleText.value || foreign.value) return;
+  const g = generation;
   await runLadder(ladder, bundleText.value, {
     resolveDid: lookups.resolveDid,
     fetchAnchorRecord: lookups.fetchAnchorRecord,
     pace: reduced() ? 0 : 240,
   });
+  if (g === generation && notAnchoredYet.value && lastAnchored.value === undefined) {
+    lastAnchored.value = await data.lastAnchoredMilestone().catch(() => null);
+  }
 }
+
+const pendingNote = computed(() => {
+  const n = lastAnchored.value;
+  const ms = bundle.value?.msIndex;
+  const where =
+    n === undefined
+      ? "its milestone is newer than the last checkpoint"
+      : n === null
+        ? "no checkpoint has been anchored on IOTA Rebased so far"
+        : `the last checkpoint covers up to milestone ${n}${ms !== null && ms !== undefined ? `, this block is in milestone ${ms}` : ""}`;
+  return `${where}; checks 1–4 passed. Run the checks again once the next checkpoint is anchored.`;
+});
+
+/** Checks 1 to 4 passed and the bundle has no anchor: the block's milestone is newer than the last checkpoint. */
+const notAnchoredYet = computed(() => {
+  const st = ladder.steps;
+  return (
+    !foreign.value &&
+    !ladder.running &&
+    ladder.overall === "PARTIAL" &&
+    st.slice(0, 4).every((x) => x.status === "pass") &&
+    st[4]?.status === "unknown" &&
+    st[4]?.detail === "bundle carries no anchor"
+  );
+});
 
 const why = (e: unknown, what: string) => {
   if (e instanceof DataError && e.status === 404) return `${what}: not found.`;
@@ -174,6 +205,7 @@ async function load(id: string) {
   life.value = null;
   bundleText.value = null;
   binding.value = null;
+  lastAnchored.value = undefined;
   msgError.value = lifeError.value = bundleError.value = null;
   resetLadder(ladder);
   const [m, l, b] = await Promise.allSettled([data.message(id), data.lifecycle(id), data.bundle(id)]);
@@ -329,6 +361,7 @@ const cfg = pinnedConfig();
           it and this block counts as invalid here.
         </p>
         <p v-if="comparison" class="compare" :data-tone="comparison.tone" role="note">{{ comparison.text }}</p>
+        <p v-if="notAnchoredYet" class="compare pending" data-tone="note" role="note"><b>Not anchored yet:</b> {{ pendingNote }}</p>
 
         <section class="checks" aria-labelledby="checks-h">
           <div class="checks-head">
@@ -557,6 +590,10 @@ const cfg = pinnedConfig();
   font-size: 14px;
   line-height: 21px;
   color: var(--fog-200);
+}
+.compare.pending b {
+  font-weight: 500;
+  color: var(--fog-50);
 }
 .compare.foreign b {
   font-weight: 500;

@@ -23,10 +23,20 @@ vi.mock("@/verify/pinned", async () => {
 });
 
 /** `served` swaps in another case's bundle, as a lying or confused API would. */
-function fakeData(name: string, verdict: string, served = name): { data: WitnessData; lookups: TrustedLookups; blockId: string; message: Message; lifecycle: Lifecycle } {
+function fakeData(
+  name: string,
+  verdict: string,
+  served = name,
+  edit?: (bundle: Record<string, unknown>) => void,
+): { data: WitnessData; lookups: TrustedLookups; blockId: string; message: Message; lifecycle: Lifecycle } {
   const c = bundleCase(name);
   const w = wired(name);
-  const bundleText = wired(served).text;
+  let bundleText = wired(served).text;
+  if (edit) {
+    const b = JSON.parse(bundleText);
+    edit(b);
+    bundleText = JSON.stringify(b);
+  }
   const blockId: string = c.bundle.block.id;
   const message = {
     blockId,
@@ -62,6 +72,7 @@ function fakeData(name: string, verdict: string, served = name): { data: Witness
     bundle: async () => bundleText,
     verifierConfig: async () => w.config,
     health: async () => ({ mode: "live", ok: true, network: "private_tangle1", version: "test", note: null }),
+    lastAnchoredMilestone: async () => 373,
     recheck: async () => {
       throw new Error("not in this test");
     },
@@ -167,6 +178,16 @@ describe("Verify", () => {
     // the headline takes the IE from the bytes; the record's other IE is named as such
     expect(w.find(".title").text()).toContain("MyDomain:fa163e5e25ef");
     expect(w.text()).toContain("The explorer's record names IE OtherDomain:000000000000 instead");
+    w.unmount();
+  });
+
+  it("says a signed message is just not anchored yet, with the last checkpoint's milestone", async () => {
+    // the valid sample without its anchor section: a block newer than the last checkpoint
+    const f = fakeData("valid_anchored", "PRODUCER_SIGNED", "valid_anchored", (b) => delete b.anchor);
+    const { w } = await mountScreen(VerifyView, { path: `/m/${f.blockId}`, data: f.data, lookups: f.lookups });
+    await until(() => w.find(".pending").exists() && w.find(".pending").text().includes("373"));
+    expect(w.find(".overall-chip").text()).toBe("PARTIAL");
+    expect(w.find(".pending").text()).toContain("Not anchored yet: the last checkpoint covers up to milestone 373, this block is in milestone 374; checks 1–4 passed.");
     w.unmount();
   });
 });

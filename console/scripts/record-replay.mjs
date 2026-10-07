@@ -14,6 +14,7 @@
  *   dids/<did>.json          the anchor resolver's answer for each issuer
  *                            (':' replaced by '_' in the file name)
  *   verifier-config.json     GET /config/verifier (informational)
+ *   anchors.json             GET /anchors (the newest checkpoints)
  *   stream.json              the latest events of GET /stream
  *
  * Run: node scripts/record-replay.mjs [--api http://127.0.0.1:7200]
@@ -116,6 +117,7 @@ async function main() {
     }
   }
   write("verifier-config.json", await fetchText(`${api}/config/verifier`));
+  write("anchors.json", await fetchText(`${api}/anchors?limit=20`));
   const events = await recentEvents(api, o.events);
   write("stream.json", json(events));
   write(

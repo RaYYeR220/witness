@@ -266,6 +266,8 @@ export interface WitnessData {
   /** Ask the API to re-run the node checks (c) and (d) now. */
   recheck(blockId: string): Promise<RecheckResult>;
   health(): Promise<SourceHealth>;
+  /** The last milestone an anchored checkpoint covers (`GET /anchors`), or null when none is anchored. */
+  lastAnchoredMilestone(): Promise<number | null>;
   lineage(entityId: string): Promise<Lineage>;
   alerts(): Promise<Alert[]>;
   anchors(): Promise<AnchorCheckpoint[]>;
@@ -282,6 +284,21 @@ export interface WitnessData {
   verifierConfig(): Promise<VerifierConfig>;
   /** The proof bundle as raw text, for `verifyBundleText`. */
   bundle(blockId: string): Promise<string>;
+}
+
+interface AnchorRow {
+  toMilestone?: unknown;
+  status?: unknown;
+}
+
+/** The highest `toMilestone` among anchored checkpoints of a `GET /anchors` page. */
+export function lastAnchoredOf(page: { items?: AnchorRow[] } | null | undefined): number | null {
+  let best: number | null = null;
+  for (const a of page?.items ?? []) {
+    if (a.status !== "anchored" || typeof a.toMilestone !== "number") continue;
+    best = best === null ? a.toMilestone : Math.max(best, a.toMilestone);
+  }
+  return best;
 }
 
 export class DataError extends Error {
@@ -379,6 +396,9 @@ export class LiveAdapter implements WitnessData {
       const note = e instanceof DataError && e.status === 503 ? "the API cannot reach its database" : "the API does not answer";
       return { mode: "live", ok: false, network: null, version: null, note };
     }
+  }
+  async lastAnchoredMilestone() {
+    return lastAnchoredOf((await get(`${this.base}/anchors?limit=20`)) as { items: AnchorRow[] });
   }
   lineage(entityId: string) {
     return get(`${this.base}/lineage/${encodeURIComponent(entityId)}`) as Promise<Lineage>;
@@ -555,6 +575,13 @@ export class ReplayAdapter implements WitnessData {
       return { mode: "replay", ok: true, network: null, version: null, note: when ? `recorded ${when}` : m.about };
     } catch {
       return { mode: "replay", ok: false, network: null, version: null, note: "the snapshot is missing" };
+    }
+  }
+  async lastAnchoredMilestone() {
+    try {
+      return lastAnchoredOf((await this.file("anchors.json")) as { items: AnchorRow[] });
+    } catch {
+      return null; // a snapshot recorded before any checkpoint
     }
   }
   lineage(entityId: string) {
