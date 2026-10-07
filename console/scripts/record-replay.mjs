@@ -37,7 +37,7 @@
 
 import { mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
-import { fileURLToPath } from "node:url";
+import { fileURLToPath, pathToFileURL } from "node:url";
 
 const here = dirname(fileURLToPath(import.meta.url));
 
@@ -63,6 +63,19 @@ function args(argv) {
 const fileKey = (id) => id.replace(/[^A-Za-z0-9._-]/g, "_");
 const didFile = (did) => `${fileKey(did)}.json`;
 const HASH32 = /^0x[0-9a-f]{64}$/;
+
+/**
+ * The API serves a report page with a strict Content-Security-Policy header; a static
+ * host serving the snapshot sends none. The same policy goes into the page itself, first
+ * thing in <head>, so the recorded copy cannot run scripts or load anything either.
+ */
+export const REPORT_CSP = "default-src 'none'; style-src 'unsafe-inline'; base-uri 'none'; form-action 'none'";
+export function withCsp(html) {
+  const meta = `<meta http-equiv="Content-Security-Policy" content="${REPORT_CSP}">`;
+  const head = /<head(\s[^>]*)?>/i.exec(html);
+  if (head) return html.slice(0, head.index + head[0].length) + meta + html.slice(head.index + head[0].length);
+  return `<!doctype html><head>${meta}</head>` + html;
+}
 
 async function fetchText(url, init = {}) {
   const res = await fetch(url, { ...init, signal: AbortSignal.timeout(15_000) });
@@ -166,7 +179,7 @@ async function main() {
   for (const r of reports.items) {
     if (!HASH32.test(r.reportHash)) continue;
     write(`reports/${r.reportHash}.json`, await fetchText(`${api}/reports/${r.reportHash}`));
-    write(`reports/${r.reportHash}.html`, await fetchText(`${api}/reports/${r.reportHash}.html`));
+    write(`reports/${r.reportHash}.html`, withCsp(await fetchText(`${api}/reports/${r.reportHash}.html`)));
     if (r.blockId) wanted.unshift(r.blockId);
   }
   if (o.scorecard) {
@@ -214,7 +227,9 @@ async function main() {
   );
 }
 
-main().catch((e) => {
-  console.error(e.message);
-  process.exit(1);
-});
+if (process.argv[1] && import.meta.url === pathToFileURL(resolve(process.argv[1])).href) {
+  main().catch((e) => {
+    console.error(e.message);
+    process.exit(1);
+  });
+}
