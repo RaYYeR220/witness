@@ -114,4 +114,22 @@ describe("Live", () => {
     expect(w.find(".ms-row").text()).toContain("Milestone 77");
     w.unmount();
   });
+
+  it("announces connection changes, not every event", async () => {
+    vi.stubGlobal("fetch", async (input: string, init: RequestInit = {}) => {
+      const url = String(input);
+      if (url.startsWith("/api/healthz")) return json({ status: "ok", db: "ok", network: "private_tangle1", version: "0.1.0" });
+      if (url.startsWith("/api/stream")) {
+        const ev = `id: 9\nevent: milestone\ndata: ${JSON.stringify({ id: 9, type: "milestone", atMs: 1, at: "", payload: { index: 9, ts: 1, blocks: 1, newMessages: 0 } })}\n\n`;
+        return stream(ev, init.signal ?? undefined);
+      }
+      return json({ items: [], nextCursor: null, limit: 25 });
+    });
+    const { w } = await mountScreen(LiveView, { path: "/live", data: new LiveAdapter("/api") });
+    await until(() => w.find(".ms-row").exists());
+    const live = w.find('.conn [aria-live="polite"]');
+    expect(live.text()).toBe("Connected");
+    expect(w.find(".conn").text()).toContain("resuming after event 9");
+    w.unmount();
+  });
 });

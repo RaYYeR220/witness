@@ -21,11 +21,13 @@ let tick: ReturnType<typeof setInterval> | null = null;
 onMounted(() => (tick = setInterval(() => (now.value = Date.now()), 5000)));
 onBeforeUnmount(() => tick && clearInterval(tick));
 
+/** The connection in words, announced when it changes; nothing per event goes in here. */
 const connLine = computed(() => {
+  if (paused.value) return "Paused, new events are held";
   if (data.mode === "replay" && conn.status === "open") return "Playing back the events recorded with this snapshot";
   switch (conn.status) {
     case "open":
-      return conn.lastId !== null ? `Connected, resuming after event ${conn.lastId} if the line drops` : "Connected, waiting for the next event";
+      return conn.lastId !== null ? "Connected" : "Connected, waiting for the next event";
     case "connecting":
       return "Connecting to the event stream";
     case "retrying":
@@ -50,8 +52,14 @@ const score = (s: number | null) => (s === null ? "" : s.toFixed(2));
           </p>
         </div>
         <div class="controls">
-          <p class="conn" :data-s="conn.status" role="status" aria-live="polite">
-            <span class="pulse" aria-hidden="true"></span>{{ paused ? `Paused, ${held.length} new ${held.length === 1 ? "event" : "events"} held` : connLine }}
+          <p class="conn" :data-s="conn.status">
+            <span class="pulse" aria-hidden="true"></span>
+            <span role="status" aria-live="polite">{{ connLine }}</span>
+            <!-- changes with every event: shown, not announced -->
+            <span v-if="paused" class="held" aria-hidden="true">({{ held.length }})</span>
+            <span v-else-if="conn.status === 'open' && conn.lastId !== null && data.mode === 'live'" aria-hidden="true"
+              >, resuming after event {{ conn.lastId }} if the line drops</span
+            >
           </p>
           <label class="check">
             <input v-model="showMilestones" type="checkbox" />
@@ -131,7 +139,7 @@ const score = (s: number | null) => (s === null ? "" : s.toFixed(2));
         </section>
 
         <aside class="rail" aria-label="This session">
-          <h2>Since you opened this page</h2>
+          <h2>New since you opened this page</h2>
           <dl class="tally">
             <div><dt><VerdictMark family="signed" />Signed</dt><dd>{{ counts.signed }}</dd></div>
             <div><dt><VerdictMark family="unsigned" />Unsigned</dt><dd>{{ counts.unsigned }}</dd></div>
@@ -189,12 +197,16 @@ h1 {
 .conn {
   display: flex;
   align-items: center;
-  gap: 9px;
+  flex-wrap: wrap;
   margin: 0;
   font-size: 13px;
   color: var(--fog-400);
 }
+.conn .held {
+  margin-left: 0.35em;
+}
 .pulse {
+  margin-right: 9px;
   width: 7px;
   height: 7px;
   border-radius: 50%;
@@ -251,7 +263,7 @@ h1 {
 }
 .msg {
   display: grid;
-  grid-template-columns: 14px 148px minmax(120px, 1fr) minmax(0, 190px) minmax(0, 230px) 64px 116px;
+  grid-template-columns: 14px 148px minmax(120px, 1fr) minmax(0, 190px) minmax(0, 220px) 78px 116px;
   align-items: baseline;
   column-gap: 14px;
   padding: 15px 10px 14px 6px;
@@ -456,7 +468,7 @@ h1 {
 
 @media (max-width: 1240px) {
   .msg {
-    grid-template-columns: 14px 132px minmax(100px, 1fr) minmax(0, 170px) 60px 76px;
+    grid-template-columns: 14px 132px minmax(100px, 1fr) minmax(0, 170px) 74px 76px;
   }
   .iss {
     display: none;

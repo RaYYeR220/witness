@@ -161,6 +161,21 @@ export function rowFromEvent(e: StreamEvent): FeedRow | null {
 export const FEED_TYPES: readonly StreamType[] = ["message", "milestone", "alert", "anchor", "incident"];
 export const FEED_MAX = 200;
 
+/**
+ * `row` in a newest-first list, by its time: above every row that is older,
+ * below every row that is newer (a recorded stream played back, or a listed
+ * message arriving after newer events, lands where it belongs). Among equal
+ * times the newest arrival goes first; a row without a time goes on top. Any
+ * earlier copy of the same row is replaced.
+ */
+export function placeByTime(list: FeedRow[], row: FeedRow, max = FEED_MAX): FeedRow[] {
+  const rest = list.filter((r) => r.key !== row.key);
+  const at = row.atMs;
+  const i = at === null ? 0 : rest.findIndex((r) => r.atMs !== null && r.atMs <= at);
+  const pos = i < 0 ? rest.length : i;
+  return [...rest.slice(0, pos), row, ...rest.slice(pos)].slice(0, max);
+}
+
 /** The feed state for one Live screen: initial page, then the stream on top. */
 export function useLiveFeed(data: WitnessData) {
   const rows = ref<FeedRow[]>([]);
@@ -183,8 +198,7 @@ export function useLiveFeed(data: WitnessData) {
   const visible = computed(() => (showMilestones.value ? rows.value : rows.value.filter((r) => r.kind !== "milestone")));
 
   function place(list: FeedRow[], row: FeedRow): FeedRow[] {
-    const rest = list.filter((r) => r.key !== row.key);
-    return [row, ...rest].slice(0, FEED_MAX);
+    return placeByTime(list, row);
   }
 
   function tally(row: FeedRow) {
@@ -243,8 +257,9 @@ export function useLiveFeed(data: WitnessData) {
     try {
       const page = await data.messages({ limit: 25 });
       const seen = new Set(rows.value.map((r) => r.key));
-      const older = page.items.map((m) => rowFromMessage(m)).filter((r) => !seen.has(r.key));
-      rows.value = [...rows.value, ...older].slice(0, FEED_MAX);
+      let next = rows.value;
+      for (const r of page.items.map((m) => rowFromMessage(m))) if (!seen.has(r.key)) next = placeByTime(next, r);
+      rows.value = next;
     } catch (e) {
       loadError.value = e instanceof Error ? e.message : String(e);
     } finally {
