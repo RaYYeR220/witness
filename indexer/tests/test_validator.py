@@ -1171,9 +1171,34 @@ async def test_already_alerted_outcomes_get_no_db_tamper(env):
 async def test_an_outcome_without_its_alert_exempts_nothing(env):
     store, v, _ = env
     mism, _ = await mismatched_block(store, v, "m")
-    await store._fetch("DELETE FROM alerts WHERE block_id = %s RETURNING 1", (mism,))
+    # The alert's severity is not the validator's: no exemption.
+    await store._fetch("UPDATE alerts SET severity = 'low' WHERE block_id = %s RETURNING 1",
+                       (mism,))
     [alert] = await v.reverify_all()
     assert (alert.rule, alert.block_id) == ("DB_TAMPER", mism)
+    other, _ = await mismatched_block(store, v, "n")
+    await store._fetch("DELETE FROM alerts WHERE block_id = %s RETURNING 1", (other,))
+    [alert] = await v.reverify_all()
+    assert (alert.rule, alert.block_id) == ("DB_TAMPER", other)
+
+
+@respx.mock
+async def test_the_message_copy_of_an_alerted_block_is_still_judged(env):
+    """A CONTENT_MISMATCH alert is about the forwarded copy. The indexed message copy (the
+    Tangle's bytes) is still held to the Tangle: rewriting it is DB_TAMPER."""
+    store, v, _ = env
+    raw, bid, data = make_block({"score": 0.5, "id": "MyDomain:mm"})
+    serve(bid, raw, confirmed_always(bid))
+    await handle_record(store, RecordingValidator(),
+                        rec("s-mm", bid, data.replace(b"0.5", b"0.7")), source="mqtt")
+    await store.put_message(MessageRow(block_id=bid, tag="trust.score", data=data))
+    assert await v.validate_once(bid, "s-mm") == "CONTENT_MISMATCH"
+    assert await v.reverify_all() == []  # only the submission copy differs: already alerted
+    await store._fetch(*tamper_sql(bid))
+    [alert] = await v.reverify_all()
+    assert (alert.rule, alert.severity, alert.block_id) == ("DB_TAMPER", "critical", bid)
+    assert [f["field"] for f in alert.evidence["fields"]] == ["messages.data"]
+    assert await v.reverify_all() == []  # deduplicated
 
 
 @respx.mock

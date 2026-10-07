@@ -154,9 +154,10 @@ only: the `indexer` login may read `aerios/iota/submissions/#` and write `witnes
   off) re-verifies the parallel database: one pass over every block it checked or
   indexed, comparing each stored copy (submission and message) with the Tangle. A copy
   that no longer matches raises `DB_TAMPER` (critical, once per block and stored
-  content). A block whose validation ended `CONTENT_MISMATCH`, `NOT_FOUND` or
-  `ORPHANED` is left to that alert and gets no `DB_TAMPER` (an outcome row without its
-  alert exempts nothing); a block verified and then tampered with stays checked.
+  content). When a block's validation ended `CONTENT_MISMATCH`, `NOT_FOUND` or
+  `ORPHANED`, its submission copy is left to that alert (an outcome row without the
+  validator's alert, same rule and severity, exempts nothing), while its indexed message
+  copy is still compared; a block verified and then tampered with stays fully checked.
   Candidates are read `reverify_batch` (200) at a time, a pass the node cuts
   short resumes at the block it stopped on, and blocks already fetched are compared with
   the digest of their Tangle content kept in memory, so a pass only asks the node about

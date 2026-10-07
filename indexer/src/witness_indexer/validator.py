@@ -61,8 +61,9 @@ METADATA_VIA = "GET /api/core/v2/blocks/{blockId}/metadata"
 BLOCK_VIA = "GET /api/core/v2/blocks/{blockId}"
 # Statuses that close a validation run; written again only when the outcome changes.
 OUTCOMES = frozenset({"CONTENT_VERIFIED", "CONTENT_MISMATCH", "NOT_FOUND", "ORPHANED"})
-# Outcomes the validator raised an alert of the same name for: re-verification leaves such a
-# block to that alert instead of adding DB_TAMPER.
+# Outcomes the validator raises an alert of the same name (and this severity) for. Those
+# alerts are about the forwarded copy (the submission): re-verification leaves that copy to
+# them, and still holds the indexed message copy to the Tangle.
 ALERTED_OUTCOMES = frozenset({"CONTENT_MISMATCH", "NOT_FOUND", "ORPHANED"})
 # A worker stops retrying a block once its status is one of these.
 TERMINAL = OUTCOMES | {"RECEIVED"}
@@ -647,14 +648,16 @@ class Validator:
         exempt a block. A block that was verified once is always judged, and all its copies
         being gone or NULL is itself DB_TAMPER ("content removed"). A block never verified is
         judged once the node confirms it is referenced by a milestone (definitive answers
-        only), so an unconfirmed block can never raise DB_TAMPER. A block whose latest
-        validation outcome is CONTENT_MISMATCH, NOT_FOUND or ORPHANED is not judged as long
-        as the alert of that outcome exists for it: it is already reported, and its stored
-        copy differing from the Tangle is what that alert says. An outcome row without its
-        alert exempts nothing, so exempting a block by forging rows means raising a critical
-        or high alert on it. The CONTENT_MISMATCH rows written for DB_TAMPER do not count as
-        outcomes: a block verified once and then tampered with stays judged, and its alert
-        is deduplicated per block and stored content.
+        only), so an unconfirmed block can never raise DB_TAMPER. When a block's latest
+        validation outcome is CONTENT_MISMATCH, NOT_FOUND or ORPHANED and the validator's
+        alert for it exists (same rule; critical, or high for ORPHANED), its submission copy
+        is not judged: that alert already reports it differing from the Tangle (or the block
+        missing). Its indexed message copy is still compared with the Tangle, since the
+        alert says nothing about it. An outcome row without that alert exempts nothing, so
+        exempting a copy by forging rows means raising a critical or high alert on the
+        block. The CONTENT_MISMATCH rows written for DB_TAMPER do not count as outcomes: a
+        block verified once and then tampered with stays fully judged, and its alert is
+        deduplicated per block and stored content.
 
         The parallel DB is not the trust root: an attacker who wipes every copy of a block from
         all four tables leaves nothing to re-verify here. That is detected by re-indexing the
@@ -743,7 +746,9 @@ class Validator:
 
     async def _reverify_row(self, row: dict) -> Alert | None:
         if row["outcome"] in ALERTED_OUTCOMES and row["outcome_alerted"]:
-            return None  # the validator's own alert already covers this block
+            if not row["has_message"]:
+                return None  # the validator's own alert covers the submission copy
+            row = {**row, "has_submission": False}  # ... but not the indexed message copy
         bid = bytes(row["block_id"])
         copy = self._tangle.get(bid)
         if copy is not None and _matches_copy(row, copy):

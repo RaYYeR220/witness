@@ -490,8 +490,8 @@ class Store:
         copy of its content (submission tag/data_hex, message tag/data, for whichever rows
         exist), `verified_once` (a MATCH check or a CONTENT_VERIFIED row), `outcome` (the
         latest validation outcome, not counting the CONTENT_MISMATCH rows re-verification
-        itself writes for DB_TAMPER) and `outcome_alerted` (an alert of that outcome's rule
-        exists for the block)."""
+        itself writes for DB_TAMPER) and `outcome_alerted` (the validator's alert for that
+        outcome exists for the block: same rule, same severity)."""
         return await self._fetch(
             "WITH ids AS ("
             " SELECT block_id FROM content_checks WHERE result = 'MATCH'"
@@ -509,7 +509,9 @@ class Store:
             "AND c.result = 'MATCH') OR EXISTS (SELECT 1 FROM lifecycle l "
             "WHERE l.block_id = p.block_id AND l.status = 'CONTENT_VERIFIED')) AS verified_once, "
             "o.status AS outcome, (o.status IS NOT NULL AND EXISTS (SELECT 1 FROM alerts a "
-            "WHERE a.block_id = p.block_id AND a.rule = o.status)) AS outcome_alerted "
+            "WHERE a.block_id = p.block_id AND a.rule = o.status AND a.severity = "
+            "CASE o.status WHEN 'ORPHANED' THEN 'high' ELSE 'critical' END)) "
+            "AS outcome_alerted "
             "FROM page p LEFT JOIN submissions s ON s.block_id = p.block_id "
             "LEFT JOIN messages m ON m.block_id = p.block_id "
             "LEFT JOIN LATERAL (SELECT l.status FROM lifecycle l WHERE l.block_id = p.block_id "
