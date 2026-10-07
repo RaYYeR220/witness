@@ -13,22 +13,31 @@ export function shortDid(did: string | null | undefined): string {
   return `${m[1]}${shortHex(m[2], 6, 4)}${m[3] ?? ""}`;
 }
 
+/** Largest |epoch ms| a Date can hold; a signed `iat` may be any 53-bit integer. */
+const MAX_DATE_MS = 8.64e15;
+
+/** ISO 8601 for a timestamp a Date can hold (year 0000 to 9999), else null. */
+export function isoOf(ms: number | null | undefined): string | null {
+  if (typeof ms !== "number" || !Number.isFinite(ms) || Math.abs(ms) > MAX_DATE_MS) return null;
+  const iso = new Date(ms).toISOString();
+  return /^\d{4}-/.test(iso) ? iso : null;
+}
+
 /** `2026-10-06 14:32:05 UTC`. */
 export function utc(ms: number | null | undefined, withSeconds = true): string {
-  if (ms === null || ms === undefined || !Number.isFinite(ms)) return "";
-  const iso = new Date(ms).toISOString();
-  return `${iso.slice(0, 10)} ${iso.slice(11, withSeconds ? 19 : 16)} UTC`;
+  const iso = isoOf(ms);
+  return iso ? `${iso.slice(0, 10)} ${iso.slice(11, withSeconds ? 19 : 16)} UTC` : "";
 }
 
 /** `14:32:05` in UTC, for dense rows. */
 export function clock(ms: number | null | undefined): string {
-  if (ms === null || ms === undefined || !Number.isFinite(ms)) return "";
-  return new Date(ms).toISOString().slice(11, 19);
+  return isoOf(ms)?.slice(11, 19) ?? "";
 }
 
 /** "just now", "12 s ago", "4 min ago", "3 h ago", else the UTC date. */
 export function ago(ms: number | null | undefined, now = Date.now()): string {
-  if (ms === null || ms === undefined || !Number.isFinite(ms)) return "";
+  if (isoOf(ms) === null) return "";
+  ms = ms as number;
   const s = Math.round((now - ms) / 1000);
   if (s < 5) return "just now";
   if (s < 60) return `${s} s ago`;
@@ -52,7 +61,7 @@ const VERDICT_INFO: Record<string, { label: string; family: VerdictFamily; gloss
 
 export function verdictInfo(v: string | null | undefined): { label: string; family: VerdictFamily; gloss: string } {
   if (!v) return { label: "No verdict", family: "unknown", gloss: "The indexer has not judged this message yet." };
-  return VERDICT_INFO[v] ?? { label: v, family: "unknown", gloss: "" };
+  return Object.hasOwn(VERDICT_INFO, v) ? VERDICT_INFO[v]! : { label: v, family: "unknown", gloss: "" };
 }
 
 /** Lifecycle statuses in the order the API walks them. */

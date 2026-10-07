@@ -13,6 +13,8 @@
 
 import { canonHash, isDict, isEnvelope, parseJson, toHex, type VerifierConfig } from "@witness/verify";
 
+import { isoOf } from "@/console/format";
+
 import { openEventStream, type StreamStatus } from "./sse";
 
 export type { StreamStatus } from "./sse";
@@ -571,7 +573,8 @@ export class ReplayAdapter implements WitnessData {
   async health(): Promise<SourceHealth> {
     try {
       const m = await this.manifest();
-      const when = m.recordedAtMs ? new Date(m.recordedAtMs).toISOString().slice(0, 16).replace("T", " ") + " UTC" : null;
+      const iso = isoOf(m.recordedAtMs);
+      const when = iso ? `${iso.slice(0, 16).replace("T", " ")} UTC` : null;
       return { mode: "replay", ok: true, network: null, version: null, note: when ? `recorded ${when}` : m.about };
     } catch {
       return { mode: "replay", ok: false, network: null, version: null, note: "the snapshot is missing" };

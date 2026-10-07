@@ -38,8 +38,9 @@ const summary = computed(() => {
   if (overall.value === "VALID") return "All five checks passed in your browser.";
   if (overall.value === "INVALID" && failed.value) return `Check ${failed.value.n}, ${failed.value.title.toLowerCase()}, failed: ${stepNote(failed.value.detail)}.`;
   if (overall.value === "PARTIAL") {
-    const names = unknown.value.map((x) => `${x.n}`).join(" and ");
-    return `Nothing failed, but check ${names} could not be evaluated. Partial is not a pass.`;
+    const ns = unknown.value.map((x) => `${x.n}`);
+    const names = ns.length > 1 ? `checks ${ns.slice(0, -1).join(", ")} and ${ns.at(-1)}` : `check ${ns[0] ?? ""}`;
+    return `Nothing failed, but ${names} could not be evaluated. Partial is not a pass.`;
   }
   return "";
 });

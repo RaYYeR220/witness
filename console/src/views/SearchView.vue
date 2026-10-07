@@ -28,10 +28,13 @@ const busy = ref(false);
 const more = ref(false);
 const error = ref<string | null>(null);
 const searched = ref(false);
+/** Bumped by every search; an answer to an older one is dropped. */
+let generation = 0;
 
 const EXAMPLES = ["trust.score", "FORGED", "2026-10-06 to 2026-10-07", "ms:1280..1300", "event=scale"];
 
 async function run(q: string) {
+  const g = ++generation;
   parsed.value = parseSearch(q);
   error.value = parsed.value.problem;
   items.value = [];
@@ -40,24 +43,27 @@ async function run(q: string) {
   busy.value = true;
   try {
     const page = await data.messages({ ...parsed.value.params, limit: 50 });
+    if (g !== generation) return;
     items.value = page.items;
     next.value = page.nextCursor;
   } catch (e) {
-    error.value = e instanceof Error ? e.message : String(e);
+    if (g === generation) error.value = e instanceof Error ? e.message : String(e);
   } finally {
-    busy.value = false;
+    if (g === generation) busy.value = false;
   }
 }
 
 async function loadMore() {
-  if (!next.value) return;
+  if (!next.value || more.value) return;
+  const g = generation;
   more.value = true;
   try {
     const page = await data.messages({ ...parsed.value.params, cursor: next.value, limit: 50 });
+    if (g !== generation) return;
     items.value = [...items.value, ...page.items];
     next.value = page.nextCursor;
   } catch (e) {
-    error.value = e instanceof Error ? e.message : String(e);
+    if (g === generation) error.value = e instanceof Error ? e.message : String(e);
   } finally {
     more.value = false;
   }

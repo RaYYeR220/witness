@@ -4,7 +4,7 @@ import { computed, onBeforeUnmount, onMounted, ref } from "vue";
 import ConsoleShell from "@/components/ConsoleShell.vue";
 import { useData } from "@/console/data";
 import { useLiveFeed } from "@/console/feed";
-import { ago, clock, shortDid, shortHex, utc, verdictInfo } from "@/console/format";
+import { ago, clock, isoOf, shortDid, shortHex, utc, verdictInfo } from "@/console/format";
 import VerdictMark from "@/console/VerdictMark.vue";
 
 /**
@@ -91,7 +91,7 @@ const score = (s: number | null) => (s === null ? "" : s.toFixed(2));
                 <span class="ie mono" :title="r.ieId ?? undefined">{{ r.ieId ?? "no IE" }}</span>
                 <span class="iss mono" :title="r.iss ?? undefined">{{ r.iss ? shortDid(r.iss) : "unsigned" }}</span>
                 <span class="ms">{{ r.msIndex !== null ? `ms ${r.msIndex}` : "pending" }}</span>
-                <time class="at" :datetime="r.atMs ? new Date(r.atMs).toISOString() : undefined" :title="utc(r.atMs)">
+                <time class="at" :datetime="isoOf(r.atMs) ?? undefined" :title="utc(r.atMs)">
                   <span class="clk">{{ clock(r.atMs) }}</span><span class="ago">{{ ago(r.atMs, now) }}</span>
                 </time>
                 <span class="sr-only">, open to verify block {{ r.blockId }}</span>

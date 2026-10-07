@@ -71,4 +71,9 @@ describe("LadderPanel", () => {
     expect(w.find('[data-step="anchor"]').attributes("data-s")).toBe("unknown");
     expect(w.find(".overall").text()).toContain("Partial is not a pass");
   });
+
+  it("names every check it could not evaluate", async () => {
+    const { w } = await climb("partial_real_no_anchor");
+    expect(w.find(".overall").text()).toContain("Nothing failed, but checks 4 and 5 could not be evaluated.");
+  });
 });

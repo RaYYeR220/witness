@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, onBeforeUnmount, ref } from "vue";
+import { computed, onBeforeUnmount, ref, watch } from "vue";
 
 import { DataError, type Checks, type Lifecycle, type RecheckResult } from "@/api/client";
 
@@ -22,7 +22,23 @@ const busy = ref(false);
 const note = ref<string | null>(null);
 const waitS = ref(0);
 let timer: ReturnType<typeof setInterval> | null = null;
+let asked = 0;
 onBeforeUnmount(() => timer && clearInterval(timer));
+
+// the same component serves the next block when the route changes: forget this one's answers
+watch(
+  () => props.blockId,
+  () => {
+    asked += 1;
+    checks.value = null;
+    last.value = null;
+    note.value = null;
+    busy.value = false;
+    waitS.value = 0;
+    if (timer) clearInterval(timer);
+    timer = null;
+  },
+);
 
 const current = computed(() => checks.value ?? props.lifecycle?.checks ?? null);
 
@@ -47,10 +63,12 @@ function countdown(s: number) {
 }
 
 async function recheck() {
+  const ask = ++asked;
   busy.value = true;
   note.value = null;
   try {
     const r = await data.recheck(props.blockId);
+    if (ask !== asked) return; // the screen moved on to another block
     last.value = r;
     checks.value = r.checks;
     note.value = r.cached
@@ -60,6 +78,7 @@ async function recheck() {
         : `Asked the node just now: ${r.calls.length} ${r.calls.length === 1 ? "call" : "calls"}, ${Math.max(0, r.finishedAtMs - r.startedAtMs)} ms.`;
     emit("rechecked");
   } catch (e) {
+    if (ask !== asked) return;
     if (e instanceof DataError && e.status === 429) {
       const s = e.retryAfterS ?? 10;
       note.value = `Too many checks are running on the server. Try again in ${s} s.`;
@@ -72,7 +91,7 @@ async function recheck() {
       note.value = e instanceof Error ? e.message : String(e);
     }
   } finally {
-    busy.value = false;
+    if (ask === asked) busy.value = false;
   }
 }
 

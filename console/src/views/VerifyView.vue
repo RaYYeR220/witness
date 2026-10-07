@@ -248,6 +248,7 @@ const pinsDiffer = computed(() => {
   if (a.network !== PINNED.network) diffs.push("network");
   if (keys(a.trustedCoordinatorKeys) !== keys(PINNED.trustedCoordinatorKeys)) diffs.push("coordinator keys");
   if (a.threshold !== PINNED.threshold) diffs.push("threshold");
+  if ((a.rebasedNetwork ?? null) !== PINNED.rebasedNetwork) diffs.push("Rebased network");
   if ((a.trailId ?? null) !== PINNED.trailId) diffs.push("anchor trail");
   return diffs;
 });
@@ -408,7 +409,8 @@ const cfg = pinnedConfig();
               </div>
             </dl>
             <p class="fine">
-              These pins are built into the console (src/config/verifier.json). The API also publishes the pins it uses;
+              These pins are built into the console (src/config/verifier.json). The API also publishes the pins it uses (all of the above but the
+              RPC, the package and the writer);
               <template v-if="pinsDiffer === null">it did not answer, which changes nothing here.</template>
               <template v-else-if="!pinsDiffer.length">they are the same.</template>
               <b v-else class="bad">they differ ({{ pinsDiffer.join(", ") }}).</b>
