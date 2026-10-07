@@ -31,6 +31,7 @@ from mcp.server.transport_security import TransportSecuritySettings
 from mcp.types import ToolAnnotations
 from witness_core import bundle as wbundle
 from witness_core import rebased
+from witness_core.didkey import with_did_key
 from witness_core.ids import from_hex
 
 DEFAULT_API = "http://127.0.0.1:7200"
@@ -301,7 +302,8 @@ def verify_message(block_id: str) -> dict[str, Any]:
         })
     fetch = rebased.make_fetcher(cfg, timeout=TIMEOUT) if cfg.rebased_rpc else None
     try:
-        ladder = wbundle.verify(doc, cfg, fetch, _did_resolver())
+        # did:key signers resolve locally (the anchor only resolves did:iota).
+        ladder = wbundle.verify(doc, cfg, fetch, with_did_key(_did_resolver()))
     except WitnessToolError:
         raise
     except Exception as exc:  # noqa: BLE001 - any verifier failure must stay one clean error

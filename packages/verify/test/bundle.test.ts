@@ -34,10 +34,10 @@ const run = (c: any, extra: Partial<VerifyOptions> = {}) => verifyBundle(...wire
 const marks = (l: Ladder) => l.steps.map((s) => (s.ok === null ? "N" : s.ok ? "T" : "F")).join("") + " " + l.overall;
 
 describe("bundles.json parity", () => {
-  it("has the 43 named cases", () => {
+  it("has the 47 named cases", () => {
     const names = bundles.cases.map((c: any) => c.name);
-    expect(names).toHaveLength(43);
-    expect(new Set(names).size).toBe(43);
+    expect(names).toHaveLength(47);
+    expect(new Set(names).size).toBe(47);
   });
 
   it.each(bundles.cases.map((c: any) => [c.name, c] as const))("%s", async (_name, c: any) => {
@@ -53,12 +53,12 @@ describe("bundles.json parity", () => {
 /** Detail strings as the Python reference prints them for the same cases. */
 const PYTHON_DETAILS: Record<string, Partial<Record<(typeof STEP_NAMES)[number], string>>> = {
   valid_anchored: {
-    block_hash: "BLAKE2b-256(raw) = 0x435be807caeb2b8d8b1d599b22fc3a1abe0960e4dae50ad77233419cb780b769",
-    inclusion: "1-step path reaches inclusionMerkleRoot 0x05fbe57ce3ac0098da19814b7b75a0beaa0947bfaf9a3d4d58dcd90351e977e6",
+    block_hash: "BLAKE2b-256(raw) = 0x74eb59a9bb6a23cde9fde642cad10cac689e7e77918dd2042411d722416038c0",
+    inclusion: "1-step path reaches inclusionMerkleRoot 0x38d543b53db44faa86b2d79ca1b786bb709a2d8aa837c3c1d07ec191233170f7",
     milestone_signatures:
-      "milestone 374 0xa6bc3be7eaa3cca15b859dd8c812b370f47e964f3df400a7d2962a04ebcd5f55: 2 valid signature(s) by pinned keys, threshold 2",
-    envelope: "PRODUCER_SIGNED by did:iota:testnet:0x5e1f#sig-1",
-    anchor: "checkpoint 0x099ceadead051f82464679deba54465c6e0322376c1f911ca4f19101202ed5ca matches the on-chain record",
+      "milestone 374 0x0147153fd52e05dc159d51ca3bf98fa4f3e18f41d918f991a82b2186db3ca667: 2 valid signature(s) by pinned keys, threshold 2",
+    envelope: "PRODUCER_SIGNED by did:iota:testnet:0x5e1fd05239fa76b9ce631486197f581a8f661997b616d18ba18c0045fd25eed7#sig-1",
+    anchor: "checkpoint 0xd0fdddfb16ce30e270f6851e105a4d81c75ff139827e2959c2d20074b7c31736 matches the on-chain record",
   },
   partial_real_no_anchor: {
     inclusion: "2-step path reaches inclusionMerkleRoot 0xd6405d7a22d8af800c7f909c798e242491a6d367f77027b56a9987c19e072b6e",
@@ -69,19 +69,19 @@ const PYTHON_DETAILS: Record<string, Partial<Record<(typeof STEP_NAMES)[number],
   signer_unresolved: { envelope: "signer identity not resolved (bundle snapshot is unauthenticated)" },
   raw_byte_flipped: {
     block_hash:
-      "BLAKE2b-256(raw) is 0xb7d298bfd249cf1646fdc6f3bc6f4e8fb746febf985a18ad0dc8ed6dea274143, " +
-      "bundle claims 0x435be807caeb2b8d8b1d599b22fc3a1abe0960e4dae50ad77233419cb780b769",
+      "BLAKE2b-256(raw) is 0x1ec52b7dae0d28d6d63007dc591f86c3c6a39767e0a98b2737ccf8e03638523b, " +
+      "bundle claims 0x74eb59a9bb6a23cde9fde642cad10cac689e7e77918dd2042411d722416038c0",
   },
   path_hash_corrupted: {
-    inclusion: "Merkle path does not reach inclusionMerkleRoot 0x05fbe57ce3ac0098da19814b7b75a0beaa0947bfaf9a3d4d58dcd90351e977e6",
+    inclusion: "Merkle path does not reach inclusionMerkleRoot 0x38d543b53db44faa86b2d79ca1b786bb709a2d8aa837c3c1d07ec191233170f7",
   },
   signature_corrupted: {
     milestone_signatures:
-      "milestone 374 0xa6bc3be7eaa3cca15b859dd8c812b370f47e964f3df400a7d2962a04ebcd5f55: 1 valid signature(s) by pinned keys, threshold 2",
+      "milestone 374 0x0147153fd52e05dc159d51ca3bf98fa4f3e18f41d918f991a82b2186db3ca667: 1 valid signature(s) by pinned keys, threshold 2",
   },
   untrusted_key_set: {
     milestone_signatures:
-      "milestone 374 0xa6bc3be7eaa3cca15b859dd8c812b370f47e964f3df400a7d2962a04ebcd5f55: 0 valid signature(s) by pinned keys, threshold 2",
+      "milestone 374 0x0147153fd52e05dc159d51ca3bf98fa4f3e18f41d918f991a82b2186db3ca667: 0 valid signature(s) by pinned keys, threshold 2",
   },
   envelope_forged: { envelope: "FORGED: signature invalid" },
   self_made_snapshot_resolved: { envelope: "FORGED: signature invalid" },
@@ -89,7 +89,7 @@ const PYTHON_DETAILS: Record<string, Partial<Record<(typeof STEP_NAMES)[number],
   key_revoked_before_inclusion: { envelope: "key revoked before inclusion" },
   key_revoked_at_inclusion: { envelope: "key revoked within the inclusion second" },
   key_revoked_same_second_after: { envelope: "key revoked within the inclusion second" },
-  key_revoked_next_second: { envelope: "PRODUCER_SIGNED by did:iota:testnet:0x5e1f#sig-1" },
+  key_revoked_next_second: { envelope: "PRODUCER_SIGNED by did:iota:testnet:0x5e1fd05239fa76b9ce631486197f581a8f661997b616d18ba18c0045fd25eed7#sig-1" },
   resolved_doc_not_issuer: { envelope: "resolved DID document does not belong to the issuer" },
   anchor_mismatch: { anchor: "checkpoint does not match on-chain record" },
   milestone_not_in_window: { anchor: "milestone not in anchored checkpoint" },
@@ -120,7 +120,7 @@ const PYTHON_DETAILS: Record<string, Partial<Record<(typeof STEP_NAMES)[number],
   },
   small_order_coordinator_key_not_counted: {
     milestone_signatures:
-      "milestone 374 0xa6bc3be7eaa3cca15b859dd8c812b370f47e964f3df400a7d2962a04ebcd5f55: 1 valid signature(s) by pinned keys, threshold 2",
+      "milestone 374 0x0147153fd52e05dc159d51ca3bf98fa4f3e18f41d918f991a82b2186db3ca667: 1 valid signature(s) by pinned keys, threshold 2",
   },
   small_order_signer_key: { envelope: "FORGED: weak public key" },
   envelope_hostile_nesting: { envelope: "malformed bundle (RecursionError)" },
@@ -128,8 +128,15 @@ const PYTHON_DETAILS: Record<string, Partial<Record<(typeof STEP_NAMES)[number],
   legacy_broken_hostile_nesting: { envelope: "malformed bundle (RecursionError)" },
   legacy_nesting_at_cap: { envelope: "unsigned legacy message" },
   envelope_nested_past_jcs_cap: { envelope: "MALFORMED: not canonicalizable: nested too deeply" },
-  key_replaced_old_msg: { envelope: "PRODUCER_SIGNED by did:iota:testnet:0x5e1f#sig-1" },
+  key_replaced_old_msg: { envelope: "PRODUCER_SIGNED by did:iota:testnet:0x5e1fd05239fa76b9ce631486197f581a8f661997b616d18ba18c0045fd25eed7#sig-1" },
   key_replaced_within_second: { envelope: "FORGED: signature invalid" },
+  noncanonical_did_signer: { envelope: "FORGED: non-canonical DID" },
+  noncanonical_did_signer_no_resolver: { envelope: "FORGED: non-canonical DID" },
+  did_key_signer: {
+    envelope:
+      "PRODUCER_SIGNED by did:key:z6MkmtWtY63GQVBrpMyRJWEzsnxfsGkemu6CtMDwGTv4RYj2#z6MkmtWtY63GQVBrpMyRJWEzsnxfsGkemu6CtMDwGTv4RYj2",
+  },
+  did_key_forged: { envelope: "FORGED: signature invalid" },
 };
 
 describe("ladder details match the Python reference", () => {
@@ -278,7 +285,7 @@ describe("trusted lookups", () => {
       resolveDid: (did) => (dids.push(did), opts.resolveDid!(did)),
       fetchAnchorRecord: (a) => (anchors.push(a), opts.fetchAnchorRecord!(a)),
     });
-    expect(dids).toEqual(["did:iota:testnet:0x5e1f"]);
+    expect(dids).toEqual(["did:iota:testnet:0x5e1fd05239fa76b9ce631486197f581a8f661997b616d18ba18c0045fd25eed7"]);
     expect(anchors).toEqual([c.bundle.anchor]);
   });
 
@@ -303,7 +310,7 @@ describe("trusted lookups", () => {
     d.keys[0].revokedAtMs = at;
     d.keys.unshift({ kid: "#sig-1", type: "Ed25519", publicKeyHex: OTHER, revokedAtMs: null });
   };
-  const SIGNED = "PRODUCER_SIGNED by did:iota:testnet:0x5e1f#sig-1";
+  const SIGNED = "PRODUCER_SIGNED by did:iota:testnet:0x5e1fd05239fa76b9ce631486197f581a8f661997b616d18ba18c0045fd25eed7#sig-1";
 
   it.each([
     // A kid listed once per key is its key history, never an error.
@@ -324,24 +331,24 @@ describe("trusted lookups", () => {
       "resolved DID document is malformed: DID snapshot must be an object with a keys list"],
     ["doc of another DID", (d: any) => (d.doc.id = "did:iota:testnet:0xother"), false,
       "resolved DID document does not belong to the issuer"],
-    ["fragment kid", (d: any) => (d.keys[0].kid = "#sig-1"), true, "PRODUCER_SIGNED by did:iota:testnet:0x5e1f#sig-1"],
+    ["fragment kid", (d: any) => (d.keys[0].kid = "#sig-1"), true, "PRODUCER_SIGNED by did:iota:testnet:0x5e1fd05239fa76b9ce631486197f581a8f661997b616d18ba18c0045fd25eed7#sig-1"],
     ["uppercase key hex", (d: any) => (d.keys[0].publicKeyHex = `0x${d.keys[0].publicKeyHex.slice(2).toUpperCase()}`), true,
-      "PRODUCER_SIGNED by did:iota:testnet:0x5e1f#sig-1"],
+      "PRODUCER_SIGNED by did:iota:testnet:0x5e1fd05239fa76b9ce631486197f581a8f661997b616d18ba18c0045fd25eed7#sig-1"],
     ["float revokedAtMs", (d: any) => (d.keys[0].revokedAtMs = new JsonNumber("float", 1, "1.0")), false,
       "FORGED: signing key not resolvable"],
     ["revoked long ago", (d: any) => (d.keys[0].revokedAtMs = 5), false, "key revoked before inclusion"],
     ["junk entries skipped", (d: any) => d.keys.unshift(5, null, "x", { kid: 5 }), true,
-      "PRODUCER_SIGNED by did:iota:testnet:0x5e1f#sig-1"],
+      "PRODUCER_SIGNED by did:iota:testnet:0x5e1fd05239fa76b9ce631486197f581a8f661997b616d18ba18c0045fd25eed7#sig-1"],
   ])("registry document: %s (as the reference decides)", async (_name, mutate, ok, detail) => {
     const docs = clone(bundles.resolvers.registry);
-    mutate(docs["did:iota:testnet:0x5e1f"]);
+    mutate(docs["did:iota:testnet:0x5e1fd05239fa76b9ce631486197f581a8f661997b616d18ba18c0045fd25eed7"]);
     const [bundle, cfg, opts] = wire(caseByName("valid_anchored"));
     const ladder = await verifyBundle(bundle, cfg, { ...opts, resolveDid: (did) => docs[did] ?? null });
     expect(ladder.steps[3]).toEqual({ name: "envelope", ok, detail });
   });
 
   it("snapshotResolver picks replaced keys by time, like bundle.snapshot_resolver", () => {
-    const DID = "did:iota:testnet:0x5e1f";
+    const DID = "did:iota:testnet:0x5e1fd05239fa76b9ce631486197f581a8f661997b616d18ba18c0045fd25eed7";
     const key = (n: number) => toHex(ed25519PublicKey(new Uint8Array(32).fill(n)));
     const ed = (n: number, revokedAtMs: number | null, kid = "#sig-1") => ({ kid, type: "Ed25519", publicKeyHex: key(n), revokedAtMs });
     const pub = (info: { ed25519Public: Uint8Array | null } | null) => (info?.ed25519Public ? toHex(info.ed25519Public) : null);
@@ -414,10 +421,10 @@ describe("envelope bytes read with Python's json.loads semantics", () => {
     ["score 2^64", text.replace('"score":0.82', '"score":18446744073709551616'), false,
       "MALFORMED: not canonicalizable: 18446744073709551616 exceeds safe integer domain for JSON floats"],
     ["lone surrogate", text.replace('"id":"', '"id":"\\ud800'), false, "MALFORMED: not canonicalizable: input contains non-UTF-8 codepoints"],
-    ["duplicate key, last wins", text.replace('{"att"', '{"seq":5,"att"'), true, "PRODUCER_SIGNED by did:iota:testnet:0x5e1f#sig-1"],
+    ["duplicate key, last wins", text.replace('{"att"', '{"seq":5,"att"'), true, "PRODUCER_SIGNED by did:iota:testnet:0x5e1fd05239fa76b9ce631486197f581a8f661997b616d18ba18c0045fd25eed7#sig-1"],
     ["w 1.0", text.replace('"w":1', '"w":1.0'), null, "unsigned legacy message"],
     ["w true", text.replace('"w":1', '"w":true'), null, "unsigned legacy message"],
-    ["whitespace around", ` \n${text}\t`, true, "PRODUCER_SIGNED by did:iota:testnet:0x5e1f#sig-1"],
+    ["whitespace around", ` \n${text}\t`, true, "PRODUCER_SIGNED by did:iota:testnet:0x5e1fd05239fa76b9ce631486197f581a8f661997b616d18ba18c0045fd25eed7#sig-1"],
     ["trailing data", `${text} x`, null, "unsigned legacy message"],
     // Parsed, but deeper than the canonicalizer recurses: the envelope is MALFORMED.
     // The envelope is depth 0 and its body 1, so 499 lists end at depth 500: the

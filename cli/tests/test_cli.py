@@ -86,6 +86,14 @@ def test_verify_negative_is_invalid(files, name):
     assert "INVALID" in r.output
 
 
+@pytest.mark.parametrize(("name", "ok"), [("did_key_signer", "ok"), ("did_key_forged", "FAILED")])
+def test_verify_resolves_a_did_key_signer_without_any_resolver(files, name, ok):
+    f = files(name)
+    r = runner.invoke(app, ["verify", str(f["bundle"]), "--config", str(f["config"]), "--json"])
+    steps = {s["name"]: s["ok"] for s in json.loads(r.output)["steps"]}
+    assert steps["envelope"] is (ok == "ok"), r.output
+
+
 def test_verify_without_config_exits_3(files):
     f = files("valid_anchored")
     r = runner.invoke(app, ["verify", str(f["bundle"])])

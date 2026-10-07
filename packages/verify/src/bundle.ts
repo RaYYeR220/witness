@@ -29,6 +29,7 @@ import {
 } from "./codec.js";
 import { ed25519Verify } from "./ed25519.js";
 import { isEnvelope, verifyEnvelope, type KeyInfo } from "./envelope.js";
+import { isCanonicalDid, NON_CANONICAL_DID } from "./ids.js";
 import { get, has, isDict, isNone, isUint, JsonParseError, parseJson, pyRepr, type Json, type JsonObject } from "./json.js";
 import { verifyPath, type PathStep } from "./merkle.js";
 import { FORGED, MALFORMED, PRODUCER_SIGNED, RELAY_ATTESTED } from "./verdicts.js";
@@ -461,6 +462,9 @@ async function stepEnvelope(b: JsonObject, resolveDid: VerifyOptions["resolveDid
   const iss = env.iss as string;
   const kid = env.kid as string;
   if (env.tag !== tag || kid.split("#")[0] !== iss) return [false, `${offline.verdict}: ${offline.reason}`];
+  // A did:iota DID in any other spelling is never looked up (the registry would answer for
+  // the canonical one): FORGED, as the indexer and the relay judge it.
+  if (!isCanonicalDid(iss)) return [false, `${FORGED}: ${NON_CANONICAL_DID}`];
   // Signer keys come only from the trusted resolver, never from the bundle.
   const trusted = await trustedKeys(resolveDid, iss);
   if (trusted === null) return [null, UNRESOLVED_SIGNER];

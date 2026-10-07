@@ -10,7 +10,7 @@ from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
 from cryptography.hazmat.primitives.asymmetric.x25519 import X25519PrivateKey
 from hypothesis import given, settings
 from hypothesis import strategies as st
-from witness_core import bundle, canon, checkpoint, codec, envelope, merkle, verdicts
+from witness_core import bundle, canon, checkpoint, codec, didkey, envelope, merkle, verdicts
 from witness_core.bundle import Ladder, VerifierConfig
 from witness_core.codec import Ed25519Sig, MilestoneEssence
 from witness_core.envelope import EnvelopeCheck
@@ -18,7 +18,8 @@ from witness_core.ids import blake2b256, from_hex, to_hex
 
 VECTORS = Path(__file__).parent / "vectors" / "bundles.json"
 NETWORK = "private_tangle1"
-DID = "did:iota:testnet:0x5e1f"
+# A canonical did:iota DID (64 lowercase hex): the only spelling a resolver answers for.
+DID = "did:iota:testnet:0x5e1fd05239fa76b9ce631486197f581a8f661997b616d18ba18c0045fd25eed7"
 KID = DID + "#sig-1"
 NOW_MS = 1_791_283_590_000
 TRAIL = "0x" + "7a" * 32
@@ -1098,7 +1099,9 @@ def _registries(vectors) -> dict[str, dict[str, dict]]:
     """Trusted DID registries the cases refer to by name: {name: {did: resolve doc}}."""
     ms_time_ms = (vectors("milestones")[-1]["timestamp"] + 5) * 1000
     wrong_issuer = _snapshot()
-    wrong_issuer["doc"]["id"] = "did:iota:testnet:0xother"
+    wrong_issuer["doc"]["id"] = "did:iota:testnet:0x" + "0e" * 32
+    # The signer's DID in upper-case hex, with a registry that would answer for that spelling.
+    upper = _respelled(_snapshot(), DID, UPPER_DID)
     return {
         "registry": {DID: _snapshot()},
         "registry_key_revoked": {DID: _snapshot(revoked_at_ms=ms_time_ms - 1)},
@@ -1111,7 +1114,25 @@ def _registries(vectors) -> dict[str, dict[str, dict]]:
         # #sig-1 replaced in place by SIGNER; OLD_SIGNER's entry carries the replacement time.
         "registry_key_replaced_next_second": {DID: _replaced(ms_time_ms + 1000)},
         "registry_key_replaced_within_second": {DID: _replaced(ms_time_ms + 500)},
+        "registry_noncanonical": {UPPER_DID: upper},
+        # What a verifier's resolver answers for a did:key on its own (didkey.with_did_key).
+        "did_key_local": {DID_KEY: didkey.document(DID_KEY)},
     }
+
+
+UPPER_DID = DID[: -64] + DID[-64:].upper()
+DID_KEY = didkey.from_public_key(SIGNER.public_key().public_bytes_raw())
+
+
+def _respelled(value: Any, old: str, new: str) -> Any:
+    """`value` with every string's `old` replaced by `new`."""
+    if isinstance(value, str):
+        return value.replace(old, new)
+    if isinstance(value, list):
+        return [_respelled(v, old, new) for v in value]
+    if isinstance(value, dict):
+        return {k: _respelled(v, old, new) for k, v in value.items()}
+    return value
 
 
 def _dup_sig(b: dict) -> dict:
@@ -1185,6 +1206,16 @@ def _cases(vectors) -> list[dict]:
                          snapshot=_replaced(ms_time_ms + 1000))
     old_msg_late = _synthetic(vectors, _envelope(sign_key=OLD_SIGNER),
                               snapshot=_replaced(ms_time_ms + 500))
+    noncanonical = _synthetic(vectors, _envelope(iss=UPPER_DID, kid=UPPER_DID + "#sig-1"),
+                              snapshot=_respelled(_snapshot(), DID, UPPER_DID))
+    did_key_kid = f"{DID_KEY}#{DID_KEY[len(didkey.PREFIX):]}"
+    did_key_doc = didkey.document(DID_KEY)
+    did_key_signed = _synthetic(vectors, _envelope(iss=DID_KEY, kid=did_key_kid),
+                                snapshot=did_key_doc)
+    # Claims the did:key, signed by someone else: the eval's FORGED did:key producer.
+    did_key_forged = _synthetic(
+        vectors, _envelope(iss=DID_KEY, kid=did_key_kid, sign_key=forger), snapshot=did_key_doc,
+        claimed=EnvelopeCheck(verdicts.PRODUCER_SIGNED, DID_KEY, did_key_kid, 1, NOW_MS, None))
     reg = "registry"
     return [
         _case("valid_anchored", b, cfg, rec, reg, "TTTTT VALID"),
@@ -1281,6 +1312,17 @@ def _cases(vectors) -> list[dict]:
         _case("key_replaced_within_second", old_msg_late.bundle, cfg,
               {"record": old_msg_late.record}, "registry_key_replaced_within_second",
               "TTTFT INVALID"),
+        # A did:iota signer in a non-canonical spelling is FORGED even where a resolver
+        # would answer for that spelling: nothing else ever looks it up.
+        _case("noncanonical_did_signer", noncanonical.bundle, cfg,
+              {"record": noncanonical.record}, "registry_noncanonical", "TTTFT INVALID"),
+        _case("noncanonical_did_signer_no_resolver", noncanonical.bundle, cfg,
+              {"record": noncanonical.record}, None, "TTTFT INVALID"),
+        # did:key signers resolve from the DID itself, as the indexer does.
+        _case("did_key_signer", did_key_signed.bundle, cfg, {"record": did_key_signed.record},
+              "did_key_local", "TTTTT VALID"),
+        _case("did_key_forged", did_key_forged.bundle, cfg, {"record": did_key_forged.record},
+              "did_key_local", "TTTFT INVALID"),
     ]
 
 

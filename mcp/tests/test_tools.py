@@ -158,6 +158,23 @@ def test_verify_tampered_record_is_invalid(tmp_path, monkeypatch):
     assert s.verify_message(own(c))["overall"] == "INVALID"
 
 
+@respx.mock
+@pytest.mark.parametrize(("name", "ok"), [("did_key_signer", True), ("did_key_forged", False)])
+def test_verify_resolves_a_did_key_signer_locally(tmp_path, monkeypatch, name, ok):
+    c = case(name)
+    cfg = tmp_path / "cfg.json"
+    cfg.write_text(json.dumps(c["config"]), encoding="utf-8")
+    monkeypatch.setenv("WITNESS_VERIFIER_CONFIG", str(cfg))
+    # A resolver that is never asked: the anchor only resolves did:iota.
+    monkeypatch.setenv("WITNESS_RESOLVER_URL", "http://resolver.test")
+    asked = respx.get(url__startswith="http://resolver.test").mock(
+        return_value=httpx.Response(400))
+    respx.get(f"{API}/proofs/{own(c)}").mock(return_value=httpx.Response(200, json=c["bundle"]))
+    steps = {st["name"]: st["ok"] for st in s.verify_message(own(c))["steps"]}
+    assert steps["envelope"] is ok
+    assert not asked.called
+
+
 # ---------------------------------------------------------------- write tool
 
 def test_create_report_needs_token():

@@ -23,7 +23,7 @@ from typing import Any, Literal, Protocol
 from . import checkpoint, codec, ed25519, envelope, merkle, nesting, verdicts
 from .codec import Ed25519Sig, MilestoneEssence
 from .envelope import EnvelopeCheck, KeyInfo
-from .ids import blake2b256, from_hex, to_hex
+from .ids import NON_CANONICAL_DID, blake2b256, from_hex, is_canonical_did, to_hex
 
 StepName = Literal["block_hash", "inclusion", "milestone_signatures", "envelope", "anchor"]
 Overall = Literal["VALID", "INVALID", "PARTIAL"]
@@ -468,6 +468,10 @@ def _step_envelope(
     iss, kid = env["iss"], env["kid"]
     if env["tag"] != tag or kid.split("#", 1)[0] != iss:
         return False, f"{offline.verdict}: {offline.reason}"
+    # A did:iota DID in any other spelling is never looked up (the registry would answer
+    # for the canonical one): FORGED, as the indexer and the relay judge it.
+    if not is_canonical_did(iss):
+        return False, f"{verdicts.FORGED}: {NON_CANONICAL_DID}"
     # Signer keys come only from the trusted resolver, never from the bundle.
     trusted = _trusted_keys(resolve_did, iss)
     if trusted is None:

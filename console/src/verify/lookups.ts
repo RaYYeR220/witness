@@ -3,7 +3,9 @@
  * the issuer's DID document (step 4) and the anchor record on IOTA Rebased
  * (step 5). Neither ever comes from the explorer's API.
  *
- *   issuer keys   asked of the anchor service operated with this explorer
+ *   issuer keys   a did:key is its own key: decoded here, never asked of
+ *                 anyone (`withDidKey`, as the indexer does). A did:iota is
+ *                 asked of the anchor service operated with this explorer
  *                 (`{VITE_RESOLVER_URL}/resolve/{did}`). That service reads
  *                 the did:iota document and its key history from IOTA
  *                 Rebased; the browser trusts its answer. This is an
@@ -15,7 +17,7 @@
  *                 explorer is trusted for step 5.
  */
 
-import type { VerifyOptions } from "@witness/verify";
+import { withDidKey, type VerifyOptions } from "@witness/verify";
 
 import { anchorFetcher, PINNED } from "./pinned";
 
@@ -64,7 +66,7 @@ export function createLookups(
     const root = (env.VITE_REPLAY_ROOT ?? `${import.meta.env.BASE_URL}replay/`).replace(/\/?$/, "/");
     return {
       // file names as scripts/record-replay.mjs writes them: anything but [A-Za-z0-9._-] becomes "_"
-      resolveDid: (did) => getJson(`${root}dids/${did.replace(/[^A-Za-z0-9._-]/g, "_")}.json`, f, timeoutMs),
+      resolveDid: withDidKey((did) => getJson(`${root}dids/${did.replace(/[^A-Za-z0-9._-]/g, "_")}.json`, f, timeoutMs)),
       fetchAnchorRecord: anchorFetcher(undefined, fetchImpl),
       didSource: "copies recorded with this snapshot from the anchor service operated with this explorer: not a live read, and not an independent read of the chain",
       anchorSource,
@@ -73,7 +75,7 @@ export function createLookups(
   }
   const resolver = (env.VITE_RESOLVER_URL ?? "/anchor").replace(/\/+$/, "");
   return {
-    resolveDid: (did) => getJson(`${resolver}/resolve/${encodeURIComponent(did)}`, f, timeoutMs),
+    resolveDid: withDidKey((did) => getJson(`${resolver}/resolve/${encodeURIComponent(did)}`, f, timeoutMs)),
     fetchAnchorRecord: anchorFetcher(undefined, fetchImpl),
     didSource: `the anchor service operated with this explorer (${resolver}/resolve), which reads did:iota from IOTA Rebased: not an independent read of the chain`,
     anchorSource,

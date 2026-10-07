@@ -41,6 +41,18 @@ describe("trusted DID lookups", () => {
     expect(ladder?.overall).toBe("PARTIAL");
   });
 
+  it("decodes a did:key itself, in live and replay builds, and never asks the anchor", async () => {
+    const DID_KEY = "did:key:z6MkmtWtY63GQVBrpMyRJWEzsnxfsGkemu6CtMDwGTv4RYj2";
+    const never = (async () => {
+      throw new Error("the anchor only resolves did:iota");
+    }) as unknown as typeof fetch;
+    for (const env of [{}, { VITE_MODE: "replay", VITE_REPLAY_ROOT: "/replay/" }]) {
+      const doc = (await createLookups(env, never).resolveDid(DID_KEY)) as { doc: { id: string }; keys: { kid: string }[] };
+      expect(doc.doc.id).toBe(DID_KEY);
+      expect(doc.keys.map((k) => k.kid)).toEqual([`${DID_KEY}#z6MkmtWtY63GQVBrpMyRJWEzsnxfsGkemu6CtMDwGTv4RYj2`, DID_KEY]);
+    }
+  });
+
   it("reads a missing DID as not found and an error status as a failure", async () => {
     const status = (code: number) => (async () => new Response("{}", { status: code })) as unknown as typeof fetch;
     expect(await createLookups({}, status(404)).resolveDid(DID)).toBeNull();

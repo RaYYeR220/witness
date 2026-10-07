@@ -389,3 +389,15 @@ async def test_non_canonical_iota_dids_are_never_looked_up(did):
         assert route.call_count == 0
     assert r.can_resolve("did:iota:testnet:0x" + "5e1f" * 16)
     assert r.can_resolve("did:iota:0x" + "5e1f" * 16)  # mainnet DIDs carry no network
+
+
+def test_did_key_reply_matches_the_verifiers_local_document():
+    """The proof verifier's callers resolve did:key with witness_core.didkey: same key, same
+    kid, as the indexer judged the message."""
+    from witness_core import didkey
+    from witness_indexer import resolver as r
+
+    did = didkey.from_public_key(bytes(range(32)))
+    assert r.did_key_public(did) == didkey.public_key(did)
+    assert r._did_key_reply(did)["keys"][0] == didkey.document(did)["keys"][0]
+    assert r._did_key_reply(did)["doc"] == didkey.document(did)["doc"]

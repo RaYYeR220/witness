@@ -24,6 +24,7 @@ from rich.table import Table
 from rich.text import Text
 from witness_core import bundle as wbundle
 from witness_core import nesting, rebased
+from witness_core.didkey import with_did_key
 from witness_core.ids import from_hex
 
 EXIT_VALID, EXIT_INVALID, EXIT_PARTIAL, EXIT_CONFIG, EXIT_ERROR = 0, 1, 2, 3, 4
@@ -276,7 +277,9 @@ def verify(
         fetch = rebased.make_fetcher(cfg, rpc_url=rebased_rpc, timeout=TIMEOUT,
                                      allow_http=insecure_rpc)
 
-    ladder = wbundle.verify(doc, cfg, fetch, resolve_did)
+    # A did:key signer is its own key: resolved here, never asked of the resolver (the
+    # anchor service only resolves did:iota), as the indexer does.
+    ladder = wbundle.verify(doc, cfg, fetch, with_did_key(resolve_did))
     if as_json:
         emit_json({"overall": ladder.overall, "steps": [
             {"name": s.name, "ok": s.ok, "detail": s.detail} for s in ladder.steps]})
