@@ -331,12 +331,12 @@ def write_keys(out_dir: str, base_policy: str, *, force: bool = False) -> dict:
 
 
 def live_dids(repo: str) -> set[str]:
-    """Every DID the repository's identity files name (current and retired)."""
+    """Every DID the repository's identity files name (current, retired and test ones)."""
     out: set[str] = set()
     for f in (Path(repo) / "deploy" / "identity").glob("*.json"):
         with contextlib.suppress(OSError, ValueError):
             doc = json.loads(f.read_text(encoding="utf-8"))
-            for i in [*doc.get("identities", []), *doc.get("previous", [])]:
+            for i in [*doc.get("identities", []), *doc.get("previous", []), *doc.get("eval", [])]:
                 if isinstance(i, dict) and isinstance(i.get("did"), str):
                     out.add(i["did"])
     return out

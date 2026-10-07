@@ -531,6 +531,9 @@ def test_live_dids_include_the_trust_manager():
     ids = json.loads((REPO / "deploy" / "identity" / "testnet.json").read_text())
     tm = next(i["did"] for i in ids["identities"] if i["name"] == "trust-manager")
     assert tm in R.live_dids(str(REPO))
+    # ... and the eval's own revoked identity, which is no producer either.
+    revoked = next(i["did"] for i in ids["eval"] if i["name"] == "chaos-revoked")
+    assert revoked in R.live_dids(str(REPO))
 
 
 @respx.mock

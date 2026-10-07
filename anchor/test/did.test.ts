@@ -3,7 +3,17 @@ import os from "node:os";
 import path from "node:path";
 import { describe, expect, it } from "vitest";
 import { NETWORKS } from "../src/config.js";
-import { DidNotFoundError, InvalidDidError, loadIdentityRegistry, methodFragment, resolveDid, resolvedKeys, retireIdentities, type DidRpc } from "../src/did.js";
+import {
+  DidNotFoundError,
+  InvalidDidError,
+  loadIdentityRegistry,
+  methodFragment,
+  resolveDid,
+  resolvedKeys,
+  retireIdentities,
+  revocationOf,
+  type DidRpc,
+} from "../src/did.js";
 
 const PKG = NETWORKS.testnet.packages.identityOriginal;
 const CFG = { didNetwork: "testnet", packages: NETWORKS.testnet.packages };
@@ -241,6 +251,31 @@ describe("resolveDid", () => {
     await expect(resolveDid(fakeRpc([created], { type: "0x2::coin::Coin<0x2::iota::IOTA>" }).rpc, CFG, DID)).rejects.toBeInstanceOf(
       DidNotFoundError,
     );
+  });
+});
+
+describe("revocationOf", () => {
+  const EXPLORER = { explorerUrl: "https://explorer.iota.org", network: "testnet" as const };
+  const sigRemoved: Version = { version: "200", tx: "TxRevokeSig", ts: 2_000, doc: { keyAgreement: [kexMethod()] } };
+
+  it("records the removal of a signing method with its transaction and time", async () => {
+    const r = await resolveDid(fakeRpc([created, sigRemoved]).rpc, CFG, DID);
+    expect(revocationOf(EXPLORER, r, `${DID}#sig-1`)).toEqual({
+      kid: `${DID}#sig-1`,
+      revokedAtMs: 2_000,
+      revokedAt: new Date(2_000).toISOString(),
+      tx: "TxRevokeSig",
+      exact: true,
+      link: "https://explorer.iota.org/txblock/TxRevokeSig?network=testnet",
+    });
+    // The resolver serves the same key with its revocation time.
+    expect(resolvedKeys(r)).toContainEqual({ kid: `${DID}#sig-1`, type: "Ed25519", publicKeyHex: "01".repeat(32), revokedAtMs: 2_000 });
+  });
+
+  it("is null while the method is current or was never there", async () => {
+    const r = await resolveDid(fakeRpc([created]).rpc, CFG, DID);
+    expect(revocationOf(EXPLORER, r, `${DID}#sig-1`)).toBeNull();
+    expect(revocationOf(EXPLORER, r, `${DID}#sig-9`)).toBeNull();
   });
 });
 

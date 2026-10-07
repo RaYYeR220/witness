@@ -544,5 +544,64 @@
       "retiredAt": "2026-10-06T14:30:39.016Z",
       "reason": "replaced by identities controlled by the domain DID"
     }
+  ],
+  "eval": [
+    {
+      "name": "chaos-revoked",
+      "did": "did:iota:testnet:0xe9b8e9c6afd436bffb296ed21f1588c6fc6c23210b3610c89107d5453a0c92f9",
+      "objectId": "0xe9b8e9c6afd436bffb296ed21f1588c6fc6c23210b3610c89107d5453a0c92f9",
+      "controller": {
+        "kind": "identity",
+        "did": "did:iota:testnet:0x6b9a693ebf2ac6fb771a75d25b1284ba75aeb0ae16618eaf5d41d24828a6f7a2",
+        "objectId": "0x6b9a693ebf2ac6fb771a75d25b1284ba75aeb0ae16618eaf5d41d24828a6f7a2"
+      },
+      "keys": [
+        {
+          "kid": "did:iota:testnet:0xe9b8e9c6afd436bffb296ed21f1588c6fc6c23210b3610c89107d5453a0c92f9#sig-1",
+          "type": "Ed25519",
+          "relationships": [
+            "authentication",
+            "assertionMethod"
+          ],
+          "publicKeyHex": "228f6cdfa448a171a6ac61f8746892cf0ef7b93dddf32358694e32c979029a7f",
+          "publicKeyJwk": {
+            "kty": "OKP",
+            "crv": "Ed25519",
+            "x": "Io9s36RIoXGmrGH4dGiSzw73uT3d8yNYaU4yyXkCmn8",
+            "alg": "EdDSA"
+          }
+        },
+        {
+          "kid": "did:iota:testnet:0xe9b8e9c6afd436bffb296ed21f1588c6fc6c23210b3610c89107d5453a0c92f9#kex-1",
+          "type": "X25519",
+          "relationships": [
+            "keyAgreement"
+          ],
+          "publicKeyHex": "eb0c011db07035f045d73f412983261246e24e3161605d291a0eaca7b3425404",
+          "publicKeyJwk": {
+            "kty": "OKP",
+            "crv": "X25519",
+            "x": "6wwBHbBwNfBF1z9BKYMmEkbiTjFhYF0pGg6sp7NCVAQ"
+          }
+        }
+      ],
+      "createdTx": "EPJEX7bUdcpmpRpZc39HufWLwqnSJeo47enKTw1YDj4",
+      "createdAt": "2026-10-07T01:54:20.986Z",
+      "links": {
+        "identity": "https://explorer.iota.org/object/0xe9b8e9c6afd436bffb296ed21f1588c6fc6c23210b3610c89107d5453a0c92f9?network=testnet",
+        "createdTx": "https://explorer.iota.org/txblock/EPJEX7bUdcpmpRpZc39HufWLwqnSJeo47enKTw1YDj4?network=testnet"
+      },
+      "purpose": "fault-injection eval only (A05): its signing key was revoked right after creation; never a writer",
+      "revoked": [
+        {
+          "kid": "did:iota:testnet:0xe9b8e9c6afd436bffb296ed21f1588c6fc6c23210b3610c89107d5453a0c92f9#sig-1",
+          "revokedAtMs": 1791338062377,
+          "revokedAt": "2026-10-07T01:54:22.377Z",
+          "tx": "8NDjqFoSCfDgT3MAVJdh65GTiRMCf7dZjUbPinotaTYb",
+          "exact": true,
+          "link": "https://explorer.iota.org/txblock/8NDjqFoSCfDgT3MAVJdh65GTiRMCf7dZjUbPinotaTYb?network=testnet"
+        }
+      ]
+    }
   ]
 }

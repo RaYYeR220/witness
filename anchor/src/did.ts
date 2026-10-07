@@ -334,6 +334,32 @@ export function publicIdentity(cfg: Pick<AnchorConfig, "explorerUrl" | "network"
   };
 }
 
+/** A verification method a DID removed, as the deploy file records it (public data only). */
+export interface RevokedKeyRecord {
+  kid: string;
+  revokedAtMs: number;
+  revokedAt: string;
+  /** The removing transaction (or the first of the window it happened in when not exact). */
+  tx: string;
+  exact: boolean;
+  link: string;
+}
+
+/** The revocation of `kid` in a resolution, or null while the method is current or never existed. */
+export function revocationOf(cfg: Pick<AnchorConfig, "explorerUrl" | "network">, r: ResolvedDid, kid: string): RevokedKeyRecord | null {
+  if (!r.meta.deactivated && collectMethods(r.doc).has(kid)) return null;
+  const m = r.revokedMethods.find((x) => x.kid === kid);
+  if (!m) return null;
+  return {
+    kid,
+    revokedAtMs: m.revokedAtMs,
+    revokedAt: new Date(m.revokedAtMs).toISOString(),
+    tx: m.tx,
+    exact: m.exact,
+    link: explorerLink(cfg, "txblock", m.tx),
+  };
+}
+
 export function registryPath(secretsDir: string): string {
   return path.join(secretsDir, "identities.json");
 }

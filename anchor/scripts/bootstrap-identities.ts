@@ -10,19 +10,41 @@
 // retired public records under `previous` in the deploy file. Private keys only ever go to
 // ${SECRETS_DIR}/<component>/.
 //
-//   pnpm --filter @witness/anchor bootstrap:identities [--retire-existing]
+// --chaos-revoked also creates `chaos-revoked`, a test identity for the fault-injection eval
+// (class A05): controlled by the domain DID like the components, with its #sig-1 removed
+// right after creation, so anything it signs later is REVOKED_KEY. It writes nothing anywhere;
+// the deploy file lists it under `eval` with the revocation, never among the components.
+//
+//   pnpm --filter @witness/anchor bootstrap:identities [--retire-existing] [--chaos-revoked]
 import path from "node:path";
 import { AnchorWallet, assertChain, createIotaClient, preferIpv4 } from "../src/client.js";
 import { explorerLink, loadConfig } from "../src/config.js";
-import { DidService, publicIdentity, retireIdentities, type PublicIdentity } from "../src/did.js";
+import {
+  DidService,
+  SIG_FRAGMENT,
+  publicIdentity,
+  retireIdentities,
+  revocationOf,
+  type PublicIdentity,
+  type ResolvedDid,
+  type RevokedKeyRecord,
+} from "../src/did.js";
 import { readJsonIfExists, writeJsonAtomic } from "../src/fsutil.js";
 
 export const DOMAIN = "domain";
 export const COMPONENTS = [DOMAIN, "trust-manager", "llo-k8s", "self-orchestrator", "relay", "anchor"];
+export const CHAOS_REVOKED = "chaos-revoked";
+/** Test identities: in the registry like the components, listed apart in the deploy file. */
+const EVAL = [CHAOS_REVOKED];
 
 interface RetiredIdentity extends PublicIdentity {
   retiredAt: string;
   reason: string;
+}
+
+interface EvalIdentity extends PublicIdentity {
+  purpose: string;
+  revoked: RevokedKeyRecord[];
 }
 
 interface DeployFile {
@@ -31,14 +53,18 @@ interface DeployFile {
   domain: string | null;
   identities: PublicIdentity[];
   previous: RetiredIdentity[];
+  eval?: EvalIdentity[];
 }
 
 function iota(nanos: bigint | string): string {
   return (Number(BigInt(nanos)) / 1e9).toFixed(4);
 }
 
+const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
+
 async function main(): Promise<void> {
   const retire = process.argv.includes("--retire-existing");
+  const chaosRevoked = process.argv.includes("--chaos-revoked");
   preferIpv4();
   const cfg = loadConfig();
   const client = createIotaClient(cfg);
@@ -90,14 +116,59 @@ async function main(): Promise<void> {
     report("created", name, created.did, created.createdTx);
   }
 
+  if (chaosRevoked) {
+    let entry = dids.registry().identities[CHAOS_REVOKED];
+    if (entry) report("skip", CHAOS_REVOKED, entry.did);
+    else {
+      entry = await dids.createComponentDid(CHAOS_REVOKED, controller);
+      report("created", CHAOS_REVOKED, entry.did, entry.createdTx);
+    }
+    // The fresh object may not be readable at once; the revocation needs its current document.
+    let resolved: ResolvedDid | null = null;
+    for (let attempt = 0; resolved === null; attempt++) {
+      try {
+        resolved = await dids.resolve(entry.did);
+      } catch (err) {
+        if (attempt >= 10) throw err;
+        await sleep(2000);
+      }
+    }
+    if (revocationOf(cfg, resolved, entry.sigKid)) report("skip", `${CHAOS_REVOKED} #${SIG_FRAGMENT} revoked`, entry.did);
+    else {
+      const revoked = await dids.revokeMethod(entry.did, `#${SIG_FRAGMENT}`);
+      if (revoked.pendingProposal) throw new Error(`revoking ${entry.sigKid} became a proposal that still needs approval`);
+      report("revoked", `${CHAOS_REVOKED} #${SIG_FRAGMENT}`, entry.did, revoked.tx);
+    }
+  }
+
   const registry = dids.registry();
-  const names = [...COMPONENTS, ...Object.keys(registry.identities).filter((n) => !COMPONENTS.includes(n)).sort()];
+  const names = [...COMPONENTS, ...Object.keys(registry.identities).filter((n) => !COMPONENTS.includes(n) && !EVAL.includes(n)).sort()];
+  const evalIdentities: EvalIdentity[] = [];
+  for (const name of EVAL) {
+    const entry = registry.identities[name];
+    if (!entry) continue;
+    // The transaction index can lag the object for a few seconds after the update.
+    let record: RevokedKeyRecord | null = null;
+    for (let attempt = 0; record === null; attempt++) {
+      record = revocationOf(cfg, await dids.resolve(entry.did), entry.sigKid);
+      if (record === null) {
+        if (attempt >= 15) throw new Error(`${entry.sigKid} is not revoked on ${cfg.network}; re-run with --chaos-revoked`);
+        await sleep(2000);
+      }
+    }
+    evalIdentities.push({
+      ...publicIdentity(cfg, entry),
+      purpose: "fault-injection eval only (A05): its signing key was revoked right after creation; never a writer",
+      revoked: [record],
+    });
+  }
   const file: DeployFile = {
     network: cfg.network,
     chainId: cfg.chainId,
     domain: domain.did,
     identities: names.flatMap((n) => (registry.identities[n] ? [publicIdentity(cfg, registry.identities[n])] : [])),
     previous,
+    ...(evalIdentities.length > 0 ? { eval: evalIdentities } : {}),
   };
   writeJsonAtomic(out, file);
 
