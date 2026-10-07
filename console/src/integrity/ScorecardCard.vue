@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { computed } from "vue";
 import type { Scorecard, ScorecardClass } from "@/api/client";
 
 /**
@@ -18,6 +19,25 @@ function separately(c: ScorecardClass): ScorecardClass | null {
   return null;
 }
 
+/**
+ * This run plus the classes it left to a separate run published with it: the total a reader
+ * quotes. Added up here from the published files, as written; null without a separate run.
+ */
+const combined = computed(() => {
+  const c = props.card;
+  if (!c || !c.separateRuns?.length) return null;
+  let detected = c.detected;
+  let attacks = c.attacks;
+  for (const cls of c.classes) {
+    const x = separately(cls);
+    if (x) {
+      detected += x.detected;
+      attacks += x.trials;
+    }
+  }
+  return attacks === c.attacks ? null : { detected, attacks };
+});
+
 const pct = (r: number) => `${Math.round(r * 1000) / 10}%`;
 const secs = (ms: number | null) => (ms === null ? "–" : `${(ms / 1000).toFixed(1)} s`);
 </script>
@@ -27,7 +47,8 @@ const secs = (ms: number | null) => (ms === null ? "–" : `${(ms / 1000).toFixe
     <h2 id="sc-h" class="sc-h">Detection under attack</h2>
     <p v-if="loading" class="x-quiet">Looking for the evaluation scorecard…</p>
     <template v-else-if="card">
-      <p class="headline">{{ card.headline }}</p>
+      <p v-if="combined" class="headline">{{ combined.detected }}/{{ combined.attacks }} attacks detected across both runs</p>
+      <p :class="combined ? 'sep x-sec-note' : 'headline'">{{ combined ? `This run: ${card.headline}.` : card.headline }}</p>
       <p class="src x-sec-note">{{ source ? source[0]!.toUpperCase() + source.slice(1) : "Published by the operator" }}; shown as written, not checked in your browser.</p>
       <p v-for="(run, i) in card.separateRuns ?? []" :key="i" class="sep x-sec-note">Published with it, a separate run: {{ run.headline }}.</p>
       <dl class="nums">

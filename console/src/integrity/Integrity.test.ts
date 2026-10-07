@@ -179,6 +179,32 @@ describe("Integrity screen", () => {
     w.unmount();
   });
 
+  it("adds a class a separate run scored to the total, and keeps this run's own headline beside it", async () => {
+    const row = (id: string, trials: number, detected: number) => ({
+      id, name: id, expected: id, trials, detected, rate: trials ? detected / trials : 0, latency_p50_ms: null, latency_p95_ms: null,
+    });
+    const card: Scorecard = {
+      schema: "witness-chaos/scorecard/v1",
+      headline: "detected 18/20 attacks (18/40 planned), 0/512 false positives (20 planned trials not run: A19)",
+      detected: 18,
+      attacks: 20,
+      detection_rate: 0.9,
+      latency_p50_ms: null,
+      latency_p95_ms: null,
+      unexpected_alerts: 0,
+      classes: [row("A01", 20, 18), row("A19", 0, 0)],
+      traps: null,
+      controls: null,
+      separateRuns: [{ headline: "detected 20/20 attacks", classes: [row("A19", 20, 20)] }],
+    } as Scorecard;
+    const { d } = data(card);
+    const { w } = await mountScreen(IntegrityView, { path: "/integrity", data: d });
+    await until(() => w.find(".headline").exists());
+    expect(w.find(".headline").text()).toBe("38/40 attacks detected across both runs");
+    expect(w.text()).toContain(`This run: ${card.headline}.`);
+    w.unmount();
+  });
+
   it("filters alerts by severity and rule through the URL and shows evidence only as text", async () => {
     const { d, alerts } = data();
     const { w, router } = await mountScreen(IntegrityView, { path: "/integrity", data: d });
