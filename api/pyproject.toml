@@ -23,3 +23,8 @@ build-backend = "hatchling.build"
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/witness_api"]
+
+# The report page template lives next to the sources (api/templates/); ship it inside the
+# wheel too, where reports.py also looks for it.
+[tool.hatch.build.targets.wheel.force-include]
+"templates" = "witness_api/templates"

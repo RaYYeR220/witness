@@ -1,0 +1,9 @@
+# Context is the repository root; send only what the patched Trust Manager needs.
+*
+!core/pyproject.toml
+!core/src
+!sdk/pyproject.toml
+!sdk/src
+!sdk/patches
+**/__pycache__
+**/*.pyc

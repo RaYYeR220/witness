@@ -1,0 +1,17 @@
+# Context is the repository root; send only what the anchor image needs.
+*
+!package.json
+!pnpm-lock.yaml
+!pnpm-workspace.yaml
+!packages/verify/package.json
+!packages/verify/tsconfig*.json
+!packages/verify/src
+!anchor
+!console/package.json
+!deploy/identity
+**/node_modules
+**/dist
+anchor/.env
+anchor/.env.*
+anchor/secrets
+anchor/data

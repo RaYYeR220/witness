@@ -1,0 +1,14 @@
+# Context is the repository root; send only what the Python images need.
+*
+!pyproject.toml
+!uv.lock
+!.python-version
+!*/pyproject.toml
+!core/src
+!indexer/src
+!api/src
+!api/templates
+!relay/src
+!deploy/docker/indexer_health.py
+**/__pycache__
+**/*.pyc
