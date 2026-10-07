@@ -1,0 +1,81 @@
+{{- $c := dict "ctx" . "component" "indexer" "values" .Values.indexer }}
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "witness.componentName" $c }}
+  namespace: {{ .Release.Namespace | quote }}
+  labels:
+    {{- include "witness.labels" $c | nindent 4 }}
+spec:
+  replicas: {{ .Values.indexer.replicaCount }}
+  # Never two indexers at once: one owns the cursor and the validation queue.
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      {{- include "witness.selectorLabels" $c | nindent 6 }}
+  template:
+    metadata:
+      labels:
+        {{- include "witness.labels" $c | nindent 8 }}
+      annotations:
+        checksum/policy: {{ .Values.policy.json | sha256sum }}
+    spec:
+      {{- with include "witness.podScheduling" $c | trim }}{{ . | nindent 6 }}{{- end }}
+      automountServiceAccountToken: false
+      # Lets the milestone being written finish.
+      terminationGracePeriodSeconds: 60
+      securityContext:
+        {{- toYaml .Values.indexer.podSecurityContext | nindent 8 }}
+      containers:
+        - name: indexer
+          image: {{ include "witness.image" $c | quote }}
+          imagePullPolicy: {{ .Values.indexer.image.pullPolicy }}
+          securityContext:
+            {{- toYaml .Values.indexer.securityContext | nindent 12 }}
+          args:
+            - --source=inx
+            - --inx={{ .Values.iota.hornet.inxAddress }}
+            - --rest={{ .Values.iota.hornet.restUrl }}
+            - --schema=witness
+            - --policy=/etc/witness/policy.json
+            - --resolver=http://{{ include "witness.componentName" (dict "ctx" . "component" "anchor") }}:{{ .Values.anchor.service.port }}
+            - --orion={{ .Values.orion.url }}
+            {{- if .Values.indexer.validate }}
+            - --validate
+            {{- end }}
+            {{- with .Values.indexer.extraArgs }}
+            {{- toYaml . | nindent 12 }}
+            {{- end }}
+          envFrom:
+            - secretRef:
+                name: {{ required "indexer.secrets.env is required" .Values.indexer.secrets.env }}
+          env:
+            {{- include "witness.databaseEnv" (dict "ctx" . "name" "WITNESS_DB") | nindent 12 }}
+            - name: WITNESS_REBASED_NETWORK
+              value: {{ .Values.rebased.network | quote }}
+          # No HTTP port: healthy while the database answers and the newest milestone is recent.
+          readinessProbe:
+            exec:
+              command: ["python", "/usr/local/lib/witness/indexer_health.py"]
+            periodSeconds: 30
+            timeoutSeconds: 10
+          livenessProbe:
+            exec:
+              command: ["python", "/usr/local/lib/witness/indexer_health.py"]
+            initialDelaySeconds: 300
+            periodSeconds: 60
+            timeoutSeconds: 10
+            failureThreshold: 5
+          volumeMounts:
+            - name: policy
+              mountPath: /etc/witness
+              readOnly: true
+            - name: tmp
+              mountPath: /tmp
+          resources:
+            {{- toYaml .Values.indexer.resources | nindent 12 }}
+      volumes:
+        {{- include "witness.policyVolume" . | nindent 8 }}
+        - name: tmp
+          emptyDir: {medium: Memory, sizeLimit: 64Mi}

@@ -1,0 +1,24 @@
+apiVersion: v2
+name: witness
+description: |
+  Witness, an IOTA Advanced Explorer for Eclipse aeriOS: verifiable observability of the trust
+  messages aeriOS writes to its IOTA Tangle. Deploys the explorer next to a domain's IOTA stack
+  (HORNET with INX, Orion-LD, PostgreSQL, an MQTT broker): the witness relay (the Messages API
+  with producer signatures and a writer policy), the indexer, the explorer REST API, the anchor
+  service (DIDs and checkpoints on IOTA Rebased), the console and the producer-signing Trust Manager.
+type: application
+version: 0.1.0
+appVersion: "0.1.0"
+annotations:
+  artifacthub.io/license: Apache-2.0
+home: https://github.com/RaYYeR220/witness
+icon: https://raw.githubusercontent.com/RaYYeR220/witness/main/console/public/favicon.svg
+sources:
+  - https://github.com/RaYYeR220/witness
+keywords:
+  - aeriOS
+  - IOTA
+  - iota-tangle
+  - trustworthiness
+  - trust-score
+  - explorer

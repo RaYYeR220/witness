@@ -1,0 +1,19 @@
+{{- $c := dict "ctx" . "component" "anchor" "values" .Values.anchor }}
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "witness.componentName" $c }}
+  namespace: {{ .Release.Namespace | quote }}
+  labels:
+    {{- include "witness.labels" $c | nindent 4 }}
+spec:
+  type: {{ .Values.anchor.service.type }}
+  # The resolver keeps answering while the loop is degraded (readiness fails then).
+  publishNotReadyAddresses: true
+  ports:
+    - name: http
+      port: {{ .Values.anchor.service.port }}
+      targetPort: http
+      protocol: TCP
+  selector:
+    {{- include "witness.selectorLabels" $c | nindent 4 }}

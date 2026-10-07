@@ -1,0 +1,131 @@
+{{- $c := dict "ctx" . "component" "anchor" "values" .Values.anchor }}
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "witness.componentName" $c }}
+  namespace: {{ .Release.Namespace | quote }}
+  labels:
+    {{- include "witness.labels" $c | nindent 4 }}
+spec:
+  replicas: {{ .Values.anchor.replicaCount }}
+  # One anchoring loop per trail and wallet; its state volume is ReadWriteOnce.
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      {{- include "witness.selectorLabels" $c | nindent 6 }}
+  template:
+    metadata:
+      labels:
+        {{- include "witness.labels" $c | nindent 8 }}
+      annotations:
+        checksum/policy: {{ .Values.policy.json | sha256sum }}
+    spec:
+      {{- with include "witness.podScheduling" $c | trim }}{{ . | nindent 6 }}{{- end }}
+      automountServiceAccountToken: false
+      securityContext:
+        {{- toYaml .Values.anchor.podSecurityContext | nindent 8 }}
+      containers:
+        - name: anchor
+          image: {{ include "witness.image" $c | quote }}
+          imagePullPolicy: {{ .Values.anchor.image.pullPolicy }}
+          securityContext:
+            {{- toYaml .Values.anchor.securityContext | nindent 12 }}
+          envFrom:
+            - secretRef:
+                name: {{ required "anchor.secrets.env is required" .Values.anchor.secrets.env }}
+          env:
+            - name: IOTA_NETWORK
+              value: {{ .Values.rebased.network | quote }}
+            - name: SECRETS_DIR
+              value: /var/lib/witness-anchor/secrets
+            - name: ANCHOR_STATE_PATH
+              value: /var/lib/witness-anchor/anchor-state.json
+            - name: ANCHOR_TRAIL_ID
+              value: {{ .Values.rebased.trailId | quote }}
+            {{- if .Values.anchor.loop }}
+            - name: ANCHOR_LOOP
+              value: "on"
+            - name: ANCHOR_KEYSTORE_PATH
+              value: /run/witness/wallet/iota.keystore
+            - name: ANCHOR_ADDRESS
+              value: {{ required "anchor.address is required when anchor.loop is on" .Values.anchor.address | quote }}
+            {{- else }}
+            - name: ANCHOR_LOOP
+              value: "off"
+            {{- end }}
+            - name: ANCHOR_POLICY_PATH
+              value: /etc/witness/policy.json
+            - name: ANCHOR_API_URL
+              value: {{ printf "http://%s:%v" (include "witness.componentName" (dict "ctx" . "component" "api")) .Values.api.service.port | quote }}
+            - name: ANCHOR_HORNET_URL
+              value: {{ .Values.iota.hornet.restUrl | quote }}
+            - name: ANCHOR_COORDINATOR_KEYS
+              value: {{ join "," .Values.iota.coordinatorKeys | quote }}
+            - name: ANCHOR_COORDINATOR_THRESHOLD
+              value: {{ .Values.iota.coordinatorThreshold | quote }}
+            - name: ANCHOR_NETWORK_NAME
+              value: {{ .Values.iota.network | quote }}
+            - name: ANCHOR_RELAY_URL
+              value: {{ printf "http://%s:%v" (include "witness.componentName" (dict "ctx" . "component" "relay")) .Values.relay.service.port | quote }}
+            - name: ANCHOR_RELAY_NODE
+              value: {{ .Values.iota.hornet.nodeName | quote }}
+            - name: ANCHOR_EVERY
+              value: {{ .Values.anchor.every | quote }}
+            - name: ANCHOR_START_INDEX
+              value: {{ .Values.anchor.startIndex | quote }}
+            - name: ANCHOR_IDENTITY
+              value: anchor
+          ports:
+            - name: http
+              containerPort: 7300
+              protocol: TCP
+          # /healthz answers 503 while the anchoring loop is degraded: the pod leaves the
+          # service's endpoints, a restart would not fix the node or the chain, so liveness
+          # only checks the port.
+          readinessProbe:
+            httpGet: {path: /healthz, port: http}
+            periodSeconds: 30
+          livenessProbe:
+            tcpSocket: {port: http}
+            initialDelaySeconds: 30
+            periodSeconds: 30
+          volumeMounts:
+            - name: policy
+              mountPath: /etc/witness
+              readOnly: true
+            - name: state
+              mountPath: /var/lib/witness-anchor
+            - name: component-key
+              mountPath: /var/lib/witness-anchor/secrets/anchor
+              readOnly: true
+            {{- if .Values.anchor.loop }}
+            - name: wallet
+              mountPath: /run/witness/wallet
+              readOnly: true
+            {{- end }}
+            - name: tmp
+              mountPath: /tmp
+          resources:
+            {{- toYaml .Values.anchor.resources | nindent 12 }}
+      volumes:
+        {{- include "witness.policyVolume" . | nindent 8 }}
+        - name: state
+          persistentVolumeClaim:
+            claimName: {{ include "witness.componentName" $c }}
+        - name: component-key
+          secret:
+            secretName: {{ required "anchor.secrets.componentKey is required" .Values.anchor.secrets.componentKey }}
+            defaultMode: 0440
+            items:
+              - {key: sig-1.jwk.json, path: sig-1.jwk.json}
+        {{- if .Values.anchor.loop }}
+        - name: wallet
+          secret:
+            secretName: {{ required "anchor.secrets.keystore is required" .Values.anchor.secrets.keystore }}
+            defaultMode: 0440
+            items:
+              - {key: iota.keystore, path: iota.keystore}
+        {{- end }}
+        - name: tmp
+          emptyDir: {medium: Memory, sizeLimit: 64Mi}

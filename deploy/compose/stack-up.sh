@@ -1,15 +1,29 @@
 #!/usr/bin/env bash
 # Brings up the local aeriOS IOTA stack (Git Bash / Linux / macOS).
-#   ./stack-up.sh           start (bootstraps the private Tangle on first run)
-#   ./stack-up.sh --reset   wipe chain data and bootstrap a fresh Tangle
+#   ./stack-up.sh             start (bootstraps the private Tangle on first run)
+#   ./stack-up.sh --reset     wipe chain data and bootstrap a fresh Tangle
+#   ./stack-up.sh --witness   also build and start the Witness overlay
+#                             (docker-compose.witness.yml; replaces the stock Trust Manager)
 set -euo pipefail
 
 here="$(cd "$(dirname "$0")" && { pwd -W 2>/dev/null || pwd; })"
 root="$(cd "$here/../.." && { pwd -W 2>/dev/null || pwd; })"
-vendor="$root/vendor"
+# WITNESS_VENDOR_DIR (environment, else deploy/compose/.env) shares one set of upstream
+# checkouts, and so one chain, between worktrees.
+if [ -z "${WITNESS_VENDOR_DIR:-}" ] && [ -f "$here/.env" ]; then
+  WITNESS_VENDOR_DIR="$(sed -n 's/^WITNESS_VENDOR_DIR=//p' "$here/.env" | tail -n 1 | tr -d '\r')"
+fi
+vendor="${WITNESS_VENDOR_DIR:-$root/vendor}"
 tangle="$vendor/iota-tangle/docker/main"
 reset=0
-[ "${1:-}" = "--reset" ] && reset=1
+witness=0
+for arg in "$@"; do
+  case "$arg" in
+    --reset) reset=1 ;;
+    --witness) witness=1 ;;
+    *) echo "usage: $0 [--reset] [--witness]" >&2; exit 2 ;;
+  esac
+done
 
 # MSYS rewrites container paths in docker args under Git Bash; we only use compose files, but be safe.
 export MSYS_NO_PATHCONV=1
@@ -55,8 +69,17 @@ docker compose -f "$here/messages-api.yml" up -d
 echo "== inx-poi"
 docker compose -f "$here/inx-poi.yml" up -d
 
-echo "== Orion-LD, Mongo, Trust Manager, Postgres, Mosquitto"
-docker compose -f "$here/docker-compose.aerios.yml" up -d
+echo "== secrets (broker passwords, tokens, relay key; existing ones are kept)"
+"$here/setup-secrets.sh"
+
+if [ "$witness" = 1 ]; then
+  echo "== Orion-LD, Mongo, Postgres, Mosquitto (the Witness overlay brings its own Trust Manager)"
+  docker compose -f "$here/docker-compose.aerios.yml" stop trustmanager
+  docker compose -f "$here/docker-compose.aerios.yml" up -d mongo-db orion-ld init-orion postgres mosquitto
+else
+  echo "== Orion-LD, Mongo, Trust Manager, Postgres, Mosquitto"
+  docker compose -f "$here/docker-compose.aerios.yml" up -d
+fi
 
 echo "== waiting for HORNET REST"
 for _ in $(seq 1 60); do
@@ -64,3 +87,13 @@ for _ in $(seq 1 60); do
   sleep 2
 done
 curl -s http://localhost:14265/api/core/v2/info | head -c 400; echo
+
+if [ "$witness" = 1 ]; then
+  echo "== Witness overlay (the patched Trust Manager replaces the stock one)"
+  # One image at a time: parallel builds need more memory than small machines have.
+  for svc in witness-relay witness-api witness-indexer witness-anchor witness-console trust-manager-witness; do
+    docker compose -f "$here/docker-compose.witness.yml" build "$svc"
+  done
+  docker compose -f "$here/docker-compose.witness.yml" up -d --wait --wait-timeout 300
+  docker compose -f "$here/docker-compose.witness.yml" ps
+fi

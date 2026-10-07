@@ -1,0 +1,66 @@
+{
+  "version": 1,
+  "tags": {
+    "trust.score": {
+      "allowed": [
+        "did:iota:testnet:0x15eb8c4d90fa4fff1d49f3ae8b1676a61e09c883303acd383cbfaacb538db9ba"
+      ],
+      "require_signature": true,
+      "legacy_grace": false
+    },
+    "LLO-K8s": {
+      "allowed": [
+        "did:iota:testnet:0x5a50c4a62cd8281d82f2f9526a6593248bd404657cf01130221839154698e715",
+        "did:iota:testnet:0xe6cf1bf1e06f82d7956585085306fc23daee082cc75120459f7d39bb152f0459"
+      ],
+      "require_signature": false,
+      "legacy_grace": true
+    },
+    "LLO-Docker": {
+      "allowed": [
+        "did:iota:testnet:0x5a50c4a62cd8281d82f2f9526a6593248bd404657cf01130221839154698e715",
+        "did:iota:testnet:0xe6cf1bf1e06f82d7956585085306fc23daee082cc75120459f7d39bb152f0459"
+      ],
+      "require_signature": false,
+      "legacy_grace": true
+    },
+    "self-orchestrator": {
+      "allowed": [
+        "did:iota:testnet:0x7cb4f7bd777e7c90e26640bdb47efa9f9fe95f1dce64e9bb0edc7c32fd9d9472",
+        "did:iota:testnet:0xe6cf1bf1e06f82d7956585085306fc23daee082cc75120459f7d39bb152f0459"
+      ],
+      "require_signature": false,
+      "legacy_grace": true
+    },
+    "self-security": {
+      "allowed": [
+        "did:iota:testnet:0xe6cf1bf1e06f82d7956585085306fc23daee082cc75120459f7d39bb152f0459"
+      ],
+      "require_signature": false,
+      "legacy_grace": true
+    },
+    "audit.report": {
+      "allowed": [
+        "did:iota:testnet:0x6b9a693ebf2ac6fb771a75d25b1284ba75aeb0ae16618eaf5d41d24828a6f7a2",
+        "did:iota:testnet:0x15eb8c4d90fa4fff1d49f3ae8b1676a61e09c883303acd383cbfaacb538db9ba",
+        "did:iota:testnet:0xe6cf1bf1e06f82d7956585085306fc23daee082cc75120459f7d39bb152f0459"
+      ],
+      "require_signature": false,
+      "legacy_grace": true
+    },
+    "witness.anchor": {
+      "allowed": [
+        "did:iota:testnet:0x6b5cef6e575705bd1e3486fee9929d695fbc0a06650b8a2ef4d252f69ce12d59"
+      ],
+      "require_signature": false,
+      "legacy_grace": true
+    }
+  },
+  "default": {
+    "allowed": [
+      "*"
+    ],
+    "require_signature": false,
+    "legacy_grace": true
+  }
+}

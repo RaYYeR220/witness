@@ -1,0 +1,57 @@
+{{- $c := dict "ctx" . "component" "console" "values" .Values.console }}
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "witness.componentName" $c }}
+  namespace: {{ .Release.Namespace | quote }}
+  labels:
+    {{- include "witness.labels" $c | nindent 4 }}
+spec:
+  replicas: {{ .Values.console.replicaCount }}
+  selector:
+    matchLabels:
+      {{- include "witness.selectorLabels" $c | nindent 6 }}
+  template:
+    metadata:
+      labels:
+        {{- include "witness.labels" $c | nindent 8 }}
+    spec:
+      {{- with include "witness.podScheduling" $c | trim }}{{ . | nindent 6 }}{{- end }}
+      automountServiceAccountToken: false
+      securityContext:
+        {{- toYaml .Values.console.podSecurityContext | nindent 8 }}
+      containers:
+        - name: console
+          image: {{ include "witness.image" $c | quote }}
+          imagePullPolicy: {{ .Values.console.image.pullPolicy }}
+          securityContext:
+            {{- toYaml .Values.console.securityContext | nindent 12 }}
+          env:
+            # nginx resolves the API per request, by its fully qualified name.
+            - name: WITNESS_API_UPSTREAM
+              value: {{ printf "%s:%v" (include "witness.serviceHost" (dict "ctx" . "component" "api")) .Values.api.service.port | quote }}
+            - name: WITNESS_REBASED_RPC_ORIGIN
+              value: {{ .Values.rebased.rpcOrigin | quote }}
+          ports:
+            - name: http
+              containerPort: 8080
+              protocol: TCP
+          readinessProbe:
+            httpGet: {path: /healthz, port: http}
+            periodSeconds: 10
+          livenessProbe:
+            httpGet: {path: /healthz, port: http}
+            periodSeconds: 30
+          volumeMounts:
+            # The image renders its nginx configuration here at start.
+            - name: nginx-conf
+              mountPath: /etc/nginx/conf.d
+            - name: tmp
+              mountPath: /tmp
+          resources:
+            {{- toYaml .Values.console.resources | nindent 12 }}
+      volumes:
+        - name: nginx-conf
+          emptyDir: {medium: Memory, sizeLimit: 1Mi}
+        - name: tmp
+          emptyDir: {medium: Memory, sizeLimit: 16Mi}

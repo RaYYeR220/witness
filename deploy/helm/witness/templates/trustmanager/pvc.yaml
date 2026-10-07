@@ -1,0 +1,22 @@
+{{- if .Values.trustManager.enabled }}
+{{- $c := dict "ctx" . "component" "trustmanager" "values" .Values.trustManager }}
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: {{ include "witness.componentName" $c }}
+  namespace: {{ .Release.Namespace | quote }}
+  labels:
+    {{- include "witness.labels" $c | nindent 4 }}
+  annotations:
+    # The signer's sequence and hash chain: a fresh one would restart the issuer's chain.
+    helm.sh/resource-policy: keep
+spec:
+  accessModes:
+    {{- toYaml .Values.trustManager.persistence.accessModes | nindent 4 }}
+  {{- with .Values.trustManager.persistence.storageClassName }}
+  storageClassName: {{ . | quote }}
+  {{- end }}
+  resources:
+    requests:
+      storage: {{ .Values.trustManager.persistence.size }}
+{{- end }}

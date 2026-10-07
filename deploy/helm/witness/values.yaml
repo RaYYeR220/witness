@@ -1,0 +1,319 @@
+# Default values for the Witness chart.
+#
+# No secret goes into values. Credentials and keys come from Secrets that exist before the
+# release (names below); deploy/compose/setup-secrets.sh produces the same material for
+# compose, and docs/operations.md shows how to turn it into Secrets.
+
+# String to partially override witness.fullname (keeps the release name).
+nameOverride: ""
+# String to fully override witness.fullname.
+fullnameOverride: ""
+# Cluster DNS domain; nginx (console) resolves the API by its fully qualified name.
+clusterDomain: cluster.local
+# Deploy all the components on specific K8s node(s).
+chartNodeSelector: {}
+
+# The domain's private IOTA Tangle (aeriOS iota-tangle chart). Witness reaches HORNET only here.
+iota:
+  hornet:
+    # HORNET REST API (blocks, metadata, milestones).
+    restUrl: http://iota-hornet:14265
+    # HORNET INX gRPC: the indexer streams milestone cones, the API mounts itself on the node.
+    inxAddress: iota-hornet:9029
+    # Node name producers pass to the relay as ?node=.
+    nodeName: iota-hornet
+    # inx-dashboard, for the posture scan (empty: not scanned).
+    dashboardUrl: ""
+  # Network label and coordinator public keys of the private Tangle (protocol config).
+  network: private_tangle1
+  coordinatorKeys:
+    - "0xed3c3f1a319ff4e909cf2771d79fece0ac9bd9fd2ee49ea6c0885c9cb3b1248c"
+    - "0xf6752f5f46a53364e2ee9c4d662d762a81efd51010282a75cd6bd03f28ef349c"
+  coordinatorThreshold: 2
+
+# IOTA Rebased: component DIDs and the Audit Trail holding the checkpoints.
+rebased:
+  network: testnet
+  # Audit Trail id (empty: the anchor creates one on first start; set it afterwards).
+  trailId: ""
+  # Origin the console's in-browser verifier may contact (CSP connect-src).
+  rpcOrigin: https://api.testnet.iota.cafe
+
+# Orion-LD context broker of the domain (trust scores, Infrastructure Elements).
+orion:
+  url: http://orion-ld-broker:1026
+
+# PostgreSQL holding the explorer's database (schema witness) and the relay's (schema relay).
+database:
+  # Existing Secret with the DSN, e.g. postgresql://user:password@host:5432/db.
+  existingSecret: witness-db
+  key: dsn
+
+# Writer policy (which DIDs may write which tags), shared by relay, indexer, API and anchor.
+# Either give the JSON here, or leave it empty and create the ConfigMap yourself:
+#   kubectl create configmap witness-policy --from-file=policy.json=deploy/policy.json
+policy:
+  json: ""
+  existingConfigMap: witness-policy
+  key: policy.json
+
+# Defaults every component starts from.
+podSecurityContext: &podSecurityContext
+  runAsNonRoot: true
+  seccompProfile:
+    type: RuntimeDefault
+securityContext: &securityContext
+  allowPrivilegeEscalation: false
+  readOnlyRootFilesystem: true
+  capabilities:
+    drop: ["ALL"]
+
+relay:
+  tier: external
+  isMainInterface: "yes"
+  replicaCount: 1
+  image:
+    repository: witness-relay
+    # Overrides the image tag whose default is the chart appVersion.
+    tag: ""
+    pullPolicy: IfNotPresent
+  imagePullSecrets: []
+  service:
+    type: ClusterIP
+    port: 5555
+  # Tags the relay seals (encrypts to the domain key), comma-separated.
+  encryptTags: ""
+  secrets:
+    # Env Secret: RELAY_DID, RELAY_KID, RELAY_MQTT_URL (with the relay's broker login),
+    # RELAY_EXPLORER_TOKEN (secrets/compose/relay.env).
+    env: witness-relay-env
+    # Files: sig-1.pem, recipients.json, search.key (secrets/relay/).
+    files: witness-relay-keys
+  podSecurityContext:
+    <<: *podSecurityContext
+    runAsUser: 10001
+    runAsGroup: 10001
+    fsGroup: 10001
+  securityContext: *securityContext
+  resources:
+    requests: {cpu: 50m, memory: 128Mi}
+    limits: {memory: 384Mi}
+  nodeSelector: {}
+  tolerations: []
+  affinity: {}
+
+api:
+  tier: external
+  isMainInterface: "yes"
+  # One instance writes signed audit reports (their sequence numbers come from one table).
+  replicaCount: 1
+  image:
+    repository: witness-api
+    tag: ""
+    pullPolicy: IfNotPresent
+  imagePullSecrets: []
+  service:
+    type: ClusterIP
+    port: 7200
+  # Mount the API on the node as /api/<route>/ (INX RegisterAPIRoute); empty route: off.
+  nodeRoute: witness/v1
+  # Host HORNET proxies to (default: this chart's API service).
+  routeHost: ""
+  # Optional bearer token for POST /messages/{id}/verify, from secrets.env (WITNESS_VERIFY_TOKEN).
+  secrets:
+    # Env Secret: WITNESS_INGEST_TOKEN, WITNESS_REPORT_TOKEN, WITNESS_POSTURE_TOKEN
+    # (secrets/compose/api.env).
+    env: witness-api-env
+    # Signing key of audit reports: a Secret with sig-1.jwk.json (secrets/domain/). Empty: off.
+    reportSignerKey: witness-domain-key
+  podSecurityContext:
+    <<: *podSecurityContext
+    runAsUser: 10001
+    runAsGroup: 10001
+    fsGroup: 10001
+  securityContext: *securityContext
+  resources:
+    requests: {cpu: 50m, memory: 160Mi}
+    limits: {memory: 512Mi}
+  nodeSelector: {}
+  tolerations: []
+  affinity: {}
+
+indexer:
+  tier: internal
+  isMainInterface: "no"
+  # Exactly one: the indexer owns validation (--validate) and writes the cursor.
+  replicaCount: 1
+  image:
+    repository: witness-indexer
+    tag: ""
+    pullPolicy: IfNotPresent
+  imagePullSecrets: []
+  # Validate every submitted block against the node (the API does not).
+  validate: true
+  extraArgs: []
+  secrets:
+    # Env Secret: WITNESS_MQTT (submissions and incident alerts, with the indexer's broker
+    # login), WITNESS_ANCHOR_DID (secrets/compose/indexer.env).
+    env: witness-indexer-env
+  podSecurityContext:
+    <<: *podSecurityContext
+    runAsUser: 10001
+    runAsGroup: 10001
+    fsGroup: 10001
+  securityContext: *securityContext
+  resources:
+    requests: {cpu: 100m, memory: 192Mi}
+    limits: {memory: 768Mi}
+  nodeSelector: {}
+  tolerations: []
+  affinity: {}
+
+anchor:
+  tier: internal
+  isMainInterface: "no"
+  # Exactly one loop per trail and wallet.
+  replicaCount: 1
+  image:
+    repository: witness-anchor
+    tag: ""
+    pullPolicy: IfNotPresent
+  imagePullSecrets: []
+  service:
+    type: ClusterIP
+    port: 7300
+  # The anchoring loop writes to IOTA Rebased (gas). Turn it on with `address` and the wallet
+  # Secret below; off, the service still resolves DIDs and serves checkpoint reads.
+  loop: false
+  # Keystore entry (0x address or alias) that pays gas and holds the trail's writer capability.
+  address: ""
+  # Milestones per checkpoint window (one trail record each): 720 is about an hour.
+  every: 720
+  startIndex: 1
+  secrets:
+    # Env Secret: ANCHOR_ADMIN_TOKEN (secrets/compose/anchor.env).
+    env: witness-anchor-env
+    # The anchor component's signing key: a Secret with sig-1.jwk.json (secrets/anchor/).
+    componentKey: witness-anchor-key
+    # The IOTA CLI keystore: a Secret with iota.keystore (never the recovery phrase).
+    keystore: witness-anchor-wallet
+  # Trail record and loop state.
+  persistence:
+    accessModes: ["ReadWriteOnce"]
+    size: 100Mi
+    storageClassName: ""
+  podSecurityContext:
+    <<: *podSecurityContext
+    runAsUser: 1000
+    runAsGroup: 1000
+    fsGroup: 1000
+  securityContext: *securityContext
+  resources:
+    requests: {cpu: 50m, memory: 192Mi}
+    limits: {memory: 768Mi}
+  nodeSelector: {}
+  tolerations: []
+  affinity: {}
+
+console:
+  tier: external
+  isMainInterface: "yes"
+  replicaCount: 1
+  image:
+    # Built with --build-arg ANCHOR_TRAIL_ID=<trail> so the in-browser verifier pins it.
+    repository: witness-console
+    tag: ""
+    pullPolicy: IfNotPresent
+  imagePullSecrets: []
+  service:
+    type: ClusterIP
+    port: 8080
+  podSecurityContext:
+    <<: *podSecurityContext
+    runAsUser: 101
+    runAsGroup: 101
+    fsGroup: 101
+  securityContext: *securityContext
+  resources:
+    requests: {cpu: 10m, memory: 32Mi}
+    limits: {memory: 128Mi}
+  nodeSelector: {}
+  tolerations: []
+  affinity: {}
+
+# The aeriOS Trust Manager with producer-signed trust.score uploads. Disable it when the
+# domain keeps the stock Trust Manager; both would score the same Infrastructure Elements.
+trustManager:
+  enabled: true
+  tier: internal
+  isMainInterface: "no"
+  replicaCount: 1
+  image:
+    repository: trust-manager-witness
+    tag: ""
+    pullPolicy: IfNotPresent
+  imagePullSecrets: []
+  service:
+    type: ClusterIP
+    port: 3000
+  secrets:
+    # The trust-manager component's signing key: a Secret with sig-1.jwk.json (secrets/trust-manager/).
+    componentKey: witness-trust-manager-key
+  # Signer state (sequence and chain), the salts log and the score store.
+  persistence:
+    accessModes: ["ReadWriteOnce"]
+    size: 100Mi
+    storageClassName: ""
+  # manager.ini; rendered with tpl, so it can name this chart's relay service.
+  configManagerIni: |
+    [General]
+    port = 3000
+    storageName = /data/scores
+    storageReset = no
+
+    [Connections]
+    domain = MyDomain
+    ngsild_cb_url = orion-ld-broker:1026
+    iota_api_url = {{ include "witness.componentName" (dict "ctx" . "component" "relay") }}:{{ .Values.relay.service.port }}
+    iota_node_ip = {{ .Values.iota.hornet.nodeName }}
+    log_file_port = 8000
+
+    [TrustAlgorithm]
+    scoreInterval = 120
+    reliabilityInterval = 20
+    reputationInterval = 7
+    healthPenalty = 0.01
+    ReliabilityWeight = 0.5
+    SecurityWeight = 0.3
+    ReputationWeight = 0.2
+    priorityThreshold = 3
+    notificationThreshold = 10
+
+    [ReliabilityScore]
+    cpuCores = +0.2
+    currentCpuUsage = -0.2
+    ramCapacity = +0.1
+    availableRam = +0.25
+    currentRamUsage = -0.25
+
+    [SecurityScore]
+    priority_1 = 0.25
+    priority_2 = 0.35
+    priority_3 = 0.4
+
+    [ReputationScore]
+    priority_1 = 0.25
+    priority_2 = 0.35
+    priority_3 = 0.4
+  podSecurityContext:
+    <<: *podSecurityContext
+    runAsUser: 10001
+    runAsGroup: 10001
+    fsGroup: 10001
+  securityContext: *securityContext
+  resources:
+    requests: {cpu: 50m, memory: 128Mi}
+    limits: {memory: 512Mi}
+  nodeSelector: {}
+  tolerations: []
+  affinity: {}

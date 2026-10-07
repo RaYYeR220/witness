@@ -1,0 +1,120 @@
+{{- $c := dict "ctx" . "component" "api" "values" .Values.api }}
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "witness.componentName" $c }}
+  namespace: {{ .Release.Namespace | quote }}
+  labels:
+    {{- include "witness.labels" $c | nindent 4 }}
+spec:
+  replicas: {{ .Values.api.replicaCount }}
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      {{- include "witness.selectorLabels" $c | nindent 6 }}
+  template:
+    metadata:
+      labels:
+        {{- include "witness.labels" $c | nindent 8 }}
+      annotations:
+        checksum/policy: {{ .Values.policy.json | sha256sum }}
+    spec:
+      {{- with include "witness.podScheduling" $c | trim }}{{ . | nindent 6 }}{{- end }}
+      automountServiceAccountToken: false
+      securityContext:
+        {{- toYaml .Values.api.podSecurityContext | nindent 8 }}
+      containers:
+        - name: api
+          image: {{ include "witness.image" $c | quote }}
+          imagePullPolicy: {{ .Values.api.image.pullPolicy }}
+          securityContext:
+            {{- toYaml .Values.api.securityContext | nindent 12 }}
+          envFrom:
+            - secretRef:
+                name: {{ required "api.secrets.env is required" .Values.api.secrets.env }}
+          env:
+            {{- include "witness.databaseEnv" (dict "ctx" . "name" "WITNESS_DB") | nindent 12 }}
+            - name: WITNESS_SCHEMA
+              value: witness
+            - name: WITNESS_HOST
+              value: "0.0.0.0"
+            - name: WITNESS_PORT
+              value: "7200"
+            - name: WITNESS_NETWORK
+              value: {{ .Values.iota.network | quote }}
+            - name: WITNESS_COORDINATOR_KEYS
+              value: {{ join "," .Values.iota.coordinatorKeys | quote }}
+            - name: WITNESS_THRESHOLD
+              value: {{ .Values.iota.coordinatorThreshold | quote }}
+            - name: WITNESS_REBASED_NETWORK
+              value: {{ .Values.rebased.network | quote }}
+            - name: WITNESS_TRAIL_ID
+              value: {{ .Values.rebased.trailId | quote }}
+            - name: WITNESS_HORNET_URL
+              value: {{ .Values.iota.hornet.restUrl | quote }}
+            {{- if .Values.api.nodeRoute }}
+            - name: WITNESS_INX_ADDR
+              value: {{ .Values.iota.hornet.inxAddress | quote }}
+            - name: WITNESS_NODE_ROUTE
+              value: {{ .Values.api.nodeRoute | quote }}
+            - name: WITNESS_ROUTE_HOST
+              value: {{ .Values.api.routeHost | default (include "witness.serviceHost" $c) | quote }}
+            {{- end }}
+            - name: WITNESS_ORION_URL
+              value: {{ .Values.orion.url | quote }}
+            - name: WITNESS_ANCHOR_URL
+              value: {{ printf "http://%s:%v" (include "witness.componentName" (dict "ctx" . "component" "anchor")) .Values.anchor.service.port | quote }}
+            - name: WITNESS_POLICY
+              value: /etc/witness/policy.json
+            # One validator: the indexer (--validate) owns validation and re-verification.
+            - name: WITNESS_VALIDATE
+              value: "0"
+            - name: WITNESS_RELAY_URL
+              value: {{ printf "http://%s:%v" (include "witness.componentName" (dict "ctx" . "component" "relay")) .Values.relay.service.port | quote }}
+            - name: WITNESS_REPORT_RELAY_NODE
+              value: {{ .Values.iota.hornet.nodeName | quote }}
+            {{- if .Values.api.secrets.reportSignerKey }}
+            - name: WITNESS_REPORT_SIGNER_KEY
+              value: /run/witness/report-signer/sig-1.jwk.json
+            {{- end }}
+            {{- with .Values.iota.hornet.dashboardUrl }}
+            - name: WITNESS_POSTURE_DASHBOARD_URL
+              value: {{ . | quote }}
+            {{- end }}
+          ports:
+            - name: http
+              containerPort: 7200
+              protocol: TCP
+          readinessProbe:
+            httpGet: {path: /healthz, port: http}
+            periodSeconds: 10
+          livenessProbe:
+            httpGet: {path: /healthz, port: http}
+            initialDelaySeconds: 30
+            periodSeconds: 30
+          volumeMounts:
+            - name: policy
+              mountPath: /etc/witness
+              readOnly: true
+            {{- if .Values.api.secrets.reportSignerKey }}
+            - name: report-signer
+              mountPath: /run/witness/report-signer
+              readOnly: true
+            {{- end }}
+            - name: tmp
+              mountPath: /tmp
+          resources:
+            {{- toYaml .Values.api.resources | nindent 12 }}
+      volumes:
+        {{- include "witness.policyVolume" . | nindent 8 }}
+        {{- if .Values.api.secrets.reportSignerKey }}
+        - name: report-signer
+          secret:
+            secretName: {{ .Values.api.secrets.reportSignerKey }}
+            defaultMode: 0440
+            items:
+              - {key: sig-1.jwk.json, path: sig-1.jwk.json}
+        {{- end }}
+        - name: tmp
+          emptyDir: {medium: Memory, sizeLimit: 64Mi}

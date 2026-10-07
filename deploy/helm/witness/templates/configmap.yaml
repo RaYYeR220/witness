@@ -1,0 +1,25 @@
+{{- if .Values.policy.json }}
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "witness.policyConfigMap" . }}
+  namespace: {{ .Release.Namespace | quote }}
+  labels:
+    {{- include "witness.labels" (dict "ctx" . "component" "policy" "values" (dict)) | nindent 4 }}
+data:
+  {{ .Values.policy.key }}: |
+    {{- .Values.policy.json | nindent 4 }}
+---
+{{- end }}
+{{- if .Values.trustManager.enabled }}
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "witness.componentName" (dict "ctx" . "component" "trustmanager") }}
+  namespace: {{ .Release.Namespace | quote }}
+  labels:
+    {{- include "witness.labels" (dict "ctx" . "component" "trustmanager" "values" .Values.trustManager) | nindent 4 }}
+data:
+  manager.ini: |
+    {{- tpl .Values.trustManager.configManagerIni . | nindent 4 }}
+{{- end }}

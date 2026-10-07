@@ -1,0 +1,91 @@
+{{- $c := dict "ctx" . "component" "relay" "values" .Values.relay }}
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "witness.componentName" $c }}
+  namespace: {{ .Release.Namespace | quote }}
+  labels:
+    {{- include "witness.labels" $c | nindent 4 }}
+spec:
+  replicas: {{ .Values.relay.replicaCount }}
+  selector:
+    matchLabels:
+      {{- include "witness.selectorLabels" $c | nindent 6 }}
+  template:
+    metadata:
+      labels:
+        {{- include "witness.labels" $c | nindent 8 }}
+      annotations:
+        checksum/policy: {{ .Values.policy.json | sha256sum }}
+    spec:
+      {{- with include "witness.podScheduling" $c | trim }}{{ . | nindent 6 }}{{- end }}
+      automountServiceAccountToken: false
+      securityContext:
+        {{- toYaml .Values.relay.podSecurityContext | nindent 8 }}
+      containers:
+        - name: relay
+          image: {{ include "witness.image" $c | quote }}
+          imagePullPolicy: {{ .Values.relay.image.pullPolicy }}
+          securityContext:
+            {{- toYaml .Values.relay.securityContext | nindent 12 }}
+          envFrom:
+            - secretRef:
+                name: {{ required "relay.secrets.env is required" .Values.relay.secrets.env }}
+          env:
+            {{- include "witness.databaseEnv" (dict "ctx" . "name" "RELAY_DB_URL") | nindent 12 }}
+            - name: RELAY_DB_SCHEMA
+              value: relay
+            - name: RELAY_HOST
+              value: "0.0.0.0"
+            - name: RELAY_PORT
+              value: "5555"
+            - name: RELAY_ALLOWED_NODES
+              value: {{ dict .Values.iota.hornet.nodeName .Values.iota.hornet.restUrl | toJson | quote }}
+            - name: RELAY_KEY_PATH
+              value: /run/witness/relay/sig-1.pem
+            - name: RELAY_POLICY_PATH
+              value: /etc/witness/policy.json
+            - name: RELAY_RESOLVER_URL
+              value: {{ printf "http://%s:%v" (include "witness.componentName" (dict "ctx" . "component" "anchor")) .Values.anchor.service.port | quote }}
+            - name: RELAY_EXPLORER_URL
+              value: {{ printf "http://%s:%v" (include "witness.componentName" (dict "ctx" . "component" "api")) .Values.api.service.port | quote }}
+            - name: RELAY_ENCRYPT_TAGS
+              value: {{ .Values.relay.encryptTags | quote }}
+            - name: RELAY_RECIPIENTS_PATH
+              value: /run/witness/relay/recipients.json
+            - name: RELAY_SEARCH_KEY_PATH
+              value: /run/witness/relay/search.key
+          ports:
+            - name: http
+              containerPort: 5555
+              protocol: TCP
+          readinessProbe:
+            httpGet: {path: /healthz, port: http}
+            periodSeconds: 10
+          livenessProbe:
+            httpGet: {path: /healthz, port: http}
+            initialDelaySeconds: 30
+            periodSeconds: 30
+          volumeMounts:
+            - name: policy
+              mountPath: /etc/witness
+              readOnly: true
+            - name: keys
+              mountPath: /run/witness/relay
+              readOnly: true
+            - name: tmp
+              mountPath: /tmp
+          resources:
+            {{- toYaml .Values.relay.resources | nindent 12 }}
+      volumes:
+        {{- include "witness.policyVolume" . | nindent 8 }}
+        - name: keys
+          secret:
+            secretName: {{ required "relay.secrets.files is required" .Values.relay.secrets.files }}
+            defaultMode: 0440
+            items:
+              - {key: sig-1.pem, path: sig-1.pem}
+              - {key: recipients.json, path: recipients.json}
+              - {key: search.key, path: search.key}
+        - name: tmp
+          emptyDir: {medium: Memory, sizeLimit: 64Mi}

@@ -1,0 +1,19 @@
+{{- if .Values.trustManager.enabled }}
+{{- $c := dict "ctx" . "component" "trustmanager" "values" .Values.trustManager }}
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "witness.componentName" $c }}
+  namespace: {{ .Release.Namespace | quote }}
+  labels:
+    {{- include "witness.labels" $c | nindent 4 }}
+spec:
+  type: {{ .Values.trustManager.service.type }}
+  ports:
+    - name: api
+      port: {{ .Values.trustManager.service.port }}
+      targetPort: api
+      protocol: TCP
+  selector:
+    {{- include "witness.selectorLabels" $c | nindent 4 }}
+{{- end }}

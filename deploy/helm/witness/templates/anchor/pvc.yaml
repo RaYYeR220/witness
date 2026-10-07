@@ -1,0 +1,20 @@
+{{- $c := dict "ctx" . "component" "anchor" "values" .Values.anchor }}
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: {{ include "witness.componentName" $c }}
+  namespace: {{ .Release.Namespace | quote }}
+  labels:
+    {{- include "witness.labels" $c | nindent 4 }}
+  annotations:
+    # The trail record lives here: losing it would make the anchor create (and pay for) a new trail.
+    helm.sh/resource-policy: keep
+spec:
+  accessModes:
+    {{- toYaml .Values.anchor.persistence.accessModes | nindent 4 }}
+  {{- with .Values.anchor.persistence.storageClassName }}
+  storageClassName: {{ . | quote }}
+  {{- end }}
+  resources:
+    requests:
+      storage: {{ .Values.anchor.persistence.size }}

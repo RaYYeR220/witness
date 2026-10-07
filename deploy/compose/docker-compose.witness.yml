@@ -1,0 +1,245 @@
+name: witness
+# Witness overlay on the local aeriOS stack (stack-up.sh brings up the base: HORNET, the legacy
+# messages relay, inx-poi, Orion-LD, Postgres, Mosquitto). Everything joins the external
+# iota-net network and reaches HORNET only there, by service name (iota-hornet:14265 REST,
+# iota-hornet:9029 INX).
+#
+#   deploy/compose/setup-secrets.sh                                  # once (stack-up.sh runs it)
+#   docker compose -f deploy/compose/docker-compose.witness.yml up -d --build
+#   open http://localhost:8080
+#
+# Configuration comes from deploy/compose/.env (see .env.example): where secrets/ and the IOTA
+# keystore are, the anchor wallet address and the Audit Trail id. Secrets are mounted read-only,
+# one file per need, and never copied into an image. Host ports listen on loopback only.
+#
+# trust-manager-witness replaces the stock Trust Manager of docker-compose.aerios.yml: both
+# would score the same Infrastructure Elements and write Orion's trustScore. Stop the stock one
+# (`docker stop trustmanager`, or use `stack-up.sh --witness`, which does it).
+
+x-service: &service
+  restart: unless-stopped
+  read_only: true
+  security_opt: ["no-new-privileges:true"]
+  cap_drop: [ALL]
+  tmpfs: ["/tmp:size=64m"]
+  networks: [iota-net]
+  logging:
+    driver: json-file
+    options: {max-size: "10m", max-file: "3"}
+
+x-database: &database postgresql://postgres:witness@witness-postgres:5432/postgres
+
+services:
+  witness-relay:
+    <<: *service
+    build:
+      context: ../..
+      dockerfile: deploy/docker/python.Dockerfile
+      target: relay
+    image: witness-relay:local
+    container_name: witness-relay
+    mem_limit: 384m
+    env_file:
+      - ${WITNESS_SECRETS_DIR:-../../secrets}/compose/relay.env
+    environment:
+      RELAY_ALLOWED_NODES: '{"iota-hornet": "http://iota-hornet:14265"}'
+      RELAY_KEY_PATH: /run/witness/relay/sig-1.pem
+      RELAY_POLICY_PATH: /etc/witness/policy.json
+      RELAY_DB_URL: *database
+      RELAY_DB_SCHEMA: relay
+      # did:iota producer keys are resolved by the anchor service.
+      RELAY_RESOLVER_URL: http://witness-anchor:7300
+      # Every submission goes to the explorer over MQTT (RELAY_MQTT_URL, with the relay's
+      # broker login, from relay.env) and over HTTP POST /ingest; the explorer dedupes.
+      RELAY_EXPLORER_URL: http://witness-api:7200
+      RELAY_ENCRYPT_TAGS: ${WITNESS_RELAY_ENCRYPT_TAGS:-}
+      RELAY_RECIPIENTS_PATH: /run/witness/relay/recipients.json
+      RELAY_SEARCH_KEY_PATH: /run/witness/relay/search.key
+      RELAY_LOG_LEVEL: ${WITNESS_LOG_LEVEL:-INFO}
+    volumes:
+      - ${WITNESS_POLICY_FILE:-../policy.json}:/etc/witness/policy.json:ro
+      - ${WITNESS_SECRETS_DIR:-../../secrets}/relay/sig-1.pem:/run/witness/relay/sig-1.pem:ro
+      - ${WITNESS_SECRETS_DIR:-../../secrets}/relay/recipients.json:/run/witness/relay/recipients.json:ro
+      - ${WITNESS_SECRETS_DIR:-../../secrets}/relay/search.key:/run/witness/relay/search.key:ro
+    ports:
+      - "127.0.0.1:${WITNESS_RELAY_PORT:-5557}:5555"
+      - "[::1]:${WITNESS_RELAY_PORT:-5557}:5555"
+
+  witness-api:
+    <<: *service
+    build:
+      context: ../..
+      dockerfile: deploy/docker/python.Dockerfile
+      target: api
+    image: witness-api:local
+    container_name: witness-api
+    mem_limit: 512m
+    env_file:
+      - ${WITNESS_SECRETS_DIR:-../../secrets}/compose/api.env
+    environment:
+      WITNESS_DB: *database
+      WITNESS_SCHEMA: witness
+      WITNESS_HOST: 0.0.0.0
+      WITNESS_PORT: "7200"
+      # What a verifier pins (GET /config/verifier).
+      WITNESS_NETWORK: private_tangle1
+      WITNESS_COORDINATOR_KEYS: ${WITNESS_COORDINATOR_KEYS:-0xed3c3f1a319ff4e909cf2771d79fece0ac9bd9fd2ee49ea6c0885c9cb3b1248c,0xf6752f5f46a53364e2ee9c4d662d762a81efd51010282a75cd6bd03f28ef349c}
+      WITNESS_THRESHOLD: ${WITNESS_COORDINATOR_THRESHOLD:-2}
+      WITNESS_REBASED_NETWORK: ${WITNESS_REBASED_NETWORK:-testnet}
+      WITNESS_TRAIL_ID: ${WITNESS_TRAIL_ID:-}
+      WITNESS_HORNET_URL: http://iota-hornet:14265
+      # Also served by the node itself at :14265/api/witness/v1 (INX RegisterAPIRoute); the
+      # node proxies to this container by name.
+      WITNESS_INX_ADDR: iota-hornet:9029
+      WITNESS_NODE_ROUTE: witness/v1
+      WITNESS_ROUTE_HOST: witness-api
+      WITNESS_ORION_URL: http://orion-ld:1026
+      WITNESS_ANCHOR_URL: http://witness-anchor:7300
+      WITNESS_POLICY: /etc/witness/policy.json
+      # One validator: the indexer (--validate) owns validation and re-verification.
+      WITNESS_VALIDATE: "0"
+      WITNESS_VERIFY_TOKEN: ${WITNESS_VERIFY_TOKEN:-}
+      # Signed audit reports go out through the witness relay, signed with the domain key.
+      WITNESS_RELAY_URL: http://witness-relay:5555
+      WITNESS_REPORT_RELAY_NODE: iota-hornet
+      WITNESS_REPORT_SIGNER_KEY: /run/witness/report-signer/sig-1.jwk.json
+      # Posture scans of this stack's own node; active probes only against these hosts.
+      WITNESS_POSTURE_DASHBOARD_URL: http://iota-inx-dashboard:8081
+      WITNESS_POSTURE_ALLOW_ACTIVE_HOSTS: iota-hornet,iota-inx-dashboard
+      WITNESS_LOG_LEVEL: ${WITNESS_LOG_LEVEL:-INFO}
+    volumes:
+      - ${WITNESS_POLICY_FILE:-../policy.json}:/etc/witness/policy.json:ro
+      - ${WITNESS_SECRETS_DIR:-../../secrets}/domain/sig-1.jwk.json:/run/witness/report-signer/sig-1.jwk.json:ro
+    ports:
+      - "127.0.0.1:${WITNESS_API_PORT:-7200}:7200"
+      - "[::1]:${WITNESS_API_PORT:-7200}:7200"
+
+  witness-anchor:
+    <<: *service
+    build:
+      context: ../..
+      dockerfile: anchor/Dockerfile
+    image: witness-anchor:local
+    container_name: witness-anchor
+    mem_limit: 768m
+    env_file:
+      - ${WITNESS_SECRETS_DIR:-../../secrets}/compose/anchor.env
+    environment:
+      IOTA_NETWORK: ${WITNESS_REBASED_NETWORK:-testnet}
+      ANCHOR_KEYSTORE_PATH: /run/witness/iota.keystore
+      ANCHOR_ADDRESS: ${WITNESS_ANCHOR_ADDRESS:?set WITNESS_ANCHOR_ADDRESS in deploy/compose/.env}
+      # Empty: the trail recorded in the anchor-state volume, or a new trail on first start.
+      ANCHOR_TRAIL_ID: ${WITNESS_TRAIL_ID:-}
+      ANCHOR_LOOP: ${WITNESS_ANCHOR_LOOP:-on}
+      ANCHOR_POLICY_PATH: /etc/witness/policy.json
+      ANCHOR_API_URL: http://witness-api:7200
+      ANCHOR_HORNET_URL: http://iota-hornet:14265
+      ANCHOR_COORDINATOR_KEYS: ${WITNESS_COORDINATOR_KEYS:-0xed3c3f1a319ff4e909cf2771d79fece0ac9bd9fd2ee49ea6c0885c9cb3b1248c,0xf6752f5f46a53364e2ee9c4d662d762a81efd51010282a75cd6bd03f28ef349c}
+      ANCHOR_COORDINATOR_THRESHOLD: ${WITNESS_COORDINATOR_THRESHOLD:-2}
+      ANCHOR_RELAY_URL: http://witness-relay:5555
+      ANCHOR_RELAY_NODE: iota-hornet
+      # Each window is one Audit Trail record (gas): 720 milestones is about an hour.
+      ANCHOR_EVERY: ${WITNESS_ANCHOR_EVERY:-720}
+      ANCHOR_START_INDEX: ${WITNESS_ANCHOR_START_INDEX:-1}
+      ANCHOR_IDENTITY: anchor
+    volumes:
+      - ${WITNESS_POLICY_FILE:-../policy.json}:/etc/witness/policy.json:ro
+      - type: bind
+        source: ${WITNESS_IOTA_KEYSTORE:?set WITNESS_IOTA_KEYSTORE in deploy/compose/.env to the IOTA CLI keystore file}
+        target: /run/witness/iota.keystore
+        read_only: true
+        bind:
+          create_host_path: false
+      - ${WITNESS_SECRETS_DIR:-../../secrets}/anchor/sig-1.jwk.json:/var/lib/witness-anchor/secrets/anchor/sig-1.jwk.json:ro
+      - anchor-state:/var/lib/witness-anchor
+    ports:
+      - "127.0.0.1:${WITNESS_ANCHOR_PORT:-7300}:7300"
+      - "[::1]:${WITNESS_ANCHOR_PORT:-7300}:7300"
+    depends_on:
+      witness-api: {condition: service_healthy}
+      witness-relay: {condition: service_healthy}
+
+  witness-indexer:
+    <<: *service
+    build:
+      context: ../..
+      dockerfile: deploy/docker/python.Dockerfile
+      target: indexer
+    image: witness-indexer:local
+    container_name: witness-indexer
+    mem_limit: 768m
+    stop_grace_period: 30s
+    env_file:
+      # WITNESS_MQTT (submissions, and incident alerts on the same broker) and WITNESS_ANCHOR_DID.
+      - ${WITNESS_SECRETS_DIR:-../../secrets}/compose/indexer.env
+    environment:
+      WITNESS_DB: *database
+      WITNESS_REBASED_NETWORK: ${WITNESS_REBASED_NETWORK:-testnet}
+    command:
+      - --source=inx
+      - --inx=iota-hornet:9029
+      - --rest=http://iota-hornet:14265
+      - --schema=witness
+      - --policy=/etc/witness/policy.json
+      - --resolver=http://witness-anchor:7300
+      - --orion=http://orion-ld:1026
+      - --validate
+      - --log-level=${WITNESS_LOG_LEVEL:-INFO}
+    volumes:
+      - ${WITNESS_POLICY_FILE:-../policy.json}:/etc/witness/policy.json:ro
+    depends_on:
+      # The anchor resolves signing keys; the indexer waits (and retries) while it is down.
+      witness-anchor: {condition: service_started}
+
+  witness-console:
+    <<: *service
+    build:
+      context: ../..
+      dockerfile: console/Dockerfile
+      args:
+        ANCHOR_TRAIL_ID: ${WITNESS_TRAIL_ID:-}
+    image: witness-console:local
+    container_name: witness-console
+    mem_limit: 128m
+    tmpfs:
+      - /tmp:size=16m
+      - /etc/nginx/conf.d:uid=101,gid=101,mode=0755,size=1m
+    environment:
+      WITNESS_API_UPSTREAM: witness-api:7200
+      WITNESS_REBASED_RPC_ORIGIN: ${WITNESS_REBASED_RPC_ORIGIN:-https://api.testnet.iota.cafe}
+    ports:
+      - "127.0.0.1:${WITNESS_CONSOLE_PORT:-8080}:8080"
+      - "[::1]:${WITNESS_CONSOLE_PORT:-8080}:8080"
+    depends_on:
+      witness-api: {condition: service_healthy}
+
+  trust-manager-witness:
+    <<: *service
+    build:
+      context: ../..
+      dockerfile: deploy/compose/trust-manager-witness/Dockerfile
+    image: trust-manager-witness:local
+    container_name: trustmanager-witness
+    mem_limit: 512m
+    init: true
+    environment:
+      WITNESS_KEY_PATH: /run/witness/trust-manager/sig-1.jwk.json
+    volumes:
+      - ./trust-manager-witness/manager.ini:/manager/configs/manager.ini:ro
+      - ${WITNESS_SECRETS_DIR:-../../secrets}/trust-manager/sig-1.jwk.json:/run/witness/trust-manager/sig-1.jwk.json:ro
+      - trust-manager-data:/data
+    ports:
+      - "127.0.0.1:${WITNESS_TRUST_MANAGER_PORT:-3101}:3000"
+      - "[::1]:${WITNESS_TRUST_MANAGER_PORT:-3101}:3000"
+    depends_on:
+      witness-relay: {condition: service_healthy}
+      witness-anchor: {condition: service_started}
+
+volumes:
+  anchor-state:
+  trust-manager-data:
+
+networks:
+  iota-net:
+    name: iota-net
+    external: true

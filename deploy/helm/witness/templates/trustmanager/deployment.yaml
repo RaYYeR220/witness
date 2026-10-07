@@ -1,0 +1,79 @@
+{{- if .Values.trustManager.enabled }}
+{{- $c := dict "ctx" . "component" "trustmanager" "values" .Values.trustManager }}
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "witness.componentName" $c }}
+  namespace: {{ .Release.Namespace | quote }}
+  labels:
+    {{- include "witness.labels" $c | nindent 4 }}
+spec:
+  replicas: {{ .Values.trustManager.replicaCount }}
+  # The signer state volume is ReadWriteOnce and one issuer must not run twice.
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      {{- include "witness.selectorLabels" $c | nindent 6 }}
+  template:
+    metadata:
+      labels:
+        {{- include "witness.labels" $c | nindent 8 }}
+      annotations:
+        checksum/config: {{ tpl .Values.trustManager.configManagerIni . | sha256sum }}
+    spec:
+      {{- with include "witness.podScheduling" $c | trim }}{{ . | nindent 6 }}{{- end }}
+      automountServiceAccountToken: false
+      securityContext:
+        {{- toYaml .Values.trustManager.podSecurityContext | nindent 8 }}
+      containers:
+        - name: trustmanager
+          image: {{ include "witness.image" $c | quote }}
+          imagePullPolicy: {{ .Values.trustManager.image.pullPolicy }}
+          securityContext:
+            {{- toYaml .Values.trustManager.securityContext | nindent 12 }}
+          env:
+            - name: WITNESS_KEY_PATH
+              value: /run/witness/trust-manager/sig-1.jwk.json
+          ports:
+            - name: api
+              containerPort: 3000
+              protocol: TCP
+          readinessProbe:
+            httpGet: {path: /weights, port: api}
+            initialDelaySeconds: 20
+            periodSeconds: 15
+          livenessProbe:
+            httpGet: {path: /weights, port: api}
+            initialDelaySeconds: 90
+            periodSeconds: 30
+          volumeMounts:
+            - name: config
+              mountPath: /manager/configs/manager.ini
+              subPath: manager.ini
+              readOnly: true
+            - name: component-key
+              mountPath: /run/witness/trust-manager
+              readOnly: true
+            - name: data
+              mountPath: /data
+            - name: tmp
+              mountPath: /tmp
+          resources:
+            {{- toYaml .Values.trustManager.resources | nindent 12 }}
+      volumes:
+        - name: config
+          configMap:
+            name: {{ include "witness.componentName" $c }}
+        - name: component-key
+          secret:
+            secretName: {{ required "trustManager.secrets.componentKey is required" .Values.trustManager.secrets.componentKey }}
+            defaultMode: 0440
+            items:
+              - {key: sig-1.jwk.json, path: sig-1.jwk.json}
+        - name: data
+          persistentVolumeClaim:
+            claimName: {{ include "witness.componentName" $c }}
+        - name: tmp
+          emptyDir: {medium: Memory, sizeLimit: 64Mi}
+{{- end }}

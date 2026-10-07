@@ -5,18 +5,21 @@ Everything runs in Docker. Scripts are bash (Git Bash on Windows).
 ## Bring-up
 
 ```bash
-deploy/compose/stack-up.sh           # first run bootstraps a private Tangle
-deploy/compose/stack-up.sh --reset   # wipe chain data and bootstrap from scratch
-deploy/compose/stack-down.sh         # stop everything, keep chain data
+deploy/compose/stack-up.sh             # first run bootstraps a private Tangle
+deploy/compose/stack-up.sh --witness   # the same, plus the Witness overlay (see Deployment)
+deploy/compose/stack-up.sh --reset     # wipe chain data and bootstrap from scratch
+deploy/compose/stack-down.sh           # stop everything, keep chain data
 ```
 
 `stack-up.sh` clones `iota-tangle`, `iota-messages-api` and `trust-manager` from
 `eclipse-aerios` into `vendor/` (gitignored), then starts, in order: HORNET +
 inx-coordinator + inx-dashboard, the messages relay (`messages-api.yml`),
-inx-poi (`inx-poi.yml`) and the rest (`docker-compose.aerios.yml`: Mongo,
-Orion-LD, Trust Manager, Postgres, Mosquitto). All containers share the
-`iota-net` network. The compose files use separate project names so the stacks
-can be restarted independently.
+inx-poi (`inx-poi.yml`), the run-time secrets (`setup-secrets.sh`, see below) and
+the rest (`docker-compose.aerios.yml`: Mongo, Orion-LD, Trust Manager, Postgres,
+Mosquitto). All containers share the `iota-net` network. The compose files use
+separate project names so the stacks can be restarted independently. Settings
+come from `deploy/compose/.env` (copy `.env.example`); `WITNESS_VENDOR_DIR` lets
+several checkouts share one `vendor/`, and so one chain.
 
 Trust Manager runs from `eclipseaerios/trust-manager:latest` with
 `deploy/compose/manager.ini` mounted over its config: `scoreInterval = 1`
@@ -37,9 +40,16 @@ shows up within a minute or two.
 | Mongo | 27017 |
 | Trust Manager | 3100 (container 3000) |
 | Postgres (`witness-postgres`, password `witness`) | 5432 |
-| Mosquitto (`witness-mosquitto`, anonymous) | 1883 MQTT, 9001 websockets |
+| Mosquitto (`witness-mosquitto`, logins only) | 1883 MQTT, 9001 websockets |
+| Witness console (overlay) | 8080 |
+| Witness API (overlay; also `:14265/api/witness/v1`) | 7200 |
+| Witness relay (overlay, `POST /upload?node=iota-hornet`) | 5557 (`WITNESS_RELAY_PORT`) |
+| Witness anchor (overlay: `/resolve`, `/checkpoints`) | 7300 |
+| Trust Manager, producer-signing (overlay) | 3101 (container 3000) |
 
-Our compose files publish ports on 127.0.0.1 only. The organisers' own HORNET compose (vendored, not ours) publishes 14265, 9029 and 31011 on all interfaces; keep that in mind for any deployment.
+Every port is published on the loopback interfaces only, 127.0.0.1 and ::1
+(`localhost` resolves to ::1 first on some hosts). The organisers' HORNET compose
+publishes on all interfaces; `hornet-loopback.yml` overrides that.
 
 Check it is alive: `curl -s localhost:14265/api/core/v2/info` and watch
 `confirmedMilestone.index` grow about every 5 seconds. `isHealthy` stays
@@ -174,7 +184,7 @@ served by the API at `GET /incidents` and `GET /incidents/{id}`.
 - `--no-incidents` turns the engine off.
 
 ```bash
-mosquitto_sub -h 127.0.0.1 -t 'witness/alerts/#' -v
+mosquitto_sub -h 127.0.0.1 -u observer -P "$(cat secrets/mosquitto/observer.password)" -t 'witness/alerts/#' -v
 ```
 
 Health shows up in `Store.stats()` (and so in the API's stats):
@@ -266,6 +276,90 @@ A replay build (`pnpm --filter console build:replay`) serves a snapshot
 recorded by `node console/scripts/record-replay.mjs --out <dist>/replay` from a
 running stack. It needs no API; step 4 uses the DID documents recorded with the
 snapshot (the screen says so) and step 5 still reads IOTA Rebased live.
+
+## Deployment: the Witness overlay
+
+`deploy/compose/docker-compose.witness.yml` (project `witness`) runs the explorer next to
+the base stack, on `iota-net`. HORNET is reached only there, by name: REST
+`iota-hornet:14265`, INX `iota-hornet:9029`.
+
+| Service | Image (Dockerfile) | Does |
+| --- | --- | --- |
+| `witness-relay` | `deploy/docker/python.Dockerfile`, target `relay` | the Messages API (`/upload`): producer signatures, writer policy, receipts; forwards every submission over MQTT and HTTP `/ingest` |
+| `witness-indexer` | same, target `indexer` | INX milestones and cones, verdicts, rules, incidents; **the only validator** (`--validate`) |
+| `witness-api` | same, target `api` | REST API on 7200, also mounted on the node as `/api/witness/v1`; `WITNESS_VALIDATE=0` |
+| `witness-anchor` | `anchor/Dockerfile` | DID resolver for relay and indexer; checkpoints on IOTA Rebased; `witness.anchor` mirror through the relay |
+| `witness-console` | `console/Dockerfile` | the app in live mode behind nginx, `/api/` proxied to the API |
+| `trust-manager-witness` | `deploy/compose/trust-manager-witness/Dockerfile` | the aeriOS Trust Manager signing its own `trust.score` (key `trust-manager`) |
+
+```bash
+cp deploy/compose/.env.example deploy/compose/.env   # set the keystore file, wallet address
+deploy/compose/stack-up.sh --witness                 # or, on a running base stack:
+deploy/compose/setup-secrets.sh
+docker stop trustmanager
+docker compose -f deploy/compose/docker-compose.witness.yml up -d --build
+```
+
+- **Trust Manager.** The patched one replaces the stock one: both would score the same
+  Infrastructure Elements and write Orion's `trustScore`, and the stock one writes
+  unsigned `trust.score` that the writer policy rejects. `stack-up.sh --witness` leaves
+  the stock one stopped; the stock one stays defined in `docker-compose.aerios.yml`.
+- **Secrets.** `setup-secrets.sh` writes, into `secrets/` (gitignored): broker passwords and
+  the hashed password file, service tokens, the relay key as PEM, the relay's search key
+  and recipients, and one env file per service (`secrets/compose/*.env`) holding only that
+  service's credentials. Existing values are kept. Component keys
+  (`secrets/<component>/sig-1.jwk.json`) come from `anchor/scripts/bootstrap-identities.ts`.
+  Each container gets read-only mounts of the files it needs and nothing else; images hold
+  no key material. The anchor mounts only the IOTA keystore file (`WITNESS_IOTA_KEYSTORE`),
+  never the directory around it.
+- **Mosquitto.** No anonymous clients. `relay` may write `aerios/iota/submissions/#`,
+  `indexer` may read it and write `witness/alerts/#`, `observer` may read both
+  (`deploy/compose/mosquitto.acl`). The legacy messages API does not use MQTT.
+- **Containers** run as unprivileged users with a read-only root filesystem, no
+  capabilities, `no-new-privileges`, a memory limit and a health check each. The anchor
+  waits for a healthy API and relay; the indexer, the console and the Trust Manager start
+  after the services they call.
+- **Trail.** With `WITNESS_TRAIL_ID` empty the anchor creates an Audit Trail on its first
+  window and keeps it in the `anchor-state` volume (`docker logs witness-anchor` prints
+  `trail created`). Put the id into `.env` and run `up -d --build` again: the API serves it
+  in `/config/verifier` and the console image pins it (`ANCHOR_TRAIL_ID` build argument).
+  Each window is one trail record; `WITNESS_ANCHOR_EVERY=720` (about an hour) keeps gas low,
+  12 suits a demo.
+- **Policy.** `deploy/policy.json` is the writer policy relay, indexer, API and anchor share
+  (`WITNESS_POLICY_FILE` to use another); it equals `chaos/demo-policy.json`, the policy of the
+  fault-injection evaluation.
+- **Low memory.** `up --build` builds images in parallel; `stack-up.sh --witness` builds them
+  one at a time.
+- **Linux hosts.** Containers read the secrets as uid 10001 (Python services, Trust Manager),
+  1000 (anchor) and 1883 (Mosquitto); files that only their owner can read must be made
+  readable to those users (Docker Desktop does not enforce this).
+
+### Helm
+
+`deploy/helm/witness` follows the aeriOS chart layout: one Deployment per component, a
+values block per component (`tier`, `image`, `resources`, `nodeSelector`, ...), the
+HORNET REST/INX endpoints under `iota.hornet`, and secrets only by reference to Secrets
+that exist before the release:
+
+```bash
+kubectl create secret generic witness-db --from-literal=dsn=postgresql://...
+kubectl create secret generic witness-relay-env --from-env-file=secrets/compose/relay.env
+kubectl create secret generic witness-relay-keys --from-file=secrets/relay/sig-1.pem \
+  --from-file=secrets/relay/recipients.json --from-file=secrets/relay/search.key
+kubectl create secret generic witness-indexer-env --from-env-file=secrets/compose/indexer.env
+kubectl create secret generic witness-api-env --from-env-file=secrets/compose/api.env
+kubectl create secret generic witness-anchor-env --from-env-file=secrets/compose/anchor.env
+kubectl create secret generic witness-domain-key --from-file=secrets/domain/sig-1.jwk.json
+kubectl create secret generic witness-anchor-key --from-file=secrets/anchor/sig-1.jwk.json
+kubectl create secret generic witness-trust-manager-key --from-file=secrets/trust-manager/sig-1.jwk.json
+kubectl create secret generic witness-anchor-wallet --from-file=iota.keystore=<keystore file>
+kubectl create configmap witness-policy --from-file=policy.json=deploy/policy.json
+helm install witness deploy/helm/witness --set anchor.loop=true --set anchor.address=0x...
+```
+
+The broker URLs inside the env files name `witness-mosquitto`; point them at the
+cluster's broker. Images are built from the Dockerfiles above and pushed to your
+registry (`<component>.image.repository`); CI builds them but publishes nothing.
 
 ## Troubleshooting
 

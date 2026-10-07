@@ -1,0 +1,21 @@
+Witness {{ .Chart.AppVersion }} is deployed as release {{ .Release.Name }} in {{ .Release.Namespace }}.
+
+Components (one Deployment each):
+  relay    {{ include "witness.componentName" (dict "ctx" . "component" "relay") }}:{{ .Values.relay.service.port }}    POST /upload?node={{ .Values.iota.hornet.nodeName }} (aeriOS Messages API contract)
+  api      {{ include "witness.componentName" (dict "ctx" . "component" "api") }}:{{ .Values.api.service.port }}{{ if .Values.api.nodeRoute }}    also {{ .Values.iota.hornet.restUrl }}/api/{{ .Values.api.nodeRoute }}/{{ end }}
+  indexer  reads {{ .Values.iota.hornet.inxAddress }} (INX){{ if .Values.indexer.validate }}, validates submissions{{ end }}
+  anchor   {{ include "witness.componentName" (dict "ctx" . "component" "anchor") }}:{{ .Values.anchor.service.port }}    loop {{ if .Values.anchor.loop }}on, every {{ .Values.anchor.every }} milestones{{ else }}off{{ end }}
+  console  {{ include "witness.componentName" (dict "ctx" . "component" "console") }}:{{ .Values.console.service.port }}
+{{- if .Values.trustManager.enabled }}
+  trust manager (producer-signed trust.score)  {{ include "witness.componentName" (dict "ctx" . "component" "trustmanager") }}:{{ .Values.trustManager.service.port }}
+{{- end }}
+
+Open the console:
+  kubectl -n {{ .Release.Namespace }} port-forward svc/{{ include "witness.componentName" (dict "ctx" . "component" "console") }} 8080:{{ .Values.console.service.port }}
+  then http://localhost:8080
+{{- if and .Values.anchor.loop (not .Values.rebased.trailId) }}
+
+No rebased.trailId is set: the anchor creates an Audit Trail on its first window and keeps it in its
+volume. Read the id from its log ("trail created") and set rebased.trailId, then rebuild the console
+image with --build-arg ANCHOR_TRAIL_ID=<id> so the in-browser verifier pins it.
+{{- end }}
