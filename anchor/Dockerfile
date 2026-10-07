@@ -43,7 +43,7 @@ RUN mkdir -p /var/lib/witness-anchor/secrets \
  && chown -R node:node /var/lib/witness-anchor \
  && chmod 0700 /var/lib/witness-anchor /var/lib/witness-anchor/secrets
 VOLUME /var/lib/witness-anchor
-USER node:node
+USER 1000:1000
 EXPOSE 7300
 LABEL org.opencontainers.image.title="witness-anchor" \
       org.opencontainers.image.description="Witness anchor: DID resolver and checkpoint anchoring on IOTA Rebased" \

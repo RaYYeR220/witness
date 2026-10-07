@@ -34,7 +34,7 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
     WITNESS_STATE_PATH=/data/witness-state.json \
     WITNESS_DISCLOSURES_PATH=/data/disclosures.jsonl
 VOLUME /data
-USER witness:witness
+USER 10001:10001
 LABEL org.opencontainers.image.title="trust-manager-witness" \
       org.opencontainers.image.description="Eclipse aeriOS Trust Manager with producer-signed trust.score uploads" \
       org.opencontainers.image.licenses="Apache-2.0"

@@ -80,7 +80,7 @@ LABEL org.opencontainers.image.source="https://github.com/RaYYeR220/witness" \
 FROM runtime AS indexer
 COPY --from=venv-indexer /opt/venv /opt/venv
 COPY deploy/docker/indexer_health.py /usr/local/lib/witness/indexer_health.py
-USER witness:witness
+USER 10001:10001
 LABEL org.opencontainers.image.title="witness-indexer" \
       org.opencontainers.image.description="Witness indexer: HORNET milestones over INX, verdicts, rules, incidents"
 # No HTTP port: healthy while the database answers and the newest indexed milestone is recent.
@@ -91,7 +91,7 @@ ENTRYPOINT ["python", "-m", "witness_indexer"]
 # ------------------------------------------------------------------------------ api
 FROM runtime AS api
 COPY --from=venv-api /opt/venv /opt/venv
-USER witness:witness
+USER 10001:10001
 ENV WITNESS_HOST=0.0.0.0 \
     WITNESS_PORT=7200
 EXPOSE 7200
@@ -104,7 +104,7 @@ ENTRYPOINT ["python", "-m", "witness_api"]
 # ------------------------------------------------------------------------------ relay
 FROM runtime AS relay
 COPY --from=venv-relay /opt/venv /opt/venv
-USER witness:witness
+USER 10001:10001
 ENV RELAY_HOST=0.0.0.0 \
     RELAY_PORT=5555
 EXPOSE 5555
