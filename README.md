@@ -1,11 +1,13 @@
 # Witness
 
-**An IOTA Advanced Explorer for Eclipse aeriOS.** Every message the aeriOS Messages API
-submits is forwarded to the explorer, stored in a parallel PostgreSQL database, checked
-against HORNET (solid, and byte-for-byte the block on the Tangle), searchable over REST, and
-provable offline from raw bytes up to a checkpoint on public IOTA Rebased.
+**An IOTA Advanced Explorer for Eclipse aeriOS.** Every message submitted through the
+modified Messages API (witness-relay) is forwarded to the explorer (best effort, see
+[Limits](#limits)). Every confirmed tagged-data block is stored in a parallel PostgreSQL
+database and searchable over REST. Submitted blocks are also checked against HORNET (solid,
+and byte-for-byte the bytes that were sent). Each block is provable from raw bytes up to a
+checkpoint on public IOTA Rebased.
 
-Replay console, nothing to install: <!-- REPLAY-URL -->
+Replay console, nothing to install: <!-- REPLAY-URL -->not published yet<!-- /REPLAY-URL -->
 · Judges start here: [JUDGES.md](JUDGES.md)
 · Every claim with its evidence: [CLAIMS.md](CLAIMS.md)
 
@@ -22,8 +24,8 @@ Replay console, nothing to install: <!-- REPLAY-URL -->
 | (c) Each block is valid and solid per `GET /api/core/v2/blocks/{id}/metadata` | [`indexer/src/witness_indexer/validator.py`](indexer/src/witness_indexer/validator.py): polls the metadata until a milestone references the block; every answer is kept; shown as `checks.solid` on `GET /messages/{blockId}`; `POST /messages/{blockId}/verify` asks again | ✅ |
 | (d) The stored content is the content on the Tangle, per `GET /api/core/v2/blocks/{id}` | same validator: fetches the raw block, requires `BLAKE2b-256(raw) == blockId`, then compares tag and data byte for byte with what the Messages API sent; `checks.content`, alert `CONTENT_MISMATCH`; later re-verification raises `DB_TAMPER` if the database copy was altered | ✅ |
 | Idea 1: MQTT broker fed by the Messages API, explorer subscribes | Eclipse Mosquitto with logins and ACLs ([`mosquitto.acl`](deploy/compose/mosquitto.acl)); the relay publishes, the indexer subscribes; alerts go out on `witness/alerts/{severity}` | ✅ |
-| Idea 2: explorer UI for the enriched, solid messages | [`console/`](console/src/screens.ts) (Vue 3): Live, Search, and Verify, which runs the five proof checks in the browser; replay build for a static demo | ✅ |
-| Idea 3: trace related messages of one flow, user or sensor | signed `prev` (per-issuer hash chain) and `corr` (correlation id) in the [envelope](docs/envelope-spec.md); `GET /flows?by=issuer\|ie\|service\|corr`, `GET /flows/{by}/{key}` with chain links, gaps and forks; alerts `CHAIN_GAP`, `CHAIN_FORK` | ✅ |
+| Idea 2: explorer UI for the enriched, solid messages | [`console/`](console/src/screens.ts) (Vue 3): Live, Search, Verify (runs the five proof checks in the browser), Lineage, Flows, Integrity (alerts and incidents), Identity, Anchors, Posture, Reports; replay build for a static demo | ✅ |
+| Idea 3: trace related messages of one flow, user or sensor | signed `prev` (per-issuer hash chain) and `corr` (correlation id) in the [envelope](docs/envelope-spec.md); `GET /flows?by=issuer\|ie\|service\|corr`, `GET /flows/{by}/{key}` with chain links, gaps and forks; alerts `CHAIN_GAP`, `CHAIN_FORK`; console Flows screen | ✅ |
 | Idea 4: Incident Explorer: correlated trust events on a timeline, each verified against its block id, real-time alerts | [`indexer/src/witness_indexer/incidents.py`](indexer/src/witness_indexer/incidents.py); `GET /incidents`, `GET /incidents/{id}` (each event with verdict, lifecycle status and proof link); SSE `GET /stream` and MQTT `witness/alerts/#`; console Integrity screen | ✅ |
 
 Beyond the brief: signed `witness/v1` envelopes with did:iota identities and a writer policy,
@@ -122,9 +124,9 @@ flowchart LR
 
 ## Quick start
 
-Needs Docker with Compose v2 and bash (Linux, macOS, or Git Bash on Windows), plus an IOTA
-Rebased testnet address with a little gas in an IOTA CLI keystore, because the overlay signs
-with did:iota identities and anchors to an Audit Trail.
+Needs Docker with Compose v2, bash (Linux, macOS, or Git Bash on Windows), Node 22 with pnpm
+(identity bootstrap), and an IOTA Rebased testnet address with a little gas in an IOTA CLI
+keystore, because the overlay signs with did:iota identities and anchors to an Audit Trail.
 
 ```bash
 git clone https://github.com/RaYYeR220/witness && cd witness
@@ -166,7 +168,7 @@ settings you are most likely to touch:
 | `WITNESS_TRAIL_ID` | empty | Audit Trail to anchor to; empty: the anchor creates one and logs its id |
 | `WITNESS_ANCHOR_EVERY` | `720` | milestones per checkpoint (about an hour; 12 for a demo) |
 | `WITNESS_POLICY_FILE` | `../policy.json` | writer policy shared by relay, indexer, API and anchor |
-| `WITNESS_RELAY_ENCRYPT_TAGS` | empty | tags whose legacy messages the relay seals |
+| `WITNESS_RELAY_ENCRYPT_TAGS` | `audit.report` | tags on which the relay seals legacy (unsigned) writes; set it empty to seal nothing |
 | `WITNESS_VERIFY_TOKEN` | empty | bearer token for `POST /messages/{id}/verify` (empty: open) |
 | `RELAY_PORT`, `WITNESS_*_PORT` | see table above | host ports |
 

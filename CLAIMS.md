@@ -27,7 +27,7 @@ Paths are relative to the repository root. Test counts and commands: [README](RE
 | B8 | Both checks pass on live Trust Manager traffic | VERIFIED-LIVE | `GET /messages/{blockId}`: `checks.solid.isSolid: true`, `checks.content.result: "MATCH"`, `status: "CONTENT_VERIFIED"` |
 | B9 | The explorer API is also served by the node itself, at `/api/witness/v1`, through INX `RegisterAPIRoute` | VERIFIED-LIVE | `curl localhost:14265/api/routes` lists `witness/v1`; `curl localhost:14265/api/witness/v1/healthz`; `api/tests/test_node_mount.py` |
 | B10 | MQTT runs on Eclipse Mosquitto with logins and topic ACLs, no anonymous clients | REPRODUCIBLE | `deploy/compose/mosquitto.conf`, `deploy/compose/mosquitto.acl`; live tests `relay/tests/test_relay_live.py`, `indexer/tests/test_incidents.py::test_alerts_reach_mosquitto` (need the stack) |
-| B11 | The console shows live messages, searches them and runs the five proof checks in the browser | REPRODUCIBLE | `console/src/views/*.test.ts`, `console/src/verify/ladder.test.ts`; replay build: <!-- REPLAY-URL --> |
+| B11 | The console shows live messages, searches them and runs the five proof checks in the browser | REPRODUCIBLE | `console/src/views/*.test.ts`, `console/src/verify/ladder.test.ts`; replay build: <!-- REPLAY-URL -->not published yet<!-- /REPLAY-URL --> |
 | B12 | Related messages are traced by issuer hash chain (`prev`), correlation id (`corr`), IE and service component, with gaps and forks reported | REPRODUCIBLE | `api/src/witness_api/routes_flows.py`, `indexer/src/witness_indexer/rules.py` (R15, R16), `indexer/tests/test_rules.py` |
 | B13 | The Incident Explorer groups trust events per IE into incidents with a timeline, each event carrying its verdict, lifecycle status and proof link; changes go out over SSE and MQTT | REPRODUCIBLE | `indexer/src/witness_indexer/incidents.py`, `indexer/tests/test_incidents.py`, `api/tests/test_api_incidents.py` |
 | B14 | Incident triggers from LLO failures, self-orchestrator errors and self-security alerts | MODELED | message shapes taken from the upstream sources (`llo-docker-operator/internal/iota/iotaTangle.go`, `self-orchestrator/script.js`); exercised by tests and the traffic generator (`chaos/src/witness_chaos/traffic.py`), not by running those components |
@@ -37,7 +37,7 @@ Paths are relative to the repository root. Test counts and commands: [README](RE
 | # | Claim | Tag | Evidence |
 |---|---|---|---|
 | P1 | A proof bundle is verified from raw bytes in five steps (block hash, Merkle inclusion, coordinator signatures, envelope signature, anchor); the explorer's own verdict is never input | REPRODUCIBLE | `core/src/witness_core/bundle.py`, `core/tests/test_bundle.py` |
-| P2 | Python, TypeScript and the browser reach the same result on every step for the same 43 bundle cases | REPRODUCIBLE | `core/tests/vectors/bundles.json` run by `core/tests/test_bundle.py` and `packages/verify/test/bundle.test.ts`; console uses `@witness/verify` |
+| P2 | Python and TypeScript (the build the console ships, run under jsdom) reach the same result on every step for the same 43 bundle cases | REPRODUCIBLE | `core/tests/vectors/bundles.json` run by `core/tests/test_bundle.py` and `packages/verify/test/bundle.test.ts` (jsdom, with `jose`'s browser build: `packages/verify/vitest.config.ts`); the console runs `@witness/verify` |
 | P3 | A Trust Manager `trust.score` from our private Tangle verifies VALID on all five steps, with step 5 read from IOTA Rebased testnet (checkpoint record 4) | VERIFIED-LIVE | `witness verify <blockId> --from-api --config console/src/config/verifier.json --resolver http://127.0.0.1:7300` on block `0x355306b0…bb364de7` (milestone 2870); record: [tx E7onRs…](https://explorer.iota.org/txblock/E7onRsfrvhy5yBmamkXHKJmWeWkKJcQNFDcz9Dn9uKsz?network=testnet). The block itself lives on our private Tangle and in the replay snapshot |
 | P4 | A milestone made offline with the public sample coordinator keys passes steps 1 to 3; only step 5 can tell it apart | REPRODUCIBLE | vector `valid_anchored` in `core/tests/vectors/bundles.json` (see [JUDGES.md](JUDGES.md#2-verify-a-bundle-yourself)); `chaos/src/witness_chaos/forge.py` |
 | P5 | One flipped byte, a replaced Merkle sibling, a dropped signature, a doctored checkpoint each turn exactly their step red | REPRODUCIBLE | bundle cases `raw_byte_flipped`, `path_hash_corrupted`, `one_signature_threshold_2`, `anchor_mismatch` |
@@ -56,7 +56,7 @@ Paths are relative to the repository root. Test counts and commands: [README](RE
 | I3 | The relay refuses unknown keys, unauthorised writers, revoked keys and replayed sequence numbers before anything reaches the node | REPRODUCIBLE | `relay/src/witness_relay/policy_gate.py`, `relay/tests/test_relay.py` |
 | I4 | The explorer gives every message exactly one verdict, decided from the block bytes, the resolved key, the writer policy and the issuer's history | REPRODUCIBLE | `indexer/src/witness_indexer/classify.py` (`judge`), `indexer/tests/test_pipeline.py`; [envelope spec](docs/envelope-spec.md#7-verdicts) |
 | I5 | Revocation is time-aware to the milestone second and fails closed inside it | REPRODUCIBLE | bundle cases `key_revoked_at_inclusion`, `key_revoked_same_second_after`, `key_revoked_next_second`, `key_replaced_within_second` |
-| I6 | Every checkpoint commits to the hash of the writer policy in force | VERIFIED-LIVE | `policyHash` `0x3528f872…9c70be4e` in records 1 to 4 equals `BLAKE2b-256(JCS(deploy/policy.json))` (`witness_core.policy.policy_hash`) |
+| I6 | Every checkpoint commits to the hash of the writer policy in force | VERIFIED-LIVE | `policyHash` `0x3528f872…9c70be4e` in records 1 to 4 equals `BLAKE2b-256(JCS(deploy/policy.json))` (`witness_core.policy.policy_hash`). Records written while the evaluation ran commit to the hash of the eval policy the stack ran on then (`chaos/demo-policy.json` plus the run's producer, see [docs/eval.md](docs/eval.md#method)), not to `deploy/policy.json` |
 | I7 | Unmodified aeriOS producers (LLO, self-orchestrator) are authenticated | NOT-CLAIMED | their messages are relay-attested: the relay signs that it received them (caller `anonymous` unless a Keycloak token is sent) |
 
 ## Anchoring on IOTA Rebased
@@ -67,7 +67,7 @@ Paths are relative to the repository root. Test counts and commands: [README](RE
 | A2 | Four checkpoints of our private Tangle (milestones 1 to 2880) are on testnet, each linked to the previous one by `prev`, all written by the anchor's address | VERIFIED-LIVE | table below; read them yourself with `witness_core.rebased.fetch_record` ([JUDGES.md](JUDGES.md#3-the-proof-on-iota-rebased)) |
 | A3 | The explorer raises `ANCHOR_MISMATCH` when stored milestone ids no longer hash to the on-chain root, comparing with the Rebased record, never with the private-Tangle mirror | REPRODUCIBLE | `indexer/src/witness_indexer/rules.py` (R11), `indexer/tests/test_rules.py`, `indexer/tests/test_anchors.py` |
 | A4 | Only `witness.anchor` mirrors signed by the pinned anchor DID are ingested | REPRODUCIBLE | `indexer/tests/test_anchors.py::test_only_the_pinned_anchor_producer_signed_well_formed_counts` |
-| A5 | Anchoring on IOTA Rebased mainnet | <!-- MAINNET --> | pending |
+| A5 | Anchoring on IOTA Rebased mainnet | <!-- MAINNET -->NOT-CLAIMED | not done: DIDs and the Audit Trail are on testnet<!-- /MAINNET --> |
 | A6 | Anchoring prevents forged milestones | NOT-CLAIMED | it bounds them: a milestone newer than the last checkpoint is protected only by the coordinator keys until the next window is anchored |
 
 ### On-chain artefacts (IOTA Rebased testnet)
@@ -105,7 +105,7 @@ Identities ([`deploy/identity/testnet.json`](deploy/identity/testnet.json)), eac
 The `previous` entries in the same file are an earlier set, retired the same day when the
 component DIDs were moved under the domain DID's control.
 
-Mainnet: <!-- MAINNET -->
+Mainnet: <!-- MAINNET -->none; everything above is on testnet.<!-- /MAINNET -->
 
 ## Confidentiality
 
@@ -114,7 +114,7 @@ Mainnet: <!-- MAINNET -->
 | C1 | A body can be sealed for one or more X25519 recipients (JWE, ECDH-ES+A256KW with A256GCM, nothing else accepted); the signature covers the ciphertext | REPRODUCIBLE | `core/src/witness_core/sealed.py`, `core/tests/test_sealed.py`, `core/tests/vectors/sealed.json` |
 | C2 | Sealed messages are found by keyed blind tokens without the explorer holding the key | REPRODUCIBLE | `POST /lookup/blind`; `core/tests/test_sealed.py`, `api/tests/test_api.py` |
 | C3 | Salted commitments let a producer disclose a sub-score later, checkably | REPRODUCIBLE | `core/src/witness_core/commit.py`, `core/tests/test_commit.py` |
-| C4 | Our running deployment seals any tag | NOT-CLAIMED | `WITNESS_RELAY_ENCRYPT_TAGS` is empty by default |
+| C4 | Our deployment seals regular aeriOS traffic | NOT-CLAIMED | only legacy `audit.report` writes are sealed by default; producer-signed envelopes and all other tags are in clear |
 | C5 | Blind tokens hide which sealed messages share a value | NOT-CLAIMED | tokens are deterministic per value and key |
 
 ## Integrity rules and the evaluation
@@ -124,7 +124,7 @@ Mainnet: <!-- MAINNET -->
 | E1 | Integrity rules R1 to R18 plus `MISSING_IN_DB`, `NOT_FOUND` and `ANCHOR_UNVERIFIABLE` raise alerts with severity and evidence | REPRODUCIBLE | `indexer/src/witness_indexer/rules.py`, `validator.py`; `indexer/tests/test_rules.py`, `test_validator.py`, `test_maintenance.py` |
 | E2 | A rewritten copy in the parallel database is detected against the Tangle (`DB_TAMPER`) | REPRODUCIBLE | `indexer/src/witness_indexer/validator.py` (`reverify_all`), `indexer/tests/test_validator.py::test_reverify_detects_db_tamper` |
 | E3 | The evaluation's answer key was committed before the attacks were run | REPRODUCIBLE | `git log -- chaos/src/witness_chaos/answer_key.yaml` (first commit `7286519`, 2026-10-06 20:31 CEST); amendments are listed in the file |
-| E4 | Detection rate and false positives | pending | <!-- EVAL-HEADLINE --> (method: [docs/eval.md](docs/eval.md)) |
+| E4 | Detection rate and false positives | <!-- EVAL-HEADLINE -->NOT-CLAIMED | no scored run published yet<!-- /EVAL-HEADLINE --> (method: [docs/eval.md](docs/eval.md)) |
 | E5 | The genuine-traffic trap uses real aeriOS components | MODELED | the trap's LLO and self-orchestrator traffic comes from `chaos/src/witness_chaos/traffic.py`; `trust.score` is signed by the same SDK code the patched Trust Manager runs |
 | E6 | Lookup latency at 100k messages, in-browser verification time | NOT-CLAIMED | not measured |
 
@@ -140,7 +140,7 @@ Mainnet: <!-- MAINNET -->
 
 | # | Claim | Tag | Evidence |
 |---|---|---|---|
-| D1 | One command brings up the organisers' stack plus the explorer; all ports on loopback only | REPRODUCIBLE | `deploy/compose/stack-up.sh`, `deploy/compose/hornet-loopback.yml`, `deploy/compose/docker-compose.witness.yml` |
+| D1 | After a one-time identity bootstrap, one command brings up the organisers' stack plus the explorer; all ports on loopback only | REPRODUCIBLE | `deploy/compose/stack-up.sh`, `deploy/compose/hornet-loopback.yml`, `deploy/compose/docker-compose.witness.yml`; the bootstrap: [docs/operations.md](docs/operations.md#a-fresh-clone-with-your-own-identities) |
 | D2 | Containers run unprivileged, read-only, without capabilities, each with only its own secrets | REPRODUCIBLE | `deploy/compose/docker-compose.witness.yml`, `deploy/compose/setup-secrets.sh` |
 | D3 | Every image builds and the Helm chart lints and renders in CI | REPRODUCIBLE | `.github/workflows/ci.yml` |
 | D4 | The Helm chart runs on a Kubernetes cluster | NOT-CLAIMED | not deployed to a cluster |

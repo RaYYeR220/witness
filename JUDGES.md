@@ -9,7 +9,7 @@ in [CLAIMS.md](CLAIMS.md).
 
 ### 1. The replay console
 
-Open <!-- REPLAY-URL -->.
+Open <!-- REPLAY-URL -->the replay console (not published yet; the same screens run in your own stack, see [Run it yourself](#run-it-yourself))<!-- /REPLAY-URL -->.
 
 It serves a snapshot recorded from our running stack, with no backend. The proofs in it are
 still checked in your browser against the pins built into the console
@@ -56,7 +56,7 @@ Our private Tangle's history is checkpointed on an IOTA Rebased testnet Audit Tr
 [`0x0715cfc5…6e3ab313`](https://explorer.iota.org/object/0x0715cfc56779f78cea48a3afb75dd44d7b9694008286acdb27a16f2c6e3ab313?network=testnet).
 Records 1 to 4 cover milestones 1 to 2880; the transactions, the six did:iota identities and
 the checkpoint hashes are listed in [CLAIMS.md](CLAIMS.md#on-chain-artefacts-iota-rebased-testnet).
-Mainnet: <!-- MAINNET -->
+Mainnet: <!-- MAINNET -->none; the trail and the identities are on testnet.<!-- /MAINNET -->
 
 Read a checkpoint straight from a public fullnode, without our services (`3` is the record
 number):
@@ -71,7 +71,7 @@ checkpoint (window, `msRoot`, `prev`, `policyHash`) with the address that added 
 
 ### 4. The scorecard
 
-<!-- EVAL-HEADLINE -->
+<!-- EVAL-HEADLINE -->No scored run is published yet.<!-- /EVAL-HEADLINE -->
 
 The method, the 20 attack classes, the positive control and the genuine-traffic trap are in
 [docs/eval.md](docs/eval.md); the answer key is
