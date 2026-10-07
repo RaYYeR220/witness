@@ -74,7 +74,9 @@ services:
       # Every submission goes to the explorer over MQTT (RELAY_MQTT_URL, with the relay's
       # broker login, from relay.env) and over HTTP POST /ingest; the explorer dedupes.
       RELAY_EXPLORER_URL: http://witness-api:7200
-      RELAY_ENCRYPT_TAGS: ${WITNESS_RELAY_ENCRYPT_TAGS:-}
+      # Legacy writes on these tags are sealed to the domain key (unset: audit.report;
+      # set it empty to seal nothing).
+      RELAY_ENCRYPT_TAGS: ${WITNESS_RELAY_ENCRYPT_TAGS-audit.report}
       RELAY_RECIPIENTS_PATH: /run/witness/relay/recipients.json
       RELAY_SEARCH_KEY_PATH: /run/witness/relay/search.key
       RELAY_LOG_LEVEL: ${WITNESS_LOG_LEVEL:-INFO}

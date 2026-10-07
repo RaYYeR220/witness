@@ -6,6 +6,11 @@ a signed message with a broken body as MALFORMED; the relay refuses it with 400 
 posting it). Legacy messages are admitted for relay attestation (or, on pass-through tags,
 posted unsigned exactly as the original API did) unless the tag demands signatures without
 a legacy grace and the caller is anonymous.
+
+Encrypted tags (`RELAY_ENCRYPT_TAGS`) are about legacy writes: the relay seals those to the
+domain's recipient key before attesting them. A producer that signs its own envelope owns
+its confidentiality and may send it sealed or not; the writer policy already limits who
+that can be.
 """
 
 from __future__ import annotations
@@ -58,13 +63,11 @@ class PolicyGate:
         resolver: KeyResolver,
         relay_did: str,
         *,
-        encrypt_tags: Iterable[str] = (),
         passthrough_tags: Iterable[str] = (),
     ):
         self.policy = writer_policy
         self._resolver = resolver
         self._relay_did = relay_did
-        self._encrypt_tags = frozenset(encrypt_tags)
         self._passthrough_tags = frozenset(passthrough_tags)
 
     async def check_envelope(self, tag: str, env: dict) -> Decision:
@@ -108,8 +111,6 @@ class PolicyGate:
             return refuse(verdicts.REPLAY, "relay-issued envelopes cannot be resubmitted")
         if not policy.allowed(self.policy, tag, check.iss):
             return refuse(verdicts.UNAUTHORIZED_WRITER, f"{check.iss} may not write tag {tag!r}")
-        if tag in self._encrypt_tags and "enc" not in env:
-            return refuse(verdicts.MALFORMED, f"tag {tag!r} requires encryption")
         # The indexer judges the block bytes, which for an envelope are its canonical JSON.
         if not schema.classify(tag, canon.jcs(env)).schema_ok:
             return refuse(verdicts.MALFORMED, f"body breaks the {tag} schema", 400)

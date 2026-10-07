@@ -8,7 +8,8 @@ way Flask's `jsonify` does), plus:
 - messages are signed: producer envelopes are verified and passed through, anything
   else is wrapped in a relay-attested envelope; the writer policy is enforced;
 - a producer's `seq` is claimed atomically before sending, so replays are refused;
-- configured tags are encrypted;
+- legacy messages on configured tags are encrypted to the recipients before they are
+  attested (producer envelopes are the producer's own business, sealed or not);
 - tags listed in `RELAY_PASSTHROUGH_TAGS` keep the original behaviour for legacy
   messages: the data is `json.dumps(message)` exactly as the original API sends it, with
   no envelope (verdict `UNSIGNED_LEGACY`), still receipted and forwarded;
@@ -393,7 +394,6 @@ def create_app(cfg: RelayConfig, *, forwarders: list[Forwarder] | None = None) -
                 writer_policy,
                 resolver,
                 cfg.relay_did,
-                encrypt_tags=cfg.encrypt_tags,
                 passthrough_tags=cfg.passthrough_tags,
             ),
             auth=CallerAuth(

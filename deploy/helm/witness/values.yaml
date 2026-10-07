@@ -83,8 +83,9 @@ relay:
   service:
     type: ClusterIP
     port: 5555
-  # Tags the relay seals (encrypts to the domain key), comma-separated.
-  encryptTags: ""
+  # Tags on which the relay seals legacy writes (to the domain key, with blind-index tokens),
+  # comma-separated; producer-signed envelopes go through as sent. Empty: nothing is sealed.
+  encryptTags: "audit.report"
   # The relay's own login, owner of the relay schema only (deploy/compose/db-init.sql creates
   # it; secrets/postgres/relay.dsn). Empty existingSecret: the chart-wide database Secret.
   database:

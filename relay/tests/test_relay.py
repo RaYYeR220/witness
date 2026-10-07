@@ -428,7 +428,10 @@ async def test_runs_as_a_role_that_owns_only_its_schema(make_cfg):
             admin.execute(sql.SQL("DROP ROLE IF EXISTS {}").format(sql.Identifier(role)))
 
 
-async def test_plaintext_envelope_on_encrypt_tag_refused(make_cfg, hornet, relay, ids):
+async def test_encrypt_tag_seals_legacy_writes_only(make_cfg, hornet, relay, ids, helpers):
+    """On an encrypted tag the relay seals what it attests. An allowed producer's own
+    envelope goes through as signed, sealed or not: the producer owns its confidentiality
+    (the API's signed audit reports rely on that)."""
     cfg = make_cfg(encrypt_tags=["trust.score"])
     plain = _seal(ids.producer, seq=1)
     sealed = envelope.seal(
@@ -442,17 +445,19 @@ async def test_plaintext_envelope_on_encrypt_tag_refused(make_cfg, hornet, relay
         enc=encrypt_body(SCORE, cfg.recipients),
     )
     async with relay(cfg) as client:
-        refused = await client.post(
-            "/upload", params=UPLOAD, json={"tag": "trust.score", "message": plain}
+        for env in (plain, sealed):
+            resp = await client.post(
+                "/upload", params=UPLOAD, json={"tag": "trust.score", "message": env}
+            )
+            assert resp.status_code == 200
+            assert resp.json()["witness"]["verdict"] == verdicts.PRODUCER_SIGNED
+        legacy = await client.post(
+            "/upload", params=UPLOAD, json={"tag": "trust.score", "message": SCORE}
         )
-        assert refused.status_code == 403
-        assert refused.json()["verdict"] == verdicts.MALFORMED
-        assert "requires encryption" in refused.json()["error"]
-        assert hornet.route.call_count == 0
-        ok = await client.post(
-            "/upload", params=UPLOAD, json={"tag": "trust.score", "message": sealed}
-        )
-        assert ok.status_code == 200
+        assert legacy.json()["witness"]["verdict"] == verdicts.RELAY_ATTESTED
+    assert [helpers.sent_data(s) for s in hornet.sent[:2]] == [canon.jcs(plain), canon.jcs(sealed)]
+    attested = helpers.sent_envelope(hornet.sent[2])
+    assert "body" not in attested and decrypt_body(attested["enc"], ids.kex_kid, ids.kex) == SCORE
 
 
 async def test_signed_body_that_breaks_the_schema_refused(

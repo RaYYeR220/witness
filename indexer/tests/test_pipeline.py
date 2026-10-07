@@ -605,6 +605,42 @@ async def test_sealed_envelope_keeps_blind_tokens(store: Store):
     assert await store._fetch("SELECT * FROM ie_scores") == []
 
 
+async def test_relay_sealed_legacy_report_is_attested_and_findable(store: Store):
+    """What the relay writes for a legacy audit.report on an encrypted tag: sealed to the
+    domain's key-agreement key with a blind token for the tag. Stored with its ciphertext
+    only, RELAY_ATTESTED (a sealed body is not judged on its schema), and found by the token
+    computed with the domain's search key."""
+    from cryptography.hazmat.primitives.asymmetric.x25519 import X25519PrivateKey
+    from witness_core import sealed
+
+    domain_kex = X25519PrivateKey.generate()
+    recipient = sealed.Recipient("did:example:domain#kex-1",
+                                 domain_kex.public_key().public_bytes_raw())
+    search_key = b"k" * 32
+    plaintext = {"reportId": "r-1", "secret": "s0123456789abcdef"}  # not an audit.report shape
+    token = sealed.blind_token(search_key, "tag", "audit.report")
+    did = did_key(RELAY)
+    env = envelope.seal("audit.report", None, iss=did, kid=kid_of(RELAY), sign_key=RELAY,
+                        seq=1, att_mode="relay", att_sub="anonymous",
+                        enc=sealed.encrypt_body(plaintext, [recipient]), bix=[token])
+    chain = FakeChain()
+    chain.add([("audit.report", canon.jcs(env))])
+    pol = policy.load({"version": 1, "tags": {"audit.report": {
+        "allowed": [did], "require_signature": False, "legacy_grace": True}}})
+    await indexer(FakeSource(chain), store, policy=pol).sync()
+
+    bid = chain.block_id(1, 0)
+    row = await msg(store, bid)
+    assert (row["verdict"], row["encrypted"], row["json"]) == ("RELAY_ATTESTED", True, None)
+    stored = json.loads(row["data"])
+    assert "body" not in stored and isinstance(stored["enc"], dict)
+    assert b"s0123456789abcdef" not in row["data"] and b"r-1" not in row["data"]
+    with pytest.raises((sealed.NotARecipient, sealed.DecryptError)):
+        sealed.decrypt_body(stored["enc"], "did:none#kex-1", X25519PrivateKey.generate())
+    assert sealed.decrypt_body(stored["enc"], recipient.kid, domain_kex) == plaintext
+    assert [bytes(r["block_id"]) for r in await store.lookup_blind([token])] == [bid]
+
+
 async def test_replay_within_one_milestone(store: Store):
     chain = FakeChain()
     chain.add([("trust.score", signed(ALICE, "trust.score", score("D:aabbccddeeff", 0.5), 4)),
